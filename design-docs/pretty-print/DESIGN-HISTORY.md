@@ -2,6 +2,20 @@
 
 Non-normative amendment trail. DESIGN.md is authoritative.
 
+## 2026-08-26 — PP8 (T-line live formula, opt-in)
+
+- PTLIN (row 215) shows the OPEN formula on the T register line while
+  chaining — DEFAULT OFF, exactly as Stan specified when selecting the
+  gap: T's value is hidden while the toggle is on, so the user opts in.
+  Implementation is a T-only branch at the top of the inline surface's
+  ladder: standard rung, then the whole-tree tiny re-font, and any
+  no-formula/no-fit case falls through to the ordinary value rendering.
+- FV11 pins all three properties: OFF-by-default (band identity between
+  the fresh state and forced-off), the formula appearing when toggled,
+  and the X line staying a value under the toggle. The first FV11
+  landed with a stubbed default-off comparison — caught in review
+  before commit; the capture helper grew a band parameter to close it.
+
 ## 2026-08-26 — PP7 (EQN full view; the Σ finding)
 
 - **The equation language has NO Σ/∏/∫ constructs** — its function

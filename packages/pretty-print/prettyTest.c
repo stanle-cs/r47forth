@@ -458,15 +458,22 @@ void prettyTestShow(uint16_t unusedButMandatoryParameter) {
 
 static uint8_t ppTestSnap[2][PPT_BAND_ROWS][SCREEN_WIDTH / 8];
 
-static void ppTestCapture(int which) {
+static void ppTestCaptureBand(int which, uint32_t top, uint32_t rows) {
   memset(ppTestSnap[which], 0, sizeof(ppTestSnap[which]));
-  for(uint32_t r = 0; r < PPT_BAND_ROWS; r++) {
+  if(rows > PPT_BAND_ROWS) {
+    rows = PPT_BAND_ROWS;
+  }
+  for(uint32_t r = 0; r < rows; r++) {
     for(uint32_t x = 0; x < SCREEN_WIDTH; x++) {
-      if(lcd_buffer_pixel_on(x, PPT_BAND_TOP + r)) {
+      if(lcd_buffer_pixel_on(x, top + r)) {
         ppTestSnap[which][r][x / 8] |= (uint8_t)(1u << (x % 8));
       }
     }
   }
+}
+
+static void ppTestCapture(int which) {
+  ppTestCaptureBand(which, PPT_BAND_TOP, PPT_BAND_ROWS);
 }
 
 static void ppTestRenderX(void) {
@@ -1193,6 +1200,60 @@ void prettyTestFormula(uint16_t unusedButMandatoryParameter) {
         lcd_fill_rect(0, 60, 120, 60, LCD_SET_VALUE);
       }
     }
+  }
+
+  // FV11 (PP8): the T-line live formula is OFF by default (identity with
+  // forced-off), shows the open formula when toggled on, and never
+  // hijacks the X line
+  {
+    ppcTestReset();
+    ppcTestType("2");
+    ppcTestOp(ITM_ENTER);
+    ppcTestType("3");
+    ppcTestOp(ITM_ADD);
+    calcMode = CM_NORMAL;
+    temporaryInformation = TI_NO_INFO;
+    lastErrorCode = 0;
+    clearSystemFlag(FLAG_FRACT);
+    clearSystemFlag(FLAG_IRFRAC);
+    prettySetEnabled(true);
+
+    // T band: baseY 24 -> rows 20..55
+    #define PPT_T_TOP 20
+    #define PPT_T_ROWS 36
+    // default state (fresh driver, toggle untouched): must equal forced-off
+    lcd_fill_rect(0, PPT_T_TOP, SCREEN_WIDTH, PPT_T_ROWS, LCD_SET_VALUE);
+    refreshRegisterLine(REGISTER_T);
+    ppTestCaptureBand(0, PPT_T_TOP, PPT_T_ROWS);
+    prettySetTline(false);
+    lcd_fill_rect(0, PPT_T_TOP, SCREEN_WIDTH, PPT_T_ROWS, LCD_SET_VALUE);
+    refreshRegisterLine(REGISTER_T);
+    ppTestCaptureBand(1, PPT_T_TOP, PPT_T_ROWS);
+    if(!ppTestSnapsEqual()) {
+      ppTestFail("FV11 T-line not OFF by default");
+    }
+    // toggled ON: the T line must DIFFER from the value render (the
+    // formula "2+3" paints instead of T's value)
+    prettySetTline(true);
+    lcd_fill_rect(0, PPT_T_TOP, SCREEN_WIDTH, PPT_T_ROWS, LCD_SET_VALUE);
+    refreshRegisterLine(REGISTER_T);
+    // "2+3" right-aligned: some ink in the T band
+    if(!ppTestRectAnyLit(PPT_T_TOP + 1, PPT_T_TOP + PPT_T_ROWS - 1, 300, SCREEN_WIDTH - 1)) {
+      ppTestFail("FV11 T-line formula missing when enabled");
+    }
+    // and the X line stays a VALUE with the toggle on: X band identical
+    // on/off (the branch must be T-only)
+    lcd_fill_rect(0, PPT_BAND_TOP, SCREEN_WIDTH, PPT_BAND_ROWS, LCD_SET_VALUE);
+    refreshRegisterLine(REGISTER_X);
+    ppTestCapture(0);
+    prettySetTline(false);
+    lcd_fill_rect(0, PPT_BAND_TOP, SCREEN_WIDTH, PPT_BAND_ROWS, LCD_SET_VALUE);
+    refreshRegisterLine(REGISTER_X);
+    ppTestCapture(1);
+    if(!ppTestSnapsEqual()) {
+      ppTestFail("FV11 X line affected by the T-line toggle");
+    }
+    prettySetTline(false);
   }
 
   ppcTestReset();

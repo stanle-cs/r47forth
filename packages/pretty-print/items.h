@@ -228,7 +228,7 @@
 #define CST_84                       212
 #define ITM_0213                     213
 #define ITM_0214                     214
-#define ITM_0215                     215
+#define ITM_PTLIN                    215  // pretty-print package: T-line live formula toggle
 #define ITM_EQSHW                    216  // pretty-print package: full-screen equation view
 #define ITM_0217                     217
 #define ITM_0218                     218

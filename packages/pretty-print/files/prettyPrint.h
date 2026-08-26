@@ -47,6 +47,10 @@ bool_t prettyTryEquation(const char *src, int16_t xLeft);
 // interactive integrate solver the integrand is framed by a big ∫.
 void fnPrettyEqShow(uint16_t unusedButMandatoryParameter);
 
+// PTLIN (ITM_PTLIN, row 215): opt-in live formula on the T register
+// line — DEFAULT OFF; falls through to T's value when no formula fits.
+void fnPrettyTlineToggle(uint16_t unusedButMandatoryParameter);
+
 // Capture-engine hooks (prettyCapture.c), called from small upstream
 // patches. STAGE/DONE bracket the item dispatch in reallyRunFunction;
 // the NIM trio mirrors number entry at the closeNim funnel with the

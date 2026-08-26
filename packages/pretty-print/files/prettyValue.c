@@ -22,10 +22,22 @@ static char ppSpanA[120];
 static char ppSpanB[120];
 
 static bool_t ppActive = true;
+static bool_t ppTlineActive = false;   // DEFAULT OFF (ruled by Stan): the
+                                       // T line shows its value unless the
+                                       // user opts into the live formula
 
 void fnPrettyToggle(uint16_t unusedButMandatoryParameter) {
   (void)unusedButMandatoryParameter;
   ppActive = !ppActive;
+}
+
+void fnPrettyTlineToggle(uint16_t unusedButMandatoryParameter) {
+  (void)unusedButMandatoryParameter;
+  ppTlineActive = !ppTlineActive;
+}
+
+void prettySetTline(bool_t on) {
+  ppTlineActive = on;
 }
 
 bool_t prettyEnabled(void) {
@@ -750,6 +762,30 @@ bool_t prettyTryRegisterLine(calcRegister_t regist, int16_t baseY, int16_t *line
   // starts at its own baseY-4 = this baseY+32 and would erase the rows.
   int16_t bandTop    = baseY - 4;
   int16_t bandBottom = baseY + ((regist == REGISTER_X) ? 38 : 31);
+
+  // T-line live formula (PP8, opt-in): while a formula is open, the T
+  // line shows it instead of T's value; no formula or no fit falls
+  // through to the ordinary value rendering below.
+  if(regist == REGISTER_T && ppTlineActive) {
+    static const uint8_t tRungs[2][2] = {
+      { PP_FONT_STANDARD, PP_FONT_STANDARD },
+      { PP_FONT_STANDARD, PP_FONT_TINY     },
+    };
+    for(int r = 0; r < 2; r++) {
+      uint8_t root;
+      ppReset();
+      if(!ppfBuildCurrent(tRungs[r][0], tRungs[r][1], &root)) {
+        break;
+      }
+      if(r == 1) {
+        ppSetFontDeep(root, PP_FONT_TINY);   // whole-tree shrink, as in the pager
+      }
+      if(ppRenderRightAligned(root, SCREEN_WIDTH, bandTop, bandBottom, ppPreferredBase(baseY))) {
+        *lineWidth = ppNodeAt(root)->width;
+        return true;
+      }
+    }
+  }
 
   for(int r = 0; r < 3; r++) {
     uint8_t root;

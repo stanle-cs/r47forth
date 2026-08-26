@@ -1,12 +1,14 @@
 diff --git a/src/c47/items.h b/src/c47/items.h
-index 98924313217f3b57f1b663367c8e45c0dc0f1010..7c1fb3db6036f0e368691ffee55db29fae4fe83b 100644
+index 98924313217f3b57f1b663367c8e45c0dc0f1010..e71e4847ec454f7cc31ea06ae1cffe883e3006b7 100644
 --- a/src/c47/items.h
 +++ b/src/c47/items.h
-@@ -229,7 +229,7 @@
+@@ -228,8 +228,8 @@
+ #define CST_84                       212
  #define ITM_0213                     213
  #define ITM_0214                     214
- #define ITM_0215                     215
+-#define ITM_0215                     215
 -#define ITM_0216                     216
++#define ITM_PTLIN                    215  // pretty-print package: T-line live formula toggle
 +#define ITM_EQSHW                    216  // pretty-print package: full-screen equation view
  #define ITM_0217                     217
  #define ITM_0218                     218

@@ -113,5 +113,6 @@ bool_t ppParseIrfrac  (const char *src, uint8_t ctxFont, uint8_t childFont, uint
 bool_t ppParseRealAny (const char *src, uint8_t ctxFont, uint8_t childFont, uint8_t *rootOut);
 bool_t ppParseComplex (const char *src, uint8_t ctxFont, uint8_t childFont, uint8_t *rootOut);
 void   prettySetEnabled(bool_t on);
+void   prettySetTline(bool_t on);
 
 #endif // !PRETTYINTERNAL_H

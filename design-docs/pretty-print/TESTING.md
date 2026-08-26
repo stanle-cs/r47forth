@@ -147,6 +147,8 @@ after restore.
 | MUT-27 | EQSHW parses with strip fonts (PP7) | EQ7 (30-row full-size span) + EQ8 |
 | MUT-28 | big-∫ strokes deleted (PP7) | EQ8 (probe stays left of the operand's columns) |
 | MUT-29 | unparseable-equation fallback removed (PP7) | EQ9 |
+| MUT-30 | T-line formula default flipped to ON (PP8) | FV11 (default-off band identity) |
+| MUT-31 | T-line branch loses its regist check (PP8) | FV11 (X-line identity under the toggle) |
 
 Two lessons from the first mutation run, kept for honesty: (a) the original
 MUT-4 ("drop the dtReal34 type gate") stays GREEN — a non-real register's
