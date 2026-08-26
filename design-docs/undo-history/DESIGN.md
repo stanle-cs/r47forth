@@ -230,6 +230,19 @@ browsers/historyBrowser.c/.h. All patch content is submission-ready
 upstream code; comments explain invariants in upstream's own voice, and no
 package markers are used.
 
+### A dispatch into the browser never captures (2026-08-25)
+
+reallyRunFunction's US_ENABLED undo-save block excludes CM_HIST_BROWSER
+(joining CM_GRAPH and CM_NO_UNDO): ENTER is US_ENABLED, and the save
+that upstream runs before dispatching an item captured the very state
+the browser was about to restore away — a phantom ENTER-labeled level
+that merged off the freshly minted (now) anchor on a choose, truncated
+the trail on a second choose, and materialized from an empty history.
+Upstream browsers never face this because they swallow ENTER before
+dispatch; this browser is the only one that lets it through. Pinned by
+B13 (empty no-op) and B14 (choose then choose again: anchor survives,
+nothing labeled ENTER, no rewrite).
+
 ### Numbering is consecutive, and the browser swallows what it does not handle (2026-08-25)
 
 Two rulings from Stan's use-reports. (1) Level numbers are DISPLAY

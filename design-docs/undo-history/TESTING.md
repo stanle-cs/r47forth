@@ -75,6 +75,7 @@ restores:
 | A1 | a state jump that loses the departure state (restore from live without an anchor) | browser battery B10 (anchor present after live-state ENTER + redo walks back to the pre-restore state; red-first against the shipped no-mint restore) |
 | N1 | display numbering with an unmarked hole (seq counter not rewound on truncate) | ring battery B11 + re-pinned R4 (override after undo: the replacing capture takes the dead tail's number; red-first against the shipped monotonic counter) |
 | K2 | an unhandled key acting on the machine under the browser | browser battery B12 (real key chain: a digit press leaves mode and machine untouched; red-first against the shipped fall-through) |
+| C1 | a pre-dispatch undo-save capturing on behalf of a browser-handled item | browser battery B13 + B14 (real key chain: ENTER on empty captures nothing; choose then choose keeps the anchor and rewrites nothing; red-first against the shipped US_ENABLED save) |
 
 R10 carries no mutation pin: it pins an **upstream** contract, not package
 code — if it ever goes red, TMP_STR_LENGTH stopped being enough and the U2

@@ -1262,6 +1262,96 @@ void historyTestBrowser(uint16_t unusedButMandatoryParameter) {
     xcopy(kbd_usr, savedKbd2, sizeof(savedKbd2));
   }
 
+  { // B13 + B14: an ENTER dispatched into the browser must not capture —
+    // reallyRunFunction's US_ENABLED undo-save ran before fnKeyEnter and
+    // invented levels: on empty history a phantom 01[ENTER]; on a choose it
+    // merged away the fresh (now) anchor; on a second choose it truncated
+    // the trail. One gate closes all three.
+    uint16_t seq;
+    int16_t li;
+    uint8_t fl;
+    char kbuf[4];
+    GdkEvent ev;
+    calcKey_t savedKbd3[37];
+    int16_t kEnter = -1, kDown = -1;
+    bool_t anchorSeen, enterLabelSeen;
+    xcopy(savedKbd3, kbd_usr, sizeof(savedKbd3));
+    xcopy(kbd_usr, kbd_std, sizeof(savedKbd3));
+    for(int16_t k = 0; k < 37; k++) {
+      if(kbd_std[k].primary == ITM_ENTER) { kEnter = k; }
+      if(kbd_std[k].primary == ITM_DOWN1) { kDown  = k; }
+    }
+    ev.button.button = 1;
+    historyTestBaseline();
+    clearSystemFlag(FLAG_USER);
+    tam.mode = 0;
+    tam.alpha = false;
+    temporaryInformation = TI_NO_INFO;
+    fnTimerExec(TO_FN_EXEC);
+    if(SHOWMODE || currentMenu() == -MNU_SHOW) {
+      closeShowMenu();
+    }
+    calcMode = CM_NORMAL;
+    shiftF = shiftG = false;
+    historyBrowser(NOPARAM);                 // empty history
+    sprintf(kbuf, "%02d", kEnter);
+    ev.type = 0;
+    btnPressed(NULL, &ev, kbuf);
+    btnReleased(NULL, &ev, kbuf);
+    if(undoHistoryDepth() != 0) {
+      historyTestFail("B13 ENTER on an empty history must capture nothing");
+    }
+    historyTestBaseline();
+    historyTestWriteLonI(REGISTER_X, 1);
+    saveForUndo();
+    historyTestWriteLonI(REGISTER_X, 2);
+    saveForUndo();
+    historyTestWriteLonI(REGISTER_X, 3);
+    saveForUndo();
+    historyTestWriteLonI(REGISTER_X, 4);     // live {4}
+    calcMode = CM_NORMAL;
+    historyBrowser(NOPARAM);
+    sprintf(kbuf, "%02d", kDown);
+    ev.type = 0;
+    btnPressed(NULL, &ev, kbuf);
+    btnReleased(NULL, &ev, kbuf);
+    sprintf(kbuf, "%02d", kEnter);
+    ev.type = 0;
+    btnPressed(NULL, &ev, kbuf);
+    btnReleased(NULL, &ev, kbuf);            // choose A
+    anchorSeen = false;
+    enterLabelSeen = false;
+    for(uint8_t l = 0; l < undoHistoryDepth(); l++) {
+      if(undoHistoryLevelInfo(l, &seq, &li, &fl)) {
+        if(fl & HISTORY_ENTRY_LIVEANCHOR) { anchorSeen = true; }
+        if(li == ITM_ENTER) { enterLabelSeen = true; }
+      }
+    }
+    if(undoHistoryDepth() != 4 || !anchorSeen || enterLabelSeen) {
+      historyTestFail("B14 choose A must mint (now), add nothing else, label nothing ENTER");
+    }
+    calcMode = CM_NORMAL;
+    historyBrowser(NOPARAM);
+    sprintf(kbuf, "%02d", kDown);
+    ev.type = 0;
+    btnPressed(NULL, &ev, kbuf);
+    btnReleased(NULL, &ev, kbuf);
+    sprintf(kbuf, "%02d", kEnter);
+    ev.type = 0;
+    btnPressed(NULL, &ev, kbuf);
+    btnReleased(NULL, &ev, kbuf);            // choose B, mid-trail
+    anchorSeen = false;
+    for(uint8_t l = 0; l < undoHistoryDepth(); l++) {
+      if(undoHistoryLevelInfo(l, &seq, &li, &fl) && (fl & HISTORY_ENTRY_LIVEANCHOR)) {
+        anchorSeen = true;
+      }
+    }
+    if(undoHistoryDepth() != 4 || !anchorSeen) {
+      historyTestFail("B14 choose B must jump within the trail, not rewrite it");
+    }
+    xcopy(kbd_usr, savedKbd3, sizeof(savedKbd3));
+  }
+
   historyTestBaseline();
   historyTestWriteLonI(REGISTER_X, historyTestFailures);
 }

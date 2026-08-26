@@ -147,3 +147,11 @@ wording.
 - The (now)-on-ENTER fix was already in the newest zip when you
   tested; grab pkg_dist/undo-history.zip fresh — it now carries all
   of today's fixes.
+
+## Phantom ENTER captures (2026-08-25, your 5th report — one cause, three symptoms)
+- ENTER dispatched into the browser was captured by upstream's
+  pre-dispatch undo-save (ENTER is US_ENABLED): a phantom ENTER level
+  from an empty history, the fresh (now) anchor merged away on a
+  choose, the trail truncated on a second choose. One exclusion in the
+  save block fixes all three; B13/B14 pin it through the real keys.
+  (now) now appears on every browser restore from live. Zip rebuilt.

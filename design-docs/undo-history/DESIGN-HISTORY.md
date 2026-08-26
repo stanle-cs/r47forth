@@ -166,3 +166,21 @@
   carries CM_HIST_BROWSER). (c) Stale build: the live-restore anchor
   fix (B10) shipped in the zip minutes before the report; reproduces
   on the prior build only.
+- **2026-08-25 (fifth use-report, three items, ONE cause).** Stan:
+  ENTER on an empty history inserted an ENTER level; choosing a second
+  level rewrote the list; (now) never appeared from the browser. The
+  real-key probe dumped all three: 01[ENTER] from empty,
+  05[ENTER] with no N after choose A, a 3-row list after choose B.
+  Root cause upstream of every earlier fix: ENTER is US_ENABLED, so
+  reallyRunFunction ran its note+saveForUndo BEFORE dispatching into
+  the browser — the capture (labeled ENTER) dedupe-merged the
+  just-minted anchor away on a choose (a merged anchor is a plain
+  state again), truncated the trail on a mid-trail choose, and pushed
+  a phantom level from empty. The B10 mint was correct and invisible:
+  its push merged into the phantom. Fix: CM_HIST_BROWSER joins the
+  save block's exclusions (the CM_GRAPH/CM_NO_UNDO shape). B13/B14
+  red-first through the real key chain. Lesson logged: the ENTER
+  dispatch fix (B9) opened a path upstream browsers never exercise,
+  and its side effects landed three reports later — when a fix opens
+  a new dispatch path, audit what upstream runs on EITHER side of the
+  handler, not just the handler.

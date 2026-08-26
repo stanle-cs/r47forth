@@ -292,7 +292,11 @@ bool_t isFunctionOldParam16(uint16_t func) {
     }
 
     if((indexOfItems[func].status & US_STATUS) == US_ENABLED || (indexOfItems[func].status & US_STATUS) == US_ENABL_XEQ) {
-      if((programRunStop != PGM_RUNNING || getSystemFlag(FLAG_IGN1ER))  && calcMode != CM_GRAPH && calcMode != CM_NO_UNDO && !getSystemFlag(FLAG_SOLVING) && !getSystemFlag(FLAG_INTING)) {
+      if((programRunStop != PGM_RUNNING || getSystemFlag(FLAG_IGN1ER))  && calcMode != CM_GRAPH && calcMode != CM_NO_UNDO && calcMode != CM_HIST_BROWSER && !getSystemFlag(FLAG_SOLVING) && !getSystemFlag(FLAG_INTING)) {
+        // CM_HIST_BROWSER joins the exclusions: ENTER is US_ENABLED, and a
+        // dispatch INTO the browser must not capture the state it is about
+        // to restore away (B13/B14 — a phantom ENTER level merged off the
+        // fresh (now) anchor and truncated the trail on a second choose).
         #if defined(DEBUGUNDO)
           printf(">>> saveForUndo from reallyRunFunction: %i, %s, calcMode = %i ", func, indexOfItems[func].itemCatalogName, calcMode);
         #endif // DEBUGUNDO
