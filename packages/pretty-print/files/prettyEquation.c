@@ -315,7 +315,7 @@ static uint8_t ppqExpr(ppqCtx_t *c, uint8_t font, uint8_t tinyF) {
   return n;
 }
 
-bool_t ppqParse(const char *src, uint8_t *rootOut) {
+bool_t ppqParse(const char *src, uint8_t ctxFont, uint8_t childFont, uint8_t *rootOut) {
   ppqCtx_t c;
   c.s = src;
   c.pos = 0;
@@ -323,7 +323,7 @@ bool_t ppqParse(const char *src, uint8_t *rootOut) {
   c.fracSeen = false;
   c.failed = false;
 
-  uint8_t n = ppqExpr(&c, PP_FONT_STANDARD, PP_FONT_TINY);
+  uint8_t n = ppqExpr(&c, ctxFont, childFont);
   if(c.failed || n == PP_NONE) {
     return false;
   }
@@ -331,14 +331,14 @@ bool_t ppqParse(const char *src, uint8_t *rootOut) {
   int16_t next;
   uint16_t code = ppqPeek(&c, &next);
   if(code == '=') {
-    uint8_t eq = ppNewRun("=", 1, PP_FONT_STANDARD);
+    uint8_t eq = ppNewRun("=", 1, ctxFont);
     c.pos = next;
-    uint8_t rhs = ppqExpr(&c, PP_FONT_STANDARD, PP_FONT_TINY);
+    uint8_t rhs = ppqExpr(&c, ctxFont, childFont);
     ppqSkipSpace(&c);
     if(c.failed || rhs == PP_NONE || eq == PP_NONE || c.pos != c.len) {
       return false;
     }
-    uint8_t box = ppNewBox(PP_HBOX, PP_FONT_STANDARD);
+    uint8_t box = ppNewBox(PP_HBOX, ctxFont);
     if(box == PP_NONE) {
       return false;
     }
@@ -365,7 +365,7 @@ bool_t prettyTryEquation(const char *src, int16_t xLeft) {
   }
   uint8_t root;
   ppReset();
-  if(!ppqParse(src, &root)) {
+  if(!ppqParse(src, PP_FONT_STANDARD, PP_FONT_TINY, &root)) {
     return false;
   }
   if(!ppMeasure(root, 0)) {
@@ -379,4 +379,63 @@ bool_t prettyTryEquation(const char *src, int16_t xLeft) {
   int16_t base = 171 + n->ascent + (23 - (n->ascent + n->descent)) / 2;
   ppPaintAt(root, xLeft, base);
   return true;
+}
+
+
+/* ==== EQSHW — full-screen equation view (PP7) ===========================
+ * Room the 23 px strip lacks: nested fractions render at full size in
+ * the 21..167 band. In the interactive integrate solver the equation is
+ * the integrand, framed by a stroke-drawn big ∫ (PP_INT) — the equation
+ * LANGUAGE has no Σ/∏/∫ constructs (verified against the parser's
+ * function aliases), so this solver mode is the one honest input a big
+ * operator has; a Σ template would be dead code and was skipped. */
+
+bool_t ppqShowRender(const char *src) {
+  lcd_fill_rect(0, 16, SCREEN_WIDTH, SCREEN_HEIGHT - 16, LCD_SET_VALUE);
+  drawSinglePixelFullWidthLine(20);
+  drawSinglePixelFullWidthLine(168);
+
+  uint8_t root;
+  bool_t pretty = false;
+  ppReset();
+  if(ppqParse(src, PP_FONT_STANDARD, PP_FONT_STANDARD, &root)) {
+    if((currentSolverStatus & SOLVER_STATUS_EQUATION_MODE) == SOLVER_STATUS_EQUATION_INTEGRATE) {
+      uint8_t big = ppNewBox(PP_INT, PP_FONT_STANDARD);
+      if(big != PP_NONE) {
+        ppAppendChild(big, root);
+        root = big;
+      }
+    }
+    if(ppMeasure(root, 0)) {
+      const ppNode_t *n = ppNodeAt(root);
+      if(n->width <= SCREEN_WIDTH - 4 && n->ascent + n->descent <= 167 - 21 + 1) {
+        int16_t base = (int16_t)((21 + 167 - (n->ascent + n->descent)) / 2 + n->ascent);
+        ppPaintAt(root, (int16_t)((SCREEN_WIDTH - n->width) / 2), base);
+        pretty = true;
+      }
+    }
+  }
+  if(!pretty) {
+    // always show SOMETHING: the linear line, centered-ish
+    int16_t w = stringWidth(src, &standardFont, false, true);
+    int16_t x = (w < SCREEN_WIDTH - 4) ? (int16_t)((SCREEN_WIDTH - w) / 2) : 2;
+    showString(src, &standardFont, x, 94 - 8, vmNormal, false, true);
+  }
+
+  screenUpdatingMode |= SCRUPD_MANUAL_STACK | SCRUPD_MANUAL_MENU | SCRUPD_MANUAL_SHIFT_STATUS;
+  screenHoldsDrawnPixels = true;
+  return pretty;
+}
+
+void fnPrettyEqShow(uint16_t unusedButMandatoryParameter) {
+  (void)unusedButMandatoryParameter;
+  if(lastErrorCode != ERROR_NONE) {
+    return;
+  }
+  if(numberOfFormulae == 0 || currentFormula >= numberOfFormulae) {
+    return;   // nothing stored to show
+  }
+  bool_t cursorShown, rightEllipsis;
+  showEquation(currentFormula, 0, EQUATION_NO_CURSOR, true, &cursorShown, &rightEllipsis);
+  ppqShowRender(tmpString);   // dryRun above filled tmpString (read-only here)
 }

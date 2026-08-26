@@ -2,6 +2,27 @@
 
 Non-normative amendment trail. DESIGN.md is authoritative.
 
+## 2026-08-26 — PP7 (EQN full view; the Σ finding)
+
+- **The equation language has NO Σ/∏/∫ constructs** — its function
+  vocabulary is trig/hyperbolic aliases plus the glyph→item map. A Σ
+  template would be dead code with zero possible inputs (capture
+  excludes solver items by standing ruling; EQN cannot express a sum),
+  so Σ was SKIPPED, narrowing the purchased scope honestly. The one
+  legitimate big-operator surface: the interactive integrate solver,
+  where the stored equation IS the integrand — EQSHW frames it with a
+  stroke-drawn big ∫ (PP_INT) when
+  `(currentSolverStatus & SOLVER_STATUS_EQUATION_MODE) == INTEGRATE`.
+- EQSHW (row 216 — the 214-216 spare run; forth-core edits row 213's
+  line, different lines merge cleanly): full-screen equation view on the
+  manual-paint protocol. `ppqParse` gained font parameters; the full
+  view parses standard/standard, so the nested fractions the 23 px strip
+  declines render at full size; unparseable equations still show their
+  linear line (the always-show-something fallback, pinned by EQ9).
+- Ellipsis caveat stands: the view renders showEquation's display
+  string, which upstream truncates at screen width — very long equations
+  fall back to the (truncated) linear line rather than mis-typesetting.
+
 ## 2026-08-26 — PP6 (typographic trio; gap-closure wave, Stan's selection)
 
 - PP_RAD grew a synthesized stroke sign (Bresenham over setBlackPixel,

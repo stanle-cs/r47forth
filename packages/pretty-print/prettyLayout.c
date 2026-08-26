@@ -307,6 +307,23 @@ bool_t ppMeasure(uint8_t n, uint8_t depth) {
       return true;
     }
 
+    case PP_INT: {
+      // big integral sign: stroke-drawn, spans the operand's height + hooks
+      uint8_t child = nd->firstChild;
+      if(child == PP_NONE || ppPool[child].nextSibling != PP_NONE) {
+        return false;
+      }
+      if(!ppMeasure(child, depth + 1)) {
+        return false;
+      }
+      ppPool[child].relX    = 16;
+      ppPool[child].relBase = 0;
+      nd->width   = ppPool[child].width + 18;
+      nd->ascent  = ppPool[child].ascent + 3;
+      nd->descent = ppPool[child].descent + 3;
+      return true;
+    }
+
     case PP_BARS: {
       uint8_t child = nd->firstChild;
       if(child == PP_NONE || ppPool[child].nextSibling != PP_NONE) {
@@ -477,6 +494,20 @@ static void ppPaint(uint8_t n, int16_t x, int16_t baseline) {
       lcd_fill_rect((uint32_t)(x + ppPool[child].relX - 1), (uint32_t)vincTop,
                     (uint32_t)(ppPool[child].width + m->overhang + 1), (uint32_t)m->vincThick,
                     LCD_EMPTY_VALUE);
+      return;
+    }
+
+    case PP_INT: {
+      uint8_t child = nd->firstChild;
+      ppPaint(child, x + ppPool[child].relX, baseline);
+      // the ∫: top hook right, 2 px vertical, bottom hook left
+      int16_t top = baseline - nd->ascent;
+      int16_t bot = baseline + nd->descent - 1;
+      lcd_fill_rect((uint32_t)(x + 6), (uint32_t)(top + 3), 2, (uint32_t)(bot - top - 5), LCD_EMPTY_VALUE);
+      ppDrawLine((int16_t)(x + 7), (int16_t)(top + 3), (int16_t)(x + 11), (int16_t)top);
+      ppDrawLine((int16_t)(x + 8), (int16_t)(top + 3), (int16_t)(x + 12), (int16_t)top);
+      ppDrawLine((int16_t)(x + 6), (int16_t)(bot - 3), (int16_t)(x + 2), (int16_t)bot);
+      ppDrawLine((int16_t)(x + 7), (int16_t)(bot - 3), (int16_t)(x + 3), (int16_t)bot);
       return;
     }
 

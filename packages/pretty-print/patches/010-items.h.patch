@@ -1,7 +1,16 @@
 diff --git a/src/c47/items.h b/src/c47/items.h
-index 98924313217f3b57f1b663367c8e45c0dc0f1010..95e26560b93dba8ee831326c0b7d72d6b20954fa 100644
+index 98924313217f3b57f1b663367c8e45c0dc0f1010..7c1fb3db6036f0e368691ffee55db29fae4fe83b 100644
 --- a/src/c47/items.h
 +++ b/src/c47/items.h
+@@ -229,7 +229,7 @@
+ #define ITM_0213                     213
+ #define ITM_0214                     214
+ #define ITM_0215                     215
+-#define ITM_0216                     216
++#define ITM_EQSHW                    216  // pretty-print package: full-screen equation view
+ #define ITM_0217                     217
+ #define ITM_0218                     218
+ #define ITM_0219                     219
 @@ -481,10 +481,10 @@
  #define ITM_SIGMA1ony2               456
  #define ITM_SIGMAx3                  457

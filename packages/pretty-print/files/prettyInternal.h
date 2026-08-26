@@ -17,7 +17,7 @@
 #define PRETTYINTERNAL_H
 
 enum { PP_RUN = 0, PP_HBOX = 1, PP_FRAC = 2, PP_RAD = 3, PP_SUP = 4, PP_PAREN = 5,
-       PP_SUB = 6, PP_BARS = 7 };
+       PP_SUB = 6, PP_BARS = 7, PP_INT = 8 };
 // PP_RAD children: radicand, then an OPTIONAL second child = the index
 // (ⁿ√), tucked above-left of the sign. PP_SUB mirrors PP_SUP downward
 // (log_b). PP_BARS wraps its child in |absolute-value| strokes.
@@ -91,7 +91,8 @@ typedef struct {
 } ppcNode_t;
 
 // prettyEquation.c — EQN display-string -> 2D strip layout
-bool_t ppqParse(const char *src, uint8_t *rootOut);
+bool_t ppqParse(const char *src, uint8_t ctxFont, uint8_t childFont, uint8_t *rootOut);
+bool_t ppqShowRender(const char *src);
 
 // prettyFormula.c — capture tree / token stream -> infix layout
 bool_t ppfBuildCurrent(uint8_t ctxFont, uint8_t childFont, uint8_t *rootOut);

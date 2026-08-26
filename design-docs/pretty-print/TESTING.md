@@ -144,6 +144,9 @@ after restore.
 | MUT-24 | ⁿ√ index dropped (PP6) | FV8 |
 | MUT-25 | SUB script raised instead of lowered (PP6) | FV9 (pin reads the script node's relBase — root descent was satisfied by "log"'s descender) |
 | MUT-26 | absolute-value bars deleted (PP6) | FV10 |
+| MUT-27 | EQSHW parses with strip fonts (PP7) | EQ7 (30-row full-size span) + EQ8 |
+| MUT-28 | big-∫ strokes deleted (PP7) | EQ8 (probe stays left of the operand's columns) |
+| MUT-29 | unparseable-equation fallback removed (PP7) | EQ9 |
 
 Two lessons from the first mutation run, kept for honesty: (a) the original
 MUT-4 ("drop the dtReal34 type gate") stays GREEN — a non-real register's

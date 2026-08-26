@@ -1208,7 +1208,7 @@ void prettyTestEquation(uint16_t unusedButMandatoryParameter) {
 
   // EQ1: '/' binds factors, not the whole expression
   ppReset();
-  if(!ppqParse("1/X+2", &root)) {
+  if(!ppqParse("1/X+2", PP_FONT_STANDARD, PP_FONT_TINY, &root)) {
     ppTestFail("EQ1 parse");
   }
   else {
@@ -1217,7 +1217,7 @@ void prettyTestEquation(uint16_t unusedButMandatoryParameter) {
 
   // EQ2: parens unwrap under the bar
   ppReset();
-  if(!ppqParse("(A+B)/C", &root)) {
+  if(!ppqParse("(A+B)/C", PP_FONT_STANDARD, PP_FONT_TINY, &root)) {
     ppTestFail("EQ2 parse");
   }
   else {
@@ -1226,7 +1226,7 @@ void prettyTestEquation(uint16_t unusedButMandatoryParameter) {
 
   // EQ3: vinculum over a parenthesized radicand
   ppReset();
-  if(!ppqParse("\xa2\x1a" "(X+1)", &root)) {
+  if(!ppqParse("\xa2\x1a" "(X+1)", PP_FONT_STANDARD, PP_FONT_TINY, &root)) {
     ppTestFail("EQ3 parse");
   }
   else {
@@ -1235,13 +1235,13 @@ void prettyTestEquation(uint16_t unusedButMandatoryParameter) {
 
   // EQ4: declines — no 2D gain, dangling operator, ellipsis, unknown glyph
   ppReset();
-  if(ppqParse("A+B", &root))            ppTestFail("EQ4 no-frac accepted");
+  if(ppqParse("A+B", PP_FONT_STANDARD, PP_FONT_TINY, &root))            ppTestFail("EQ4 no-frac accepted");
   ppReset();
-  if(ppqParse("1/X+", &root))           ppTestFail("EQ4 dangling accepted");
+  if(ppqParse("1/X+", PP_FONT_STANDARD, PP_FONT_TINY, &root))           ppTestFail("EQ4 dangling accepted");
   ppReset();
-  if(ppqParse("1/X" "\xa0\x1b", &root)) ppTestFail("EQ4 ellipsis accepted");
+  if(ppqParse("1/X" "\xa0\x1b", PP_FONT_STANDARD, PP_FONT_TINY, &root)) ppTestFail("EQ4 ellipsis accepted");
   ppReset();
-  if(ppqParse("\x83\xc0" "/2", &root))  ppTestFail("EQ4 unknown glyph accepted");
+  if(ppqParse("\x83\xc0" "/2", PP_FONT_STANDARD, PP_FONT_TINY, &root))  ppTestFail("EQ4 unknown glyph accepted");
 
   // EQ5: the strip render paints the bar in the equation's own row
   {
@@ -1261,6 +1261,102 @@ void prettyTestEquation(uint16_t unusedButMandatoryParameter) {
       if(ppTestRectAnyLit(194, 200, 0, 60)) ppTestFail("EQ5 ink below the strip");
     }
     lcd_fill_rect(0, 171, SCREEN_WIDTH, 23, LCD_SET_VALUE);
+  }
+
+  // EQ6 (PP7): the nested equation that must DECLINE in the strip parses
+  // and fits the full view at standard fonts — and stays full-size (a
+  // strip-font mutation shrinks the outer stack below 25 px)
+  ppReset();
+  {
+    uint8_t root6;
+    if(!ppqParse("1/(2+3/4)", PP_FONT_STANDARD, PP_FONT_STANDARD, &root6)) {
+      ppTestFail("EQ6 full-view parse");
+    }
+    else if(!ppMeasure(root6, 0)) {
+      ppTestFail("EQ6 measure");
+    }
+    else {
+      const ppNode_t *n6 = ppNodeAt(root6);
+      if(n6->ascent + n6->descent > 147) ppTestFailInt("EQ6 too tall", 147, n6->ascent + n6->descent);
+      if(n6->ascent + n6->descent < 25)  ppTestFailInt("EQ6 shrunk to strip size", 25, n6->ascent + n6->descent);
+    }
+  }
+
+  // EQ7 (PP7): EQSHW renders the nested equation between its frames and
+  // arms the manual-paint protocol
+  {
+    int16_t hadScrUpd = screenUpdatingMode;
+    bool_t hadHolds = screenHoldsDrawnPixels;
+    screenUpdatingMode = SCRUPD_AUTO;
+    screenHoldsDrawnPixels = false;
+    if(!ppqShowRender("1/(2+3/4)")) {
+      ppTestFail("EQ7 full view declined");
+    }
+    if(!ppTestRowAllLit(20, 0, SCREEN_WIDTH - 1))  ppTestFail("EQ7 frame 20");
+    if(!ppTestRowAllLit(168, 0, SCREEN_WIDTH - 1)) ppTestFail("EQ7 frame 168");
+    if(!ppTestRectAnyLit(21, 167, 0, SCREEN_WIDTH - 1)) ppTestFail("EQ7 no content");
+    {
+      // full-size pin: the nested stack spans >= 30 rows at standard
+      // fonts (a strip-font mutation shrinks it below that)
+      uint32_t topRow = 0, botRow = 0;
+      bool_t seen = false;
+      for(uint32_t r = 21; r <= 167; r++) {
+        if(ppTestRowAnyLit(r, 0, SCREEN_WIDTH - 1)) {
+          if(!seen) { topRow = r; seen = true; }
+          botRow = r;
+        }
+      }
+      if(!seen || botRow - topRow + 1 < 30) {
+        ppTestFailInt("EQ7 render not full-size", 30, seen ? (int32_t)(botRow - topRow + 1) : 0);
+      }
+    }
+    if(!(screenUpdatingMode & SCRUPD_MANUAL_STACK)) ppTestFail("EQ7 protocol not armed");
+    if(!screenHoldsDrawnPixels)                     ppTestFail("EQ7 pixels not held");
+    screenUpdatingMode = hadScrUpd;
+    screenHoldsDrawnPixels = hadHolds;
+  }
+
+  // EQ8 (PP7): interactive integrate mode frames the integrand with the
+  // stroke-drawn big ∫ — ink appears left of the plain render's block
+  {
+    uint16_t hadStatus = currentSolverStatus;
+    int16_t hadScrUpd = screenUpdatingMode;
+    bool_t hadHolds = screenHoldsDrawnPixels;
+    screenUpdatingMode = SCRUPD_AUTO;
+    screenHoldsDrawnPixels = false;
+    currentSolverStatus = (uint16_t)((currentSolverStatus & ~SOLVER_STATUS_EQUATION_MODE) | SOLVER_STATUS_EQUATION_INTEGRATE);
+    if(!ppqShowRender("1/X")) {
+      ppTestFail("EQ8 integrate view declined");
+    }
+    else {
+      bool_t any8 = false;
+      for(uint32_t xx = 170; xx < 188 && !any8; xx++) {   // left of the operand's columns
+        for(uint32_t yy = 40; yy < 150 && !any8; yy++) {
+          any8 = lcd_buffer_pixel_on(xx, yy);
+        }
+      }
+      if(!any8) ppTestFail("EQ8 integral sign missing");
+    }
+    currentSolverStatus = hadStatus;
+    screenUpdatingMode = hadScrUpd;
+    screenHoldsDrawnPixels = hadHolds;
+  }
+
+  // EQ9 (PP7): an unparseable equation still shows its linear line in the
+  // full view — the always-show-something fallback
+  {
+    int16_t hadScrUpd = screenUpdatingMode;
+    bool_t hadHolds = screenHoldsDrawnPixels;
+    screenUpdatingMode = SCRUPD_AUTO;
+    screenHoldsDrawnPixels = false;
+    if(ppqShowRender("A+B+")) {
+      ppTestFail("EQ9 unparseable accepted as pretty");
+    }
+    if(!ppTestRectAnyLit(21, 167, 0, SCREEN_WIDTH - 1)) {
+      ppTestFail("EQ9 fallback text missing");
+    }
+    screenUpdatingMode = hadScrUpd;
+    screenHoldsDrawnPixels = hadHolds;
   }
 
   ppTestWriteLonI(REGISTER_X, ppTestFailures);

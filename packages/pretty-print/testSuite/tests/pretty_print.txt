@@ -51,7 +51,8 @@ Func: prettyTestEquation
 
 ; EQ1 '/' binds factors; EQ2 parens unwrap under the bar; EQ3 vinculum
 ; over a parenthesized radicand; EQ4 strict declines; EQ5 the strip
-; render pins the bar row.
+; render pins the bar row; EQ6-8 the EQSHW full view: nested fractions
+; at full size, frames + protocol, and the big integral in integrate mode.
 In:  FL_ASLIFT=1 RX=LonI:"99"
 Out: EC=0 RX=LonI:"0"
 

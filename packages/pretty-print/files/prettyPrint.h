@@ -43,6 +43,10 @@ void fnPrettyHistClear(uint16_t unusedButMandatoryParameter);
 // while editing). False -> upstream's linear showString runs.
 bool_t prettyTryEquation(const char *src, int16_t xLeft);
 
+// EQSHW (ITM_EQSHW, row 216): full-screen equation view; in the
+// interactive integrate solver the integrand is framed by a big ∫.
+void fnPrettyEqShow(uint16_t unusedButMandatoryParameter);
+
 // Capture-engine hooks (prettyCapture.c), called from small upstream
 // patches. STAGE/DONE bracket the item dispatch in reallyRunFunction;
 // the NIM trio mirrors number entry at the closeNim funnel with the
