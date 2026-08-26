@@ -475,3 +475,13 @@ comparison words raise `ERROR_INVALID_DATA_TYPE_FOR_OP` on non-numeric operands.
 The standard's own answer to values that do not fit the data stack is
 segregation onto a separate stack. That is a precedent for the parked hybrid
 spill design in `design-docs/forth-core/DEFECTS_stack_semantics.md` D3.
+
+## Attachment limit (ruled 2026-08-25, undo-history announcement)
+
+The SwissMicros forum allows THREE attachments per post, and the zip
+takes one slot. Plan posts around it from the start: related pictures
+get COLLATED into one image (side by side or stacked, PIL is on the
+box) instead of dropped at the end. The undo-history post shipped with
+zip + two shots; the gap and restored-stack captures stayed repo-only.
+phpBB indices are newest-upload-first — derive the upload order from
+the draft's [attachment=N] references before posting.

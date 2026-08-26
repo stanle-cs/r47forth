@@ -104,3 +104,13 @@ wording.
   numbering consecutive]
 - forum/screenshots/undo-attach-3-restored.png  [stack after ENTER on the
   SLVQ level: 3x2 matrix, 1., -3., 2]
+
+## Final post attachment plan (2026-08-25, three-slot forum limit)
+- Slots: zip (referenced as "the attachment" in Install), picker shot
+  [attachment=1], history view [attachment=2]. Gap + restored shots are
+  DROPPED from the post (remain in forum/screenshots/ and in the
+  battery pins). Upload order for phpBB newest-first indexing: view
+  first, then picker, then zip (zip lands at 0, unreferenced inline).
+- The package-manager thread URL in Install
+  (viewtopic.php?f=46&t=4876) is Stan's own thread; external fetch
+  returns 403 to non-browsers, so it is author-verified only.

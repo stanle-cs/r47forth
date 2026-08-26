@@ -220,3 +220,19 @@ to leave the Why-skip question; Stan's own edit had already kept it.
 Exit criterion met. Remaining are his-side items: upload order decides
 the attachment indices (post encodes 3/2/0/1), the base commit line
 needs the branch pushed or restated, thread placement.
+
+## Final version locked (2026-08-25, Stan's second pass)
+
+Adopted verbatim. His changes: the PR offer moved up front, reworded
+impersonal ("This is built with the hope to be submitted as a PR to
+upstream if people think it's useful"); "the UHIST flag" named in the
+convenience line; my picker caption deleted (the attachment rides
+under the convenience line); the restored-stack and gap shots DROPPED
+with their prose — the forum allows three attachments and the zip
+takes a slot; the package-manager thread URL added to Install
+(t=4876, his thread; external verification blocked by 403, author-
+verified). Checks: no dangling references to the dropped shots, three
+attachments exactly, BBCode url tag well-formed, numbers unchanged.
+Battery re-run for the record. Standing rule recorded in DESIGN.md:
+plan future posts around the three-slot limit, collate related
+pictures into one image.
