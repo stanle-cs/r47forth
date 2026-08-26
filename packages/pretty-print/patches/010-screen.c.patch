@@ -1,0 +1,17 @@
+diff --git a/src/c47/screen.c b/src/c47/screen.c
+index d2ac868bd18f9f4c20608f5dc90d5652844afcc6..4a1290461cf1b8c65a1b34e6ae5bdba77a108110 100644
+--- a/src/c47/screen.c
++++ b/src/c47/screen.c
+@@ -3933,6 +3933,12 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
+ 
+ 
+ 
++        /* pretty-print package: natural (textbook) rendering of the value.
++         * A false return paints nothing and every upstream arm below runs
++         * unchanged; on success lineWidth carries the painted width. */
++        else if(prettyTryRegisterLine(regist, baseY, &lineWidth)) {
++        }
++
+ /*Main type dtReal34 FLAG_FRACT*/
+         else if(getSystemFlag(FLAG_FRACT)
+                     && (    getRegisterDataType(regist) == dtReal34

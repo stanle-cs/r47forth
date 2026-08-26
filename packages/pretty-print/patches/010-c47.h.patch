@@ -1,0 +1,13 @@
+diff --git a/src/c47/c47.h b/src/c47/c47.h
+index 1dade6b5c0efe403bb366e388d204d42b0a32709..72bd8c86459a3b9db6a274753a4e2524c848c628 100644
+--- a/src/c47/c47.h
++++ b/src/c47/c47.h
+@@ -132,6 +132,8 @@
+     #if defined(TESTSUITE_BUILD)
+       #include "testSuite.h"
+     #endif //TESTSUITE_BUILD
++
++    #include "prettyPrint.h"
+   #endif // !GENERATE_CATALOGS && !GENERATE_CONSTANTS && !GENERATE_TESTPGMS
+ 
+   #if defined(GENERATE_CATALOGS) || defined(GENERATE_TESTPGMS)

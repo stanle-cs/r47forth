@@ -1,0 +1,3 @@
+# not package content: docs and the gate script
+*.md
+build-test.sh

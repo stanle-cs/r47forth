@@ -1,0 +1,12 @@
+diff --git a/src/testSuite/tests/testSuiteList.txt b/src/testSuite/tests/testSuiteList.txt
+index 6bb764d1b588d13b2767c07e61837d86e4b5a0c0..3f76a3749d04256070dbed3c15990e3e2caf467d 100644
+--- a/src/testSuite/tests/testSuiteList.txt
++++ b/src/testSuite/tests/testSuiteList.txt
+@@ -267,6 +267,7 @@ dot
+ cross
+ 
+ matrix
++pretty_print
+ 
+ percent
+ percentMRR

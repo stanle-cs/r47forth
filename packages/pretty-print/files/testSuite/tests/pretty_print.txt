@@ -1,0 +1,32 @@
+;*************************************************************
+;**  pretty-print package cases                             **
+;**  prettyTestMeasure:  engine measure + parser battery    **
+;**  prettyTestPixels:   inline X-line render, pixel pins   **
+;**  prettyTestFallback: identity when pretty declines      **
+;**  Each driver writes its failure count into X.           **
+;*************************************************************
+In: FL_SPCRES=0 FL_CPXRES=0 SD=0 RMODE=0 IM=2compl SS=4 WS=64
+Func: prettyTestMeasure
+
+; M1/M2 pin the metric derivation (bar where the minus sign sits, gaps,
+; overhang) as exact width/ascent/descent numbers; M3 round-trips the
+; builder's improper-fraction form through the parser; M4 is rejections.
+In:  FL_ASLIFT=1 RX=LonI:"99"
+Out: EC=0 RX=LonI:"0"
+
+Func: prettyTestPixels
+
+; P1-P3: X = 0.75 rendered on the real X line — bar exactly at rows
+; 149-150 across the fraction span, numerator ink strictly above the gap,
+; denominator ink strictly below. P5: upstream's diagonal form (package
+; off) must differ.
+In:  FL_ASLIFT=1 RX=LonI:"99"
+Out: EC=0 RX=LonI:"0"
+
+Func: prettyTestFallback
+
+; F1: unsupported type (string) — enabled/disabled bands bit-identical.
+; F2: FLAG_FRACT clear — identity. F3: displayValueX byte parity (the
+; builder-first rule as an executable property).
+In:  FL_ASLIFT=1 RX=LonI:"99"
+Out: EC=0 RX=LonI:"0"

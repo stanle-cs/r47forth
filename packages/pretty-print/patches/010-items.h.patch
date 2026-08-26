@@ -1,0 +1,13 @@
+diff --git a/src/c47/items.h b/src/c47/items.h
+index 98924313217f3b57f1b663367c8e45c0dc0f1010..86b63eee42912531d37439c91e86854facd67a6f 100644
+--- a/src/c47/items.h
++++ b/src/c47/items.h
+@@ -482,7 +482,7 @@
+ #define ITM_SIGMAx3                  457
+ #define ITM_SIGMAx4                  458
+ #define ITM_0459                     459
+-#define ITM_0460                     460
++#define ITM_PPON                     460  // pretty-print package: natural-display toggle
+ #define ITM_0461                     461
+ #define ITM_0462                     462
+ 
