@@ -1,13 +1,15 @@
 diff --git a/src/c47/config.c b/src/c47/config.c
-index b4b65f5207e0939215616d0258fdbf2e1a91dc15..cc54fcad9cd5b2c6c1aade8ba56a46e730f7e71a 100644
+index b4b65f5207e0939215616d0258fdbf2e1a91dc15..99aa9c0baa7f5497d5d59ce46ecfb00a53f3f2db 100644
 --- a/src/c47/config.c
 +++ b/src/c47/config.c
-@@ -1714,6 +1714,8 @@ void doFnReset(uint16_t confirmation, bool_t autoSav) {
-     real34SetZero(&hiBinR);
-     histElementXorY = -1;
+@@ -1729,6 +1729,10 @@ void doFnReset(uint16_t confirmation, bool_t autoSav) {
+     Sett(_Reset);
+     //Statusbar default setup   DATE noTIME noCR noANGLE [ADM] FRAC INT MATX TVM CARRY noSS WATCH SERIAL PRN BATVOLT noSHIFTR
  
-+    prettyReset();   // pretty-print package: re-arm the shadow expression stack
++    prettyReset();   // pretty-print package: re-arm the shadow stack and
++                     // restore the natural-display default-ON — must run
++                     // AFTER the systemFlags wipe above (PP11)
 +
+     configCommon(CFG_DFLT);
  
-     int32ToReal(-10, x_min);
-     int32ToReal(10, x_max);
+     hourGlassIconEnabled = false;

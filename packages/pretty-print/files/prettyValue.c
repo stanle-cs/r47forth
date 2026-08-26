@@ -21,14 +21,22 @@ static char ppScratch[200];
 static char ppSpanA[120];
 static char ppSpanB[120];
 
-static bool_t ppActive = true;
+// PP11: the master toggle is a REAL system flag (FLAG_PRETTYP, bit 50 —
+// count reserved via the identical-edit claim with undo-history), so it
+// persists across power cycles with the ordinary flag machinery.
+// prettyReset() restores the default-ON after a RESET wipes the flags.
 static bool_t ppTlineActive = false;   // DEFAULT OFF (ruled by Stan): the
                                        // T line shows its value unless the
                                        // user opts into the live formula
 
 void fnPrettyToggle(uint16_t unusedButMandatoryParameter) {
   (void)unusedButMandatoryParameter;
-  ppActive = !ppActive;
+  if(getSystemFlag(FLAG_PRETTYP)) {
+    clearSystemFlag(FLAG_PRETTYP);
+  }
+  else {
+    setSystemFlag(FLAG_PRETTYP);
+  }
 }
 
 void fnPrettyTlineToggle(uint16_t unusedButMandatoryParameter) {
@@ -41,11 +49,16 @@ void prettySetTline(bool_t on) {
 }
 
 bool_t prettyEnabled(void) {
-  return ppActive;
+  return getSystemFlag(FLAG_PRETTYP);
 }
 
 void prettySetEnabled(bool_t on) {
-  ppActive = on;
+  if(on) {
+    setSystemFlag(FLAG_PRETTYP);
+  }
+  else {
+    clearSystemFlag(FLAG_PRETTYP);
+  }
 }
 
 
@@ -747,7 +760,7 @@ static const uint8_t ppFullRungs[4][2] = {
 };
 
 bool_t prettyTryRegisterLine(calcRegister_t regist, int16_t baseY, int16_t *lineWidth) {
-  if(!ppActive
+  if(!getSystemFlag(FLAG_PRETTYP)
       || calcMode != CM_NORMAL
       || temporaryInformation != TI_NO_INFO
       || lastErrorCode != 0

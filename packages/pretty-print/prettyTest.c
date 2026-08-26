@@ -1357,6 +1357,25 @@ void prettyTestFormula(uint16_t unusedButMandatoryParameter) {
     prettySetTline(false);
   }
 
+  // FV13 (PP11): the master toggle is the REAL system flag — the toggle
+  // item flips it, and a reset restores the default-ON
+  {
+    bool_t before = getSystemFlag(FLAG_PRETTYP);
+    fnPrettyToggle(NOPARAM);
+    if(getSystemFlag(FLAG_PRETTYP) == before) {
+      ppTestFail("FV13 toggle does not flip FLAG_PRETTYP");
+    }
+    fnPrettyToggle(NOPARAM);
+    prettySetEnabled(false);
+    prettyReset();
+    if(!getSystemFlag(FLAG_PRETTYP)) {
+      ppTestFail("FV13 reset does not restore default-ON");
+    }
+    if(!prettyEnabled()) {
+      ppTestFail("FV13 prettyEnabled does not read the flag");
+    }
+  }
+
   ppcTestReset();
   ppTestWriteLonI(REGISTER_X, ppTestFailures);
 }

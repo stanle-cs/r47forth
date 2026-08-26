@@ -1013,6 +1013,7 @@
 #define FLAG_PRMS                             0x806B
 #define FLAG_PINTG                            0x806C
 #define FLAG_PDIFF                            0x806D
+#define FLAG_PRETTYP                          0x8071 //50 natural-display master toggle (pretty-print package; count reserved by the claims registry)
 #define FLAG_PSHADE                           0x806E //47
 #define FLAG_SBadm                            0x806F //48
 

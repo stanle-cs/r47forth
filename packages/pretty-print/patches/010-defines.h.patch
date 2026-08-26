@@ -1,8 +1,12 @@
 diff --git a/src/c47/defines.h b/src/c47/defines.h
-index 63b9c1a7692f24da093a882ffa1f3be1625bb7a8..1a732e3d7f1b1001a5993c7641e71e51d86ad4ba 100644
+index 63b9c1a7692f24da093a882ffa1f3be1625bb7a8..29533da08a643215071eeeb15d05a91a42d6141e 100644
 --- a/src/c47/defines.h
 +++ b/src/c47/defines.h
-@@ -1016,7 +1016,7 @@
+@@ -1013,10 +1013,11 @@
+ #define FLAG_PRMS                             0x806B
+ #define FLAG_PINTG                            0x806C
+ #define FLAG_PDIFF                            0x806D
++#define FLAG_PRETTYP                          0x8071 //50 natural-display master toggle (pretty-print package; count reserved by the claims registry)
  #define FLAG_PSHADE                           0x806E //47
  #define FLAG_SBadm                            0x806F //48
  
@@ -11,7 +15,7 @@ index 63b9c1a7692f24da093a882ffa1f3be1625bb7a8..1a732e3d7f1b1001a5993c7641e71e51
  
                                                       // only used as bit count for setting change detection
  #define SETTING_AMODE                         0x0080 // current angle mode
-@@ -1711,6 +1711,7 @@ static inline uint8_t regCtoKS(const int16_t regC) {
+@@ -1711,6 +1712,7 @@ static inline uint8_t regCtoKS(const int16_t regC) {
  #define CM_PLOT_STAT                               8 // Plot stats mode
  #define CM_ERROR_MESSAGE                           9 // Error message in one of the register lines
  #define CM_BUG_ON_SCREEN                          10 // Bug message on screen

@@ -2,6 +2,29 @@
 
 Non-normative amendment trail. DESIGN.md is authoritative.
 
+## 2026-08-26 — PP11 (the toggle becomes a persisted system flag)
+
+- FLAG_PRETTYP (0x8071, bit 50) replaces the package bool: PPON now
+  persists across power cycles with the ordinary flag machinery. The
+  count-line conflict that made a flag impossible in v1 is resolved by
+  the identical-edit claim: BOTH packages' defines.h carry
+  NUMBER_OF_SYSTEM_FLAGS 64+50 verbatim, and the 3-way merge unifies.
+- **Adjacency lesson sharpened: diff3 conflicts on TOUCHING-line edits,
+  not just same-line ones.** My row-2300 items.c edit sat one line below
+  undo-history's row-2299 edit and conflicted (my hunk's context carries
+  upstream's 2299, their patch had changed it); the identical-edit trick
+  cannot save a hunk whose CONTEXT mismatches. Resolution follows the
+  case-20 pattern: the SYSFL row 2300 ("PPRTY", literal 0x8071) lives in
+  UNDO-HISTORY's patch alongside its own row-2299 edit; solo
+  pretty-print keeps the fully-working flag but shows no catalog row for
+  it — a documented solo-config gap, not a behavior change.
+- Ordering trap paid for: the config.c prettyReset hook originally sat
+  BEFORE doFnReset's `systemFlags0 = 0` wipe — the default-ON would have
+  been erased moments after being set. The hook moved below
+  `Sett(_Reset)`; FV13 pins reset-restores-default-ON.
+- DESIGN.md §7's "no system flag in v1" entry is superseded by this
+  stage; the claims registry rows there stay authoritative.
+
 ## 2026-08-26 — PP10 (the browser lands on calcMode 20)
 
 - **The composition wall was condition LINES, not insertions.**

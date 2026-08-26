@@ -154,6 +154,8 @@ after restore.
 | MUT-34 | x<>reg loses its displacement emit (PP9) | T20 |
 | MUT-35 | browser recall leaves the shadow stale (PP10) | FV12 |
 | MUT-36 | browser selection loses its clamp (PP10) | FV12 (over-navigated ENTER recalls nothing) |
+| MUT-37 | reset drops the natural-display default-ON (PP11) | FV13 |
+| MUT-38 | the toggle item flips nothing (PP11) | FV13 |
 
 Two lessons from the first mutation run, kept for honesty: (a) the original
 MUT-4 ("drop the dtReal34 type gate") stays GREEN — a non-real register's

@@ -89,6 +89,9 @@ void prettyReset(void) {
   ppcHistCount = 0;
   ppcHistSeq = 0;
   ppcInited = true;
+  // the natural-display default is ON; a RESET wipes system flags before
+  // this hook runs (the config.c call sits after Sett(_Reset))
+  setSystemFlag(FLAG_PRETTYP);
 }
 
 static uint8_t ppcAlloc(uint8_t kind) {
