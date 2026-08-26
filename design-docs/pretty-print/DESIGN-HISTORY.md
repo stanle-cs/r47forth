@@ -2,6 +2,24 @@
 
 Non-normative amendment trail. DESIGN.md is authoritative.
 
+## 2026-08-26 — PP9 (RCL/STO capture classes)
+
+- Register operations now chain instead of invalidating: RCL pushes a
+  NAMED leaf for numbered registers (R05 stays R05 — a name is truthful
+  even if the register is later overwritten), deep-copies the shadow
+  tree for stack-register recalls (copy-then-lift, matching upstream's
+  read-before-shift), and degrades lettered/named registers to value
+  leaves (their display names are not item ids). RCL±×÷ builds a dyadic
+  node with the PLAIN operator item so the renderer needs no new cases.
+  x<>reg emits the departing tree (its value still sits in X at STAGE)
+  and leaves a value leaf for the register's old content — naming the
+  register would lie, since it now holds the swapped-in value. DROPY
+  mirrors upstream's shift-with-top-dup from slot 1.
+- T18 documents a subtle correct behavior: using a stack-recalled COPY
+  of the open formula supersedes (emits) the original still sitting
+  higher up — the copy continues visually, the original is finished.
+- STO and STO±×÷ stay stack-silent (PPC_STO_NOP), as before.
+
 ## 2026-08-26 — PP8 (T-line live formula, opt-in)
 
 - PTLIN (row 215) shows the OPEN formula on the T register line while

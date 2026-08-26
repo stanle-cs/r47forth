@@ -63,6 +63,7 @@ static uint16_t ppcHistSeq;
 enum {
   PPC_DY, PPC_MO, PPC_ENTER, PPC_SWAP, PPC_RUP, PPC_RDOWN, PPC_CLX,
   PPC_DROP, PPC_CLSTK, PPC_FILL, PPC_LASTX, PPC_CONSTCLS, PPC_STO_NOP,
+  PPC_RCLCLS, PPC_RCLARITH, PPC_XSWAPREG, PPC_DROPY,
   PPC_INVALIDATE, PPC_DISCARD, PPC_IGNORE
 };
 
@@ -187,6 +188,21 @@ static uint8_t ppcValLeafFromRegister(calcRegister_t regist) {
   ppcArena[n].item = ppcAllocParamOf(regist);
   xcopy(ppcArena[n].payload, getRegisterDataPointer(regist), bytes);
   return n;
+}
+
+// RCL operand leaf: numbered registers keep their NAME (R05 stays R05
+// even if the register is later overwritten — names are truthful);
+// lettered/named registers become value leaves (their display names are
+// not item ids); stack registers are handled by the caller via deepCopy.
+static uint8_t ppcRclLeaf(uint16_t param) {
+  if(param <= 99) {
+    uint8_t n = ppcAlloc(PPN_RCL);
+    if(n != PPC_NIL) {
+      ppcArena[n].item = param;
+    }
+    return n;
+  }
+  return ppcValLeafFromRegister((calcRegister_t)param);
 }
 
 static void ppcEnsureKnown(uint8_t slot) {
@@ -440,6 +456,12 @@ static uint8_t ppcClassify(int16_t func) {
     case ITM_STO: case ITM_STOADD: case ITM_STOSUB: case ITM_STOMULT: case ITM_STODIV:
       return PPC_STO_NOP;
 
+    case ITM_RCL:   return PPC_RCLCLS;
+    case ITM_RCLADD: case ITM_RCLSUB: case ITM_RCLMULT: case ITM_RCLDIV:
+      return PPC_RCLARITH;
+    case ITM_Xex:   return PPC_XSWAPREG;
+    case ITM_DROPY: return PPC_DROPY;
+
     // stack mutators that are US_UNCHANGED and would otherwise be ignored
     case ITM_UNDO:
       return PPC_DISCARD;   // the user revoked the current formula
@@ -581,6 +603,19 @@ void prettyNoteFunction(int16_t func, uint16_t param) {
         uint8_t n = ppcValLeafFromRegister(REGISTER_L);
         ppcSlotL = (n == PPC_NIL) ? PPC_UNKNOWN : n;
       }
+      break;
+    case PPC_RCLARITH:
+      ppcEnsureKnown(0);
+      if(ppcCurrent != PPC_NIL && ppcSlot[0] != ppcCurrent) {
+        ppcSupersedeCurrent();
+      }
+      break;
+    case PPC_XSWAPREG:
+      // the tree's value still sits in register X at STAGE
+      ppcDisplaced(0, true);
+      break;
+    case PPC_DROPY:
+      ppcDisplaced(1, true);
       break;
     case PPC_INVALIDATE:
     case PPC_DISCARD:
@@ -728,6 +763,77 @@ void prettyNoteFunctionDone(void) {
     }
     case PPC_STO_NOP:
       break;
+    case PPC_RCLCLS: {
+      // copy-then-lift: a stack-register source is read BEFORE the shift
+      uint8_t t;
+      uint16_t param = ppcStage.param;
+      if(param >= REGISTER_X && param <= getStackTop()) {
+        t = ppcDeepCopy(ppcSlot[param - REGISTER_X]);
+      }
+      else {
+        t = ppcRclLeaf(param);
+      }
+      if(ppcStage.lifted) {
+        ppcShiftUpForLift();
+      }
+      else {
+        ppcDisplaced(0, false);
+        ppcFreeTree(ppcSlot[0] == PPC_UNKNOWN ? PPC_NIL : ppcSlot[0]);
+        ppcSlot[0] = PPC_UNKNOWN;
+      }
+      ppcSlot[0] = (t == PPC_NIL) ? PPC_UNKNOWN : t;
+      break;
+    }
+    case PPC_RCLARITH: {
+      uint16_t mapped =
+          ppcStage.func == ITM_RCLADD  ? ITM_ADD  :
+          ppcStage.func == ITM_RCLSUB  ? ITM_SUB  :
+          ppcStage.func == ITM_RCLMULT ? ITM_MULT : ITM_DIV;
+      uint16_t param = ppcStage.param;
+      uint8_t r;
+      if(param >= REGISTER_X && param <= getStackTop()) {
+        r = ppcDeepCopy(ppcSlot[param - REGISTER_X]);
+      }
+      else {
+        r = ppcRclLeaf(param);
+      }
+      uint8_t n = ppcAlloc(PPN_OP2);
+      if(n == PPC_NIL || r == PPC_NIL) {
+        ppcFreeTree(r == PPC_UNKNOWN ? PPC_NIL : r);
+        ppcInvalidate(false);
+        break;
+      }
+      ppcArena[n].item = mapped;
+      ppcArena[n].child[0] = ppcSlot[0];   // left = old X
+      ppcArena[n].child[1] = r;            // right = the register operand
+      ppcFreeTree(ppcSlotL == PPC_UNKNOWN ? PPC_NIL : ppcSlotL);
+      ppcSlotL = PPC_UNKNOWN;
+      ppcSlot[0] = n;
+      ppcCurrent = n;
+      break;
+    }
+    case PPC_XSWAPREG:
+      // X now holds the register's OLD value — a fresh value leaf is the
+      // only truthful description (naming the register would lie: it
+      // holds the swapped-in tree value now)
+      ppcFreeTree(ppcSlot[0] == PPC_UNKNOWN ? PPC_NIL : ppcSlot[0]);
+      {
+        uint8_t v = ppcValLeafFromRegister(REGISTER_X);
+        ppcSlot[0] = (v == PPC_NIL) ? PPC_UNKNOWN : v;
+      }
+      break;
+    case PPC_DROPY: {
+      uint8_t top = ppcTopSlot();
+      ppcFreeTree(ppcSlot[1] == PPC_UNKNOWN ? PPC_NIL : ppcSlot[1]);
+      for(uint8_t k = 1; k + 1 <= top; k++) {
+        ppcSlot[k] = ppcSlot[k + 1];
+      }
+      if(top >= 2) {
+        uint8_t d = ppcDeepCopy(ppcSlot[top]);
+        ppcSlot[top] = (d == PPC_NIL) ? PPC_UNKNOWN : d;
+      }
+      break;
+    }
     case PPC_INVALIDATE:
       ppcInvalidate(true);
       break;

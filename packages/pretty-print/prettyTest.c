@@ -600,6 +600,12 @@ static void ppcTestSigNode(uint8_t n, char *out, size_t cap) {
       break;
     }
     case PPN_VAL:    strcat(out, "#"); break;
+    case PPN_RCL: {
+      char rname[8];
+      sprintf(rname, "R%02u", (unsigned)nd->item);
+      strcat(out, rname);
+      break;
+    }
     case PPN_CONST:  strncat(out, indexOfItems[nd->item].itemCatalogName, 15); break;
     case PPN_OPAQUE: strcat(out, "!"); break;
     default:         strcat(out, "?"); break;
@@ -649,6 +655,13 @@ static void ppcTestOp(int16_t item) {
     addItemToNimBuffer(item);   // the keypress closes NIM before the run
   }
   runFunction(item);
+}
+
+static void ppcTestOpParam(int16_t item, uint16_t param) {
+  if(calcMode == CM_NIM) {
+    closeNim();   // a TAM-parameter key closes NIM before the entry cycle
+  }
+  reallyRunFunction(item, param);
 }
 
 static void ppcTestExpectSig(const char *what, const char *expected) {
@@ -845,6 +858,54 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
   sprintf(expect, "# 5 %s", nMULT);
   ppcTestExpectSig("T15 eRPN", expect);
   clearSystemFlag(FLAG_ERPN);
+
+  // T17 (PP9): a numbered-register recall keeps its NAME in the chain
+  ppcTestReset();
+  ppcTestType("3");
+  ppcTestOpParam(ITM_STO, 5);
+  ppcTestType("2");
+  ppcTestOpParam(ITM_RCL, 5);
+  ppcTestOp(ITM_MULT);
+  sprintf(expect, "2 R05 %s", nMULT);
+  ppcTestExpectSig("T17 RCL name", expect);
+  ppcTestExpectHist("T17 hist", 0);
+
+  // T18 (PP9): recalling a STACK register deep-copies its tree; using the
+  // copy supersedes (emits) the original still sitting higher up
+  ppcTestReset();
+  ppcTestType("2");
+  ppcTestOp(ITM_ENTER);
+  ppcTestType("3");
+  ppcTestOp(ITM_ADD);
+  ppcTestType("4");
+  ppcTestOpParam(ITM_RCL, REGISTER_Y);
+  ppcTestOp(ITM_MULT);
+  sprintf(expect, "4 2 3 %s %s", nADD, nMULT);
+  ppcTestExpectSig("T18 RCL stack copy", expect);
+  ppcTestExpectHist("T18 hist", 1);
+
+  // T19 (PP9): RCL+ builds a dyadic node with the plain operator
+  ppcTestReset();
+  ppcTestType("10");
+  ppcTestOpParam(ITM_STO, 7);
+  ppcTestType("5");
+  ppcTestOpParam(ITM_RCLADD, 7);
+  sprintf(expect, "5 R07 %s", nADD);
+  ppcTestExpectSig("T19 RCL-arith", expect);
+
+  // T20 (PP9): x<>reg emits the departing tree and leaves a truthful
+  // value leaf for the register's old content
+  ppcTestReset();
+  ppcTestType("2");
+  ppcTestOp(ITM_ENTER);
+  ppcTestType("3");
+  ppcTestOp(ITM_ADD);
+  ppcTestOpParam(ITM_Xex, 9);
+  ppcTestType("4");
+  ppcTestOp(ITM_MULT);
+  sprintf(expect, "# 4 %s", nMULT);
+  ppcTestExpectSig("T20 x<>reg", expect);
+  ppcTestExpectHist("T20 hist", 1);
 
   // T16: abort while ASLIFT is set (straight after an operator result) —
   // the deferred-lift design absorbs the upstream undo() for free; a

@@ -149,6 +149,9 @@ after restore.
 | MUT-29 | unparseable-equation fallback removed (PP7) | EQ9 |
 | MUT-30 | T-line formula default flipped to ON (PP8) | FV11 (default-off band identity) |
 | MUT-31 | T-line branch loses its regist check (PP8) | FV11 (X-line identity under the toggle) |
+| MUT-32 | RCL of a stack register loses its deep copy (PP9) | T18 |
+| MUT-33 | RCL-arithmetic keeps the RCL item instead of mapping to the plain operator (PP9) | T19 |
+| MUT-34 | x<>reg loses its displacement emit (PP9) | T20 |
 
 Two lessons from the first mutation run, kept for honesty: (a) the original
 MUT-4 ("drop the dtReal34 type gate") stays GREEN — a non-real register's

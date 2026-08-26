@@ -1,13 +1,13 @@
 {
   "base_commit": "70f8b7db7425422ec80e0342e627ed3e2cfd71a6",
   "files": {
-    "prettyCapture.c": "d998d767af36fa301f7450aa6366df0835cfde928b09055ba26a18663f318dd2",
+    "prettyCapture.c": "e0104772fae526aa0a65291e6ecda11620d364bae7154c5d4b50c169a6edecbb",
     "prettyEquation.c": "7441ede9a2756cff5b7a388333212f46dfb146f5a324d05e2e1dbb0af47ade37",
-    "prettyFormula.c": "62df130c8effbb4dbb1ceddcb43a0eca028c89a481b01fef935ca45692b0a069",
+    "prettyFormula.c": "f6309ae1314e48a28e178fe7a0fcca440641b1efccf742c17be760ace4d9a439",
     "prettyInternal.h": "fcbe9b050e4e5bda42c8471f3de3cc343d03bc731d11eb422c9f82131cb7d3b7",
     "prettyLayout.c": "5bb1a717ea69f07a325ebb1209892ebaca53b36c082438ebd798b28aca63acae",
     "prettyPrint.h": "279f67c9cc8542c9e106c5364d3d92526b72c950f8a151d8fff4dc2e3d02d76d",
-    "prettyTest.c": "347abc961fca950754c7d1b7331c108a242aa92f3128970fe94e254d9797809f",
+    "prettyTest.c": "9fad0708895e8d095bbde34f63f3676d3723e6873a3dc1aadb309a0fcef14fca",
     "prettyValue.c": "4db7dcc6c024658924e9bb6b2c1aaf2145bde9d3c14cbdfa46b851f7e0ae9f01",
     "testSuite/tests/pretty_print.txt": "778b71cee0339ec87dc971217dc9efcaf0e83609660ebc9b7b9de295bf3c9b4e"
   },

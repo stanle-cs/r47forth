@@ -289,8 +289,12 @@ static uint8_t ppfFromCaptureNode(uint8_t cap, uint8_t ctxFont, uint8_t childFon
       }
       return ppfRun(ppfValBuf, ctxFont);
     case PPN_CONST:
-    case PPN_RCL:
       return ppfRun(indexOfItems[nd->item].itemCatalogName, ctxFont);
+    case PPN_RCL: {
+      char rname[8];
+      sprintf(rname, "R%02u", (unsigned)nd->item);
+      return ppfRun(rname, ctxFont);
+    }
     case PPN_OP1: {
       int p;
       uint8_t a = ppfFromCaptureNode(nd->child[0], ctxFont, childFont, &p);
@@ -393,7 +397,14 @@ bool_t ppfBuildEntry(const uint8_t *entry, uint8_t ctxFont, uint8_t childFont,
         if(sp >= 8) {
           return false;
         }
-        stackNode[sp] = ppfRun(indexOfItems[item].itemCatalogName, ctxFont);
+        if(tok == PPT_TKR) {
+          char rname[8];
+          sprintf(rname, "R%02u", (unsigned)item);
+          stackNode[sp] = ppfRun(rname, ctxFont);
+        }
+        else {
+          stackNode[sp] = ppfRun(indexOfItems[item].itemCatalogName, ctxFont);
+        }
         stackPrec[sp++] = PPF_PREC_ATOM;
         break;
       }
