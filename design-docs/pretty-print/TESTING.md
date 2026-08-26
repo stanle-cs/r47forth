@@ -152,6 +152,8 @@ after restore.
 | MUT-32 | RCL of a stack register loses its deep copy (PP9) | T18 |
 | MUT-33 | RCL-arithmetic keeps the RCL item instead of mapping to the plain operator (PP9) | T19 |
 | MUT-34 | x<>reg loses its displacement emit (PP9) | T20 |
+| MUT-35 | browser recall leaves the shadow stale (PP10) | FV12 |
+| MUT-36 | browser selection loses its clamp (PP10) | FV12 (over-navigated ENTER recalls nothing) |
 
 Two lessons from the first mutation run, kept for honesty: (a) the original
 MUT-4 ("drop the dtReal34 type gate") stays GREEN — a non-real register's

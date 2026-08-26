@@ -1,5 +1,5 @@
 diff --git a/src/c47/screen.c b/src/c47/screen.c
-index d2ac868bd18f9f4c20608f5dc90d5652844afcc6..4a1290461cf1b8c65a1b34e6ae5bdba77a108110 100644
+index d2ac868bd18f9f4c20608f5dc90d5652844afcc6..ec0bd848a7b480f787a2192589c49f8b71a8efb5 100644
 --- a/src/c47/screen.c
 +++ b/src/c47/screen.c
 @@ -3933,6 +3933,12 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
@@ -15,3 +15,17 @@ index d2ac868bd18f9f4c20608f5dc90d5652844afcc6..4a1290461cf1b8c65a1b34e6ae5bdba7
  /*Main type dtReal34 FLAG_FRACT*/
          else if(getSystemFlag(FLAG_FRACT)
                      && (    getRegisterDataType(regist) == dtReal34
+@@ -6160,6 +6166,13 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
+         force_refresh(force);
+         break;
+ 
++      case CM_PRETTY_BROWSER:
++        last_CM = calcMode;
++        prettyBrowser(NOPARAM);
++        refreshStatusBar();
++        force_refresh(force);
++        break;
++
+       case CM_REGISTER_BROWSER:
+         last_CM = calcMode;
+         clearScreen(11);

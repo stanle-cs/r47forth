@@ -33,11 +33,19 @@ bool_t prettyTryRegisterLine(calcRegister_t regist, int16_t baseY, int16_t *line
 // fnPixel manual-paint protocol; falls back to fnC47Show.
 void fnPrettyShow(uint16_t unusedButMandatoryParameter);
 
-// PHIST (ITM_PHIST, row 462): the calculation-history pager — repeated
-// presses page through, any other key releases. PCLR (ITM_PCLR, row 461)
-// clears the formula history.
+// PHIST (ITM_PHIST, row 462): opens the formula BROWSER (calcMode 20 —
+// UP/DOWN select, .d pans a wide row, ENTER recalls the result to X,
+// EXIT leaves). PCLR (ITM_PCLR, row 461) clears the formula history.
 void fnPrettyHist     (uint16_t unusedButMandatoryParameter);
 void fnPrettyHistClear(uint16_t unusedButMandatoryParameter);
+
+// browser handlers, called from the keyboard.c / screen.c hooks
+void prettyBrowser     (uint16_t unusedButMandatoryParameter);
+void prettyBrowserUp   (void);
+void prettyBrowserDown (void);
+void prettyBrowserPan  (void);
+void prettyBrowserEnter(void);
+void prettyBrowserLeave(void);
 
 // EQN strip 2D rendering, hooked at showEquation's paint site (never
 // while editing). False -> upstream's linear showString runs.

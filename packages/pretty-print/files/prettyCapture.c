@@ -978,3 +978,13 @@ void ppcHistoryClear(void) {
   ppcHistUsed = 0;
   ppcHistCount = 0;
 }
+
+// For mutations that bypass item dispatch (the browser's recall-to-X):
+// wipe the shadow to UNKNOWN without touching the history ring.
+void ppcShadowInvalidate(void) {
+  if(!ppcInited) {
+    prettyReset();
+    return;
+  }
+  ppcInvalidate(false);
+}

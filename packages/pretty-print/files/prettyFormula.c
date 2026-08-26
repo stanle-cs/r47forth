@@ -487,7 +487,7 @@ void fnPrettyHistClear(uint16_t unusedButMandatoryParameter) {
 // Standard rung first, then the whole tree re-fonted tiny — fraction
 // children are built in the context font, so childFont alone cannot
 // shrink a nested stack (found by the continued-fraction stress test).
-static bool_t ppfBuildRow(uint8_t row, uint8_t haveCurrent, uint8_t *rootOut, int16_t *ascOut, int16_t *hOut) {
+bool_t ppfBuildRow(uint8_t row, uint8_t haveCurrent, uint8_t *rootOut, int16_t *ascOut, int16_t *hOut) {
   for(int rung = 0; rung < 2; rung++) {
     uint8_t cf = (rung == 0) ? PP_FONT_STANDARD : PP_FONT_TINY;
     uint8_t root;
@@ -525,6 +525,14 @@ static bool_t ppfBuildRow(uint8_t row, uint8_t haveCurrent, uint8_t *rootOut, in
 void fnPrettyHist(uint16_t unusedButMandatoryParameter) {
   (void)unusedButMandatoryParameter;
   if(lastErrorCode != ERROR_NONE) {
+    return;
+  }
+
+  // PP10: PHIST opens the formula BROWSER (calcMode 20) — selection,
+  // panning, recall-to-X. The manual-paint pager below is retained as
+  // the non-browser fallback surface and for the packing reference.
+  if(calcMode != CM_PRETTY_BROWSER) {
+    prettyBrowser(NOPARAM);
     return;
   }
 

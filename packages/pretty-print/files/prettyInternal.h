@@ -105,6 +105,10 @@ uint8_t          ppcCurrentFormulaRoot(void);
 uint8_t          ppcHistoryCount(void);
 const uint8_t   *ppcHistoryEntry(uint8_t idx, uint16_t *lenOut, uint16_t *seqOut);
 void             ppcHistoryClear(void);
+void             ppcShadowInvalidate(void);   ///< dispatch-bypassing mutations (browser recall)
+
+// prettyFormula.c — the browser reuses the pager's packed row builder
+bool_t ppfBuildRow(uint8_t row, uint8_t haveCurrent, uint8_t *rootOut, int16_t *ascOut, int16_t *hOut);
 
 // prettyValue.c — converters and the toggle's test hook
 bool_t ppParseFraction(const char *src, uint8_t ctxFont, uint8_t childFont, uint8_t *rootOut);

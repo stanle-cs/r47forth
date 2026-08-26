@@ -1,0 +1,21 @@
+diff --git a/src/c47/defines.h b/src/c47/defines.h
+index 63b9c1a7692f24da093a882ffa1f3be1625bb7a8..1a732e3d7f1b1001a5993c7641e71e51d86ad4ba 100644
+--- a/src/c47/defines.h
++++ b/src/c47/defines.h
+@@ -1016,7 +1016,7 @@
+ #define FLAG_PSHADE                           0x806E //47
+ #define FLAG_SBadm                            0x806F //48
+ 
+-#define NUMBER_OF_SYSTEM_FLAGS                 64+48 // We can have a maximum of 128 system flags
++#define NUMBER_OF_SYSTEM_FLAGS                 64+50 // We can have a maximum of 128 system flags; 50 = one reserved for pretty-print's FLAG_PRETTYP (claims registry) — pretty-print's defines.h carries the IDENTICAL count edit so the 3-way merge unifies
+ 
+                                                      // only used as bit count for setting change detection
+ #define SETTING_AMODE                         0x0080 // current angle mode
+@@ -1711,6 +1711,7 @@ static inline uint8_t regCtoKS(const int16_t regC) {
+ #define CM_PLOT_STAT                               8 // Plot stats mode
+ #define CM_ERROR_MESSAGE                           9 // Error message in one of the register lines
+ #define CM_BUG_ON_SCREEN                          10 // Bug message on screen
++#define CM_PRETTY_BROWSER                         20 // pretty-print formula browser (package browsers 19-23, claims registry)
+ #define CM_CONFIRMATION                           11 // Waiting for confirmation or canceling
+ #define CM_MIM                                    12 // Matrix input mode tbd reorder
+ #define CM_EIM                                    13 // Equation input mode

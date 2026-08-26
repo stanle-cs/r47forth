@@ -43,6 +43,19 @@ static void ppTestSetRealX(const char *value) {
   stringToReal34(value, REGISTER_REAL34_DATA(REGISTER_X));
 }
 
+static bool_t ppTestIsLonI(calcRegister_t regist, uint32_t expected) {
+  longInteger_t li;
+  bool_t equal;
+  if(getRegisterDataType(regist) != dtLongInteger) {
+    return false;
+  }
+  longIntegerInit(li);
+  convertLongIntegerRegisterToLongInteger(regist, li);
+  equal = longIntegerCompareUInt(li, expected) == 0;
+  longIntegerFree(li);
+  return equal;
+}
+
 
 /* ==== prettyTestMeasure ================================================= */
 
@@ -1120,8 +1133,9 @@ void prettyTestFormula(uint16_t unusedButMandatoryParameter) {
   if(!ppTestRowAllLit(20, 0, SCREEN_WIDTH - 1))  ppTestFail("FV5 frame 20");
   if(!ppTestRowAllLit(168, 0, SCREEN_WIDTH - 1)) ppTestFail("FV5 frame 168");
   if(!ppTestRectAnyLit(21, 167, 0, SCREEN_WIDTH - 1)) ppTestFail("FV5 no content ink");
-  if(!(screenUpdatingMode & SCRUPD_MANUAL_STACK)) ppTestFail("FV5 protocol not armed");
-  if(!screenHoldsDrawnPixels)                     ppTestFail("FV5 pixels not held");
+  if(calcMode != CM_PRETTY_BROWSER) ppTestFail("FV5 browser mode not entered");
+  prettyBrowserLeave();
+  if(calcMode == CM_PRETTY_BROWSER) ppTestFail("FV5 leave did not restore mode");
   fnPrettyHistClear(NOPARAM);
   if(ppcHistoryCount() != 0) ppTestFailInt("FV5 PCLR", 0, ppcHistoryCount());
   screenUpdatingMode = SCRUPD_AUTO;
@@ -1155,8 +1169,34 @@ void prettyTestFormula(uint16_t unusedButMandatoryParameter) {
   if(!ppTestRectAnyLit(21, 56, 0, SCREEN_WIDTH - 1)) {
     ppTestFail("FV6 tall formula missing from the pager");
   }
+  prettyBrowserLeave();
   screenUpdatingMode = SCRUPD_AUTO;
   screenHoldsDrawnPixels = false;
+
+  // FV12 (PP10): selection clamps at the last row and ENTER recalls the
+  // selected entry's result into X, restoring the mode and wiping the
+  // shadow (the recall bypassed item dispatch)
+  ppcTestReset();
+  ppcTestType("2");
+  ppcTestOp(ITM_ENTER);
+  ppcTestType("3");
+  ppcTestOp(ITM_ADD);
+  ppcTestType("5");
+  ppcTestOp(ITM_ENTER);
+  ppcTestType("6");
+  ppcTestOp(ITM_ADD);
+  calcMode = CM_NORMAL;
+  temporaryInformation = TI_NO_INFO;
+  lastErrorCode = 0;
+  fnPrettyHist(NOPARAM);
+  if(calcMode != CM_PRETTY_BROWSER) ppTestFail("FV12 browser not entered");
+  prettyBrowserDown();
+  prettyBrowserDown();   // over-navigation must clamp at the last row
+  prettyBrowserDown();
+  prettyBrowserEnter();
+  if(calcMode == CM_PRETTY_BROWSER) ppTestFail("FV12 recall did not leave the browser");
+  if(!ppTestIsLonI(REGISTER_X, 5)) ppTestFail("FV12 recalled result not in X");
+  if(ppcCurrentFormulaRoot() != PPC_NIL) ppTestFail("FV12 shadow not invalidated after recall");
 
   // FV7 (PP6): sqrt over a fraction — the synthesized tall sign; measure
   // must succeed and the sign strokes must leave ink left of the vinculum

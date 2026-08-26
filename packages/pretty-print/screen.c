@@ -6166,6 +6166,13 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
         force_refresh(force);
         break;
 
+      case CM_PRETTY_BROWSER:
+        last_CM = calcMode;
+        prettyBrowser(NOPARAM);
+        refreshStatusBar();
+        force_refresh(force);
+        break;
+
       case CM_REGISTER_BROWSER:
         last_CM = calcMode;
         clearScreen(11);

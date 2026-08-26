@@ -2,6 +2,53 @@
 
 Non-normative amendment trail. DESIGN.md is authoritative.
 
+## 2026-08-26 — PP10 (the browser lands on calcMode 20)
+
+- **The composition wall was condition LINES, not insertions.**
+  Undo-history's browser edits ~7 shared condition lines (fn-key/TAM
+  guards, shift inclusion, keyActionProcessed, underline, keyboardTweak)
+  — a third browser editing the same lines is a guaranteed 3-way
+  conflict. Resolution: ONE undo-history amendment (Stan pre-authorized
+  the mechanism class) converts those lines to the range form
+  `calcMode 19..23 = package browsers` and adds literal `case 20:` to
+  its case-list insertions — solo-safe, and browsers 21-23 now compose
+  for free. Recorded in undo-history DESIGN.md §6.
+- Pretty-print's own keyboard surface is insertions only: the
+  head-of-chain resolution branch (both packages independently prepend
+  `if(mode){...} else` blocks at different lines — the 3-way merge
+  CHAINS them, which is the elegant part), and one case block per
+  fnKey handler, each anchored after a complete case body well away
+  from undo-history's insertion points (fallthrough groups must never
+  be split — a braced case inside one captures the group).
+- PHIST now opens the browser; UP/DOWN select (clamped), .d pans a
+  too-wide selected row (wraps), ENTER recalls the selected entry's
+  TKRES into X — saveForUndo first, lift, then `ppcShadowInvalidate()`:
+  the recall bypasses item dispatch, so the shadow wipes to UNKNOWN
+  rather than pretending it followed. The live (now) row recalls
+  nothing — its value IS X. The manual-paint pager body remains as the
+  non-browser fallback surface.
+- Keyboard-case reachability is proven structurally (the handlers are
+  3-line breaks); the handlers themselves are pinned via direct calls
+  (FV12). A B9-style real-keypress harness remains open work.
+- The head-of-chain branch was ABANDONED after conflicting at
+  undo-history's exact insertion point (and the earlier anchor would
+  have left a bare `else` binding into a PC_BUILD preprocessor block):
+  instead forth-core's REWRITTEN key-resolution list line gained
+  `|| (calcMode >= 20 && calcMode <= 23)` — package browsers without
+  their own resolution branch resolve plainly through the standard
+  branch. Solo-pretty-print (no forth-core) resolves nav keys through
+  the final else (primaryAim == primary for them); only .d-pan may
+  differ solo — documented quirk, direct-call pins unaffected.
+- **FOUND, PRE-EXISTING, NOT OURS: the forth-core + undo-history
+  HEADLESS BATTERY segfaults** right after fold test [9] (R8-P1) — with
+  or without the amendment, with or without pretty-print. No gate ever
+  ran the battery under a combined shadow (forth's battery gate is
+  solo; combined passes run only the meson testSuite). Reproducer:
+  configure CUSTOM_PKG=packages/forth-core,packages/undo-history with
+  -DFORTH_DEBUG_SELFTEST, run `c47 --headless`. Filed here for the
+  forth-core/undo-history owners; the forth+pretty-print battery is
+  GREEN at this tip.
+
 ## 2026-08-26 — PP9 (RCL/STO capture classes)
 
 - Register operations now chain instead of invalidating: RCL pushes a
