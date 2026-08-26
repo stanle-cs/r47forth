@@ -211,3 +211,11 @@
   the live branch's pending gap. R2-3: restore failure now repairs the
   cursor to the pushed anchor. R2-4: B15 made self-pinning and
   mutation-proven. Pins R13/R14; gate green; round 3 owed.
+- **2026-08-26 audit round 3** (on round 2's fixes; trap 3-for-3).
+  Convergent ruling: equal states separated by a gap are distinct
+  occurrences — dedupe suppressed when GAPBEFORE is incoming; the
+  anchor pushes with the ~ pointing the right way and undo lands on
+  the last recorded state. R13 v1 had pinned the buggy merge (lesson:
+  pins encode semantics, not fix echoes). Restore-failure push
+  detection moved from entry-count to top-seq; gap-abandon extended to
+  every successful restore. Round 4 owed.

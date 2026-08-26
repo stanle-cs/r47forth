@@ -233,7 +233,11 @@ static int historySerializePush(bool_t fromSaved, int16_t labelItem, uint8_t ext
   // twice (upstream saves again inside some functions, and the capture right
   // after a ring restore reproduces the restored entry). Identity is
   // everything except totalBytes/seq/label and the provenance flags.
-  if(historyEntryCount > 0) {
+  if(historyEntryCount > 0 && !(extraFlags & HISTORY_ENTRY_GAPBEFORE)) {
+    // A state equal to the top but separated from it by a GAP is a
+    // DISTINCT temporal occurrence, not a duplicate: merging collapsed
+    // the pre-gap and post-gap levels and pointed the ~ the wrong way
+    // (audit r3, both readers convergent).
     historyEntryHeader_t top;
     historyHeaderOf(historyEntryCount - 1, &top);
     if(top.totalBytes == h.totalBytes &&
@@ -248,7 +252,6 @@ static int historySerializePush(bool_t fromSaved, int16_t labelItem, uint8_t ext
         top.labelItem = labelItem;
       }
       top.flags &= (uint8_t)~HISTORY_ENTRY_LIVEANCHOR;   // a merged anchor is a plain state again
-      top.flags |= (uint8_t)(extraFlags & HISTORY_ENTRY_GAPBEFORE);   // but a gap below it is real either way (audit r2)
       xcopy(historyRing + historyEntryOffset[historyEntryCount - 1], &top, sizeof(top));
       return 2;
     }
@@ -337,14 +340,8 @@ bool_t undoHistoryNoteFirstUndo(void) {
                     ? historyEntryCount - 2 : HISTORY_CURSOR_NONE;
   }
   else if(result == 2) {
-    if(gapAnchor) {
-      // The mint merged into the top, which now carries the ~: same gap
-      // semantics as the push path — step over, never land on the
-      // skipped state (audit r2, both readers convergent).
-      historyGapPending = false;
-      historyCursor = historyEntryCount - 1;
-      return historyEntryCount >= 2;
-    }
+    // Unreachable with gapAnchor set: a gap-marked mint never dedupes
+    // (audit r3) — a merge here is always the plain no-gap kind.
     historyCursor = (historyLastCaptureSeq != 0 && historySeqOf(historyEntryCount - 1) == historyLastCaptureSeq)
                     ? historyEntryCount - 1 : HISTORY_CURSOR_NONE;
   }
@@ -552,7 +549,7 @@ bool_t undoHistoryRestoreLevel(uint8_t logical) {
       }
     }
     {
-      uint8_t countBefore = historyEntryCount;
+      uint16_t topSeqBefore = historyEntryCount > 0 ? historySeqOf((uint8_t)(historyEntryCount - 1)) : 0;
       (void)undoHistoryNoteFirstUndo();
       for(uint8_t l = 0; l < historyEntryCount; l++) {
         if(historySeqOf(l) == targetSeq) {
@@ -566,18 +563,27 @@ bool_t undoHistoryRestoreLevel(uint8_t logical) {
       logical = (uint8_t)found;
       if(!historyRestoreToIndex(logical)) {
         // The machine still holds the live state: if the mint pushed, the
-        // top IS that state — point the cursor at it instead of at
-        // whatever the mint guessed (audit r2, RAM_FULL mid-restore).
-        historyCursor = historyEntryCount > countBefore ? historyEntryCount - 1 : HISTORY_CURSOR_NONE;
+        // top IS that state — point the cursor at it. Detected by the
+        // TOP SEQ, not the entry count: an evict-plus-push keeps the
+        // count equal and even shrinks it (audit r3).
+        bool_t pushed = historyEntryCount > 0 && historySeqOf((uint8_t)(historyEntryCount - 1)) != topSeqBefore;
+        historyCursor = pushed ? historyEntryCount - 1 : HISTORY_CURSOR_NONE;
         return false;
       }
-      // The un-captured live branch is abandoned, its pending gap with
-      // it — the restored branch starts clean (audit r2).
-      historyGapPending = false;
+      historyGapPending = false;   // the abandoned live branch takes its gap with it
       return true;
     }
   }
-  return historyRestoreToIndex(logical);
+  {
+    // A mid-trail jump abandons the un-captured live continuation too —
+    // including a retry after a failed live restore left the cursor on
+    // the anchor (audit r3): any successful restore starts clean.
+    bool_t ok = historyRestoreToIndex(logical);
+    if(ok) {
+      historyGapPending = false;
+    }
+    return ok;
+  }
 }
 #if defined(PC_BUILD)
 /* === testSuite coverage drivers ==========================================
@@ -1040,10 +1046,10 @@ void historyTestRing(uint16_t unusedButMandatoryParameter) {
     }
   }
 
-  { // R13 (audit r2, convergent): a gap-pending mint that DEDUPE-MERGES
-    // must still step over the gap — the merged top carries the ~, the
-    // pending flag clears, and the machine never lands on the skipped
-    // state.
+  { // R13 (audit r3 rewrite): equal states separated by a GAP are distinct
+    // temporal occurrences — the mint must PUSH, never merge, so the ~
+    // points the right way (anchor -> pre-gap top), the first undo lands
+    // ON the last recorded state, and (now) survives.
     historyEntryHeader_t h;
     historyTestBaseline();
     historyTestWriteLonI(REGISTER_X, 1);
@@ -1054,29 +1060,35 @@ void historyTestRing(uint16_t unusedButMandatoryParameter) {
     memset(REGISTER_STRING_DATA(REGISTER_X), 'A', HISTORY_ENTRY_MAX_BYTES + 400);
     REGISTER_STRING_DATA(REGISTER_X)[HISTORY_ENTRY_MAX_BYTES + 400] = 0;
     saveForUndo();                       // oversized -> skipped, gap pending
-    historyTestWriteLonI(REGISTER_X, 2); // live byte-identical to P
+    historyTestWriteLonI(REGISTER_X, 2); // live byte-identical to P, but POST-gap
     fnUndo(NOPARAM);
-    if(!historyTestIsLonI(REGISTER_X, 1)) {
-      historyTestFail("R13 a merged gap-mint must still step to the last ring level");
-    }
-    if(undoHistoryDepth() != 2) {
-      historyTestFail("R13 the merge must not grow the ring");
+    if(undoHistoryDepth() != 3) {
+      historyTestFail("R13 a gap-separated equal state must push a distinct anchor");
     }
     else {
-      historyHeaderOf(1, &h);
-      if(!(h.flags & HISTORY_ENTRY_GAPBEFORE)) {
-        historyTestFail("R13 the merged top must carry the gap mark");
+      historyHeaderOf(2, &h);
+      if(!(h.flags & HISTORY_ENTRY_GAPBEFORE) || !(h.flags & HISTORY_ENTRY_LIVEANCHOR)) {
+        historyTestFail("R13 the pushed anchor carries the gap mark and (now)");
       }
-      if(h.flags & HISTORY_ENTRY_LIVEANCHOR) {
-        historyTestFail("R13 a merged anchor stays a plain state (ruling)");
+      historyHeaderOf(1, &h);
+      if(h.flags & HISTORY_ENTRY_GAPBEFORE) {
+        historyTestFail("R13 the pre-gap top must NOT carry a gap mark (P->Q is contiguous)");
       }
     }
-    if(undoHistoryCursorIndex() != 0) {
-      historyTestFail("R13 cursor must sit on the restored ring level");
+    if(!historyTestIsLonI(REGISTER_X, 2)) {
+      historyTestFail("R13 the first undo lands on the last recorded state");
+    }
+    if(undoHistoryCursorIndex() != 1) {
+      historyTestFail("R13 cursor must sit on the pre-gap top");
     }
     fnRedo(NOPARAM);
-    if(!historyTestIsLonI(REGISTER_X, 2)) {
-      historyTestFail("R13 redo must return to the merged top");
+    if(!historyTestIsLonI(REGISTER_X, 2) || undoHistoryCursorIndex() != 2) {
+      historyTestFail("R13 redo must return to the anchor");
+    }
+    fnUndo(NOPARAM);
+    fnUndo(NOPARAM);
+    if(!historyTestIsLonI(REGISTER_X, 1)) {
+      historyTestFail("R13 undoing twice more reaches Q");
     }
   }
 

@@ -170,6 +170,13 @@ workflow; it may not be one of the readers.
   violate (fix the mutation), or unfalsifiable-by-construction (record it
   as a documented gap, as round 4's hardening was). Check for redundant
   paths that self-heal the mutation before crediting any of the three.
+- **A pin written beside a fix can enshrine the fix's bug.** undo-history
+  round 3: R13 v1 asserted the merged-gap representation its own fix
+  produced, and the next round ruled that representation defective — the
+  pin was red-first and still pinned a bug. Write pins from the ruled
+  SEMANTICS; where the semantics are unsettled, pose the doubt as an
+  explicit packet question (posing the merged-top ~ direction as one
+  turned a hunch into two independent confirmations in a single pass).
 - **An operator-run probe transcript is the cheapest refutation
   evidence.** undo-history round 1: a five-line real-key probe transcript
   supplied as a pre-verified fact killed a "stuck state" finding in one
