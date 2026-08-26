@@ -406,6 +406,10 @@ static bool_t historyRestoreToIndex(uint8_t index) {
   thereIsSomethingToUndo = true;
   undo();
   historyCursor = index;
+  historyGapPending = false;   // any successful restore abandons the
+                               // un-captured live tip, its pending gap
+                               // included — the rule lives HERE so every
+                               // caller is covered (audit r4, convergent)
   return true;
 }
 
@@ -570,7 +574,6 @@ bool_t undoHistoryRestoreLevel(uint8_t logical) {
         historyCursor = pushed ? historyEntryCount - 1 : HISTORY_CURSOR_NONE;
         return false;
       }
-      historyGapPending = false;   // the abandoned live branch takes its gap with it
       return true;
     }
   }
@@ -578,11 +581,7 @@ bool_t undoHistoryRestoreLevel(uint8_t logical) {
     // A mid-trail jump abandons the un-captured live continuation too —
     // including a retry after a failed live restore left the cursor on
     // the anchor (audit r3): any successful restore starts clean.
-    bool_t ok = historyRestoreToIndex(logical);
-    if(ok) {
-      historyGapPending = false;
-    }
-    return ok;
+    return historyRestoreToIndex(logical);
   }
 }
 #if defined(PC_BUILD)
@@ -1114,6 +1113,29 @@ void historyTestRing(uint16_t unusedButMandatoryParameter) {
     historyHeaderOf((uint8_t)(undoHistoryDepth() - 1), &h);
     if(h.flags & HISTORY_ENTRY_GAPBEFORE) {
       historyTestFail("R14 the abandoned branch's gap must not mark the new branch");
+    }
+  }
+
+  { // R15 (audit r4, convergent): the gap-abandon rule lives in the
+    // restore FUNNEL — an undo/redo walk that restores a ring level
+    // abandons the un-captured live tip too, pending gap included.
+    historyEntryHeader_t h;
+    historyTestBaseline();
+    historyTestWriteLonI(REGISTER_X, 1);
+    saveForUndo();
+    historyTestWriteLonI(REGISTER_X, 2);
+    saveForUndo();
+    reallocateRegister(REGISTER_X, dtString, TO_BLOCKS(HISTORY_ENTRY_MAX_BYTES + 512), amNone);
+    memset(REGISTER_STRING_DATA(REGISTER_X), 'A', HISTORY_ENTRY_MAX_BYTES + 400);
+    REGISTER_STRING_DATA(REGISTER_X)[HISTORY_ENTRY_MAX_BYTES + 400] = 0;
+    saveForUndo();                       // skipped -> gap pending; live stays oversized
+    fnUndo(NOPARAM);                     // mint returns 0 (oversized live); buffer undo
+    fnUndo(NOPARAM);                     // ring step-back restore succeeds
+    historyTestWriteLonI(REGISTER_X, 9);
+    saveForUndo();                       // next capture must NOT wear the stale ~
+    historyHeaderOf((uint8_t)(undoHistoryDepth() - 1), &h);
+    if(h.flags & HISTORY_ENTRY_GAPBEFORE) {
+      historyTestFail("R15 a ring restore must abandon the stale pending gap");
     }
   }
 

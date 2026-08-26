@@ -219,3 +219,8 @@
   pins encode semantics, not fix echoes). Restore-failure push
   detection moved from entry-count to top-seq; gap-abandon extended to
   every successful restore. Round 4 owed.
+- **2026-08-26 audit round 4** (on round 3's deltas; 4-for-4). One
+  convergent finding: the gap-abandon rule was per-site — stepBack and
+  fnRedo restores leaked the pending gap. Moved into the
+  historyRestoreToIndex funnel (bug class: structural rule spelled
+  per-site); caller clears removed; R15 red-first. Rounds 5+6 owed.
