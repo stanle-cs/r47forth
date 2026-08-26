@@ -110,6 +110,11 @@ update posts from now on:
   reason inline: "( ENTER ran the line before the console landed,
   doesn't work well in new design)".
 - Changelog verbs are plain: "added", "support:".
+- Bug-fix bullets are "fix X" one-liners (ruled 2026-08-26, first
+  changelog draft rejected): state the symptom in one short line,
+  optional parenthetical for consequence or example. NO two-sentence
+  bug-story-then-resolution structure — "X did Y. It does Z now." is
+  the rejected shape.
 - The closing is repo link, build command, flash disclaimer. He cut
   the target/base/licence recap and the sim-vs-hardware disclosure
   from the update post (the stage-2 post already carries them).

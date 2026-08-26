@@ -1,15 +1,16 @@
 [b]Changelog[/b]
 [list]
-[*]Unlabeled value rows showed a lone -, easy to read as a minus sign next to a negative number. The placeholder is now (val).
-[*]ENTER did nothing in the history view on the real keyboard (the key never reached the view). It restores the selected level now.
-[*]Restoring a level with ENTER left no (now) entry, so there was no way back to where you jumped from. REDO returns there now.
-[*]ENTER on an empty history inserted an ENTER level, choosing a second level rewrote the list, and (now) never appeared. One cause for all three (the keypress was saved as an operation before the view handled it), fixed together.
-[*]Keys with no meaning in the view (digits, shifted functions) acted on the calculator underneath, which could end in a firmware error. They are ignored while the view is open.
-[*]f-UP could open the view in the middle of a command prompt. It waits until the prompt is done.
-[*]After an undo, the next operation left a hole in the level numbers (rows like 05 03 02 01). Numbering stays consecutive now.
-[*]UNDO across a ~ could land on the wrong level, and the next press could walk forward. It lands on the newest stored level now, further presses keep going back, and REDO returns.
-[*]Two equal states on either side of a ~ were folded into one level, so an undo skipped a step and the mark sat on the wrong row. They stay separate levels.
-[*]After undoing back past a skipped state, the next stored level could get a ~ for a gap that was not there. It does not appear anymore.
-[*]Choosing a level while memory was too tight to restore it could push that same level out of the history. The restore refuses first, with the level intact.
-[*]With memory full, a restore that failed halfway could leave the stock one-step undo half overwritten, and pressing UNDO gave a state that never existed. A failed restore leaves everything untouched, or turns off the one-step undo when it cannot (UNDO walks the history instead). Freeing memory and trying again works.
+[*]fix unlabeled rows showing a bare - that read like a minus sign, now (val)
+[*]fix ENTER dead in the history view on the real keyboard
+[*]fix (now) missing when a level is chosen with ENTER (REDO had no way back)
+[*]fix ENTER on an empty history adding an ENTER level
+[*]fix choosing a second level rewriting the history
+[*]fix digits and shifted keys reaching the calculator under the view (possible firmware error)
+[*]fix f-UP opening the view over a pending command prompt
+[*]fix numbering holes after undo then a new operation (05 03 02 01)
+[*]fix UNDO across a ~ landing wrong or stepping forward
+[*]fix two equal states around a ~ merging into one level
+[*]fix a stray ~ after undoing past a skipped state
+[*]fix a memory-full restore deleting the very level it tried to restore
+[*]fix a memory-full restore corrupting the one-step undo
 [/list]
