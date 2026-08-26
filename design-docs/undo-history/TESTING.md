@@ -101,3 +101,19 @@ OUT OF MEMORY diagnostics into the log by design):
 
 | A4 | clearing the pending gap on a FAILED restore (funnel clear moved above the failure returns) | ring battery R16 (slot-0 staging failure: gap survives, cursor stays live, machine and armed buffer untouched; freed-memory retry succeeds and abandons the gap) |
 | A5 | a mid-staging failure leaving the torn SAVED bank consumable | ring battery R17 (X stages, Y's grow hits RAM_FULL, browser-path failure discarded, then fnUndo: the torn bank must not be installed; red-first — pre-fix the machine landed on level-0 X beside pre-op Y) |
+
+R18 pins the sums ruling (r5 addendum): a sums-bearing state NEVER fits
+an entry under the shipped constants (HISTORY_SUMS_BYTES = 28 x 60 =
+1,680 B > entry cap 1,024 B; the old 1 KiB ring caps at 256 B) — the fixture drives a real sums
+block through saveForUndo and asserts the skip, the pending gap, and
+the ~ on the first sums-free capture. Its tripwire assert reddens if
+the constants ever let sums fit, which is the signal to write the
+sums-restore and sums-site-retirement pins that are dormant today. The
+funnel's sums-site retirement (thereIsSomethingToUndo = false at the
+sums allocation failure) is therefore correct-by-construction defense,
+trace-verified only — unreachable while the tripwire holds (the R10
+precedent: unreachability documented, alarm pinned). The sums block in
+R18 is allocated directly rather than via the stats pipeline: the
+pointer plus block IS the state the capture reads, saveForUndo's own
+copy is the gesture that rides it, and the entry-flag assert proves the
+fixture reached it.

@@ -61,6 +61,12 @@ finding.
         Round 3's bad Sol finding was this omission.
      4. If a comment in the code names a function, that function's body is
         in the packet below. Say so here; the linter cross-checks.
+     5. Constants that gate reachability — sizing arithmetic, caps,
+        buffer budgets — with their VALUES multiplied out. undo-history
+        round 5: both readers traced the sums restore path as live code;
+        HISTORY_SUMS_BYTES (~1.3 KiB) vs the 1 KiB entry cap makes it
+        unreachable by construction, and neither could know without the
+        numbers in front of them.
 -->
 
 ## The code

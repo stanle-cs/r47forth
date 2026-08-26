@@ -203,12 +203,14 @@ def lint(path):
     # self-contained design packet) both answered well, identity passing.
     # Round 10: 23.9 KB (Gemini, whole-function fix packet — four findings, one
     # a real premise-level catch) and 19.2 KB (Sol, design packet) both answered
+    # in minutes. undo-history round 1 extended it again: 27.9 KB (Gemini) and
+    # 26.6 KB (Sol) refutation packets, both fully structured answers.
     # well. Two packets in that round WERE split for size and the split cost
     # nothing, so the ceiling is still advice, not a wall: split for DEPTH — one
     # packet, one question — and let size follow from that.
     note = ('thin — is the whole function really here?' if kb < 2 else
-            'proven range' if kb <= 24 else
-            'beyond the tested range (23.9 KB Gemini / 19.2 KB Sol are the largest proven); split for depth')
+            'proven range' if kb <= 28 else
+            'beyond the tested range (27.9 KB Gemini / 26.6 KB Sol are the largest proven); split for depth')
     print(f"  [SIZE] {size} bytes ({kb:.1f} KB) — {note}")
 
     if hard:

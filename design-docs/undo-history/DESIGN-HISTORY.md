@@ -245,3 +245,20 @@
   upstream convention — upstream undo() tears the live state the
   same way; and rebuild-the-bank is the relocating-state fix shape).
   R17 red-first. Rounds 6+7 owed.
+- **2026-08-26 r5 addendum (pre-round-6): the sums arithmetic.** Writing
+  the sums-site retirement pin exposed that the scenario is
+  unreachable by construction: HISTORY_SUMS_BYTES (28 sums x
+  REAL_SIZE_IN_BYTES(75) = 28 x 60 = 1,680 B) exceeds the per-entry cap
+  (1,024 B)
+  on both ring sizes, so HAS_SUMS entries cannot exist — stats
+  sessions always skip through the gap machinery (coherent: the
+  single-level undo still operates, restoring a pre-stats level
+  correctly drops live sums via undo()'s own branch). Ruled a
+  by-construction skip, not a defect: documented in DESIGN.md, pinned
+  by R18 (real sums block through saveForUndo -> skip + gap + ~ on
+  the next sums-free capture) with a tripwire that reddens if the
+  constants ever let sums fit — the day the dormant sums restore and
+  retirement paths need real pins. Round-5 packet lesson encoded in
+  the template: constants that gate reachability (sizing arithmetic)
+  belong in the packet — neither reader could have caught this
+  without HISTORY_SUMS_BYTES vs the cap in front of them.

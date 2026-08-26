@@ -1284,6 +1284,54 @@ void historyTestRing(uint16_t unusedButMandatoryParameter) {
     lastErrorCode = ERROR_NONE;
   }
 
+  { // R18 (r5 addendum): statistical sums and the ring, by construction.
+    // HISTORY_SUMS_BYTES (28 sums x REAL_SIZE_IN_BYTES(75)) exceeds
+    // HISTORY_ENTRY_MAX_BYTES (ring/4) on BOTH ring sizes, so a state
+    // carrying sums NEVER fits an entry: while sums exist, captures skip
+    // through the pending-gap machinery and the single-level buffer is
+    // the only undo — ruled, not accidental. The funnel's HAS_SUMS
+    // branch (and its retirement site) is dormant support that goes
+    // live only if the ring grows; the tripwire below forces its pins
+    // to be written the day the constants change.
+    historyEntryHeader_t h;
+    historyTestBaseline();
+    historyTestWriteLonI(REGISTER_X, 4);
+    saveForUndo();                       // entry 0: plain {4}
+    statisticalSumsPointer = allocC47Blocks(NUMBER_OF_STATISTICAL_SUMS * REAL_SIZE_IN_BLOCKS(75));
+    if(statisticalSumsPointer == NULL) {
+      historyTestFail("R18 fixture: sums block must allocate");
+    }
+    else {
+      memset(statisticalSumsPointer, 0, HISTORY_SUMS_BYTES);
+    }
+    if(HISTORY_SUMS_BYTES <= HISTORY_ENTRY_MAX_BYTES) {
+      historyTestFail("R18 tripwire: sums now FIT an entry — write the sums restore + retirement pins");
+    }
+    historyTestWriteLonI(REGISTER_X, 5);
+    saveForUndo();                       // state WITH sums: must skip, gap pending
+    if(undoHistoryDepth() != 1) {
+      historyTestFail("R18 a sums-bearing state must skip the ring by construction");
+    }
+    if(!historyGapPending) {
+      historyTestFail("R18 the skipped sums state leaves the gap pending");
+    }
+    freeC47Blocks(statisticalSumsPointer, NUMBER_OF_STATISTICAL_SUMS * REAL_SIZE_IN_BLOCKS(75));
+    statisticalSumsPointer = NULL;
+    historyTestWriteLonI(REGISTER_X, 6);
+    saveForUndo();                       // sums gone: pushes and consumes the gap
+    if(undoHistoryDepth() != 2) {
+      historyTestFail("R18 the first sums-free capture must push again");
+    }
+    historyHeaderOf((uint8_t)(undoHistoryDepth() - 1), &h);
+    if(!(h.flags & HISTORY_ENTRY_GAPBEFORE)) {
+      historyTestFail("R18 the capture after a sums session wears the gap mark");
+    }
+    if(historyGapPending) {
+      historyTestFail("R18 the consumed gap must clear");
+    }
+    lastErrorCode = ERROR_NONE;
+  }
+
   historyTestBaseline();                 // leave no half-navigated state behind
   historyTestWriteLonI(REGISTER_X, historyTestFailures);
 }

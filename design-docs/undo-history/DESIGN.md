@@ -41,6 +41,17 @@ label item). A skipped capture (oversized state, see
 §3) therefore only removes granularity — navigation across the gap restores
 a complete, correct state.
 
+Statistical sums are a **by-construction skip** under the shipped sizes
+(r5 addendum, R18): HISTORY_SUMS_BYTES (28 × REAL_SIZE_IN_BYTES(75) = 28 × 60 =
+1,680 B) exceeds the per-entry cap (ring/4 = 1,024 B) on both ring sizes,
+so while sums exist every capture skips through the pending-gap
+machinery and only upstream's single-level undo operates. That is the
+oversized-skip design doing its job, not an accident — stats work never
+tears history, it just isn't ring-captured. The serializer's HAS_SUMS
+support and the funnel's sums restore/retirement site are dormant until
+the ring grows; R18's tripwire reddens the day the constants make sums
+fit, forcing their pins to be written then.
+
 ## 2. Cursor algebra
 
 `historyCursor` = NONE while live, else the index of the entry most recently
