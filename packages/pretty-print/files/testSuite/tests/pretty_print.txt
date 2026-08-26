@@ -47,6 +47,14 @@ Func: prettyTestFormula
 In:  FL_ASLIFT=1 RX=LonI:"99"
 Out: EC=0 RX=LonI:"0"
 
+Func: prettyTestEquation
+
+; EQ1 '/' binds factors; EQ2 parens unwrap under the bar; EQ3 vinculum
+; over a parenthesized radicand; EQ4 strict declines; EQ5 the strip
+; render pins the bar row.
+In:  FL_ASLIFT=1 RX=LonI:"99"
+Out: EC=0 RX=LonI:"0"
+
 Func: prettyTestCapture
 
 ; The 15 normative traces from DESIGN.md §4, driven through the REAL

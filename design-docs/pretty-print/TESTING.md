@@ -64,6 +64,15 @@ does this first, always.
   `screenHoldsDrawnPixels` armed; string X falls back to the ordinary
   SHOW (temporaryInformation leaves TI_NO_INFO).
 
+### PP5 additions
+
+- **`prettyTestEquation`** — the EQN strip grammar: EQ1 `1/X+2` keeps
+  '/' bound to factors (`[F(1|X) + 2]`); EQ2/EQ3 parens unwrap under a
+  bar or vinculum; EQ4 strict declines (no-fraction expressions, dangling
+  operators, ellipsis-truncated strings, glyphs outside the grammar); EQ5
+  `prettyTryEquation("1/X", 1)` paints the bar at row 182 inside the
+  equation's own 23 px strip row and nothing below it.
+
 ### PP4 additions
 
 - **`prettyTestFormula`** — layout-signature pins over the infix
@@ -122,6 +131,9 @@ after restore.
 | MUT-17 | precedence parens dropped (PP4) | FV1 |
 | MUT-18 | DIV falls to function form instead of a stacked fraction (PP4) | FV2 |
 | MUT-19 | token decoder pops operands swapped (PP4) | FV3 |
+| MUT-20 | equation grammar accepts trailing content (PP5) | EQ4 |
+| MUT-21 | paren unwrap under bar/vinculum dropped (PP5) | EQ2, EQ3 |
+| MUT-22 | '/' swallows the whole expression instead of a factor (PP5) | EQ1 |
 
 Two lessons from the first mutation run, kept for honesty: (a) the original
 MUT-4 ("drop the dtReal34 type gate") stays GREEN — a non-real register's

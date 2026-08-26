@@ -290,7 +290,7 @@ No patches to `stack.c`, `defines.h`, `keyboard.c`, `softmenus.c`,
 | **PP2** | `PP_RAD`/`PP_SUP`; IRFRAC + exponent + complex parsers; `PSHOW` manual-paint surface | radicals/exponents/complex pretty; PSHOW works |
 | **PP3** | capture engine complete (no UI): hooks, classifier, segmentation, ring | all capture pins green through real key paths |
 | **PP4** | `prettyExpr.h` contract; tree→2D infix with precedence parens + `PP_PAREN` synthesis; current-formula line; history browser (calcMode 20, the keyboard.c stage) | formula view usable end to end |
-| **PP5** | EQN 2D via `ppBuildFromGlyphString` (API reserved from PP1) | optional; separate ruling before start |
+| **PP5** | EQN strip 2D: strict display-string grammar, '/' terms stack (standard/tiny, 17 px in the 23 px strip row), √ gets vinculums, parens unwrap under both; one hunk at solver/equation.c's paint site, no-cursor path only | SHIPPED 2026-08-26 (authorized by the proceed-with-all-stages instruction) |
 
 Branch per stage (`pretty-print/stage-pp1`, …), single clean commit series,
 gate green per stage. PP1 branches from the undo-history/stage-u2 tip because

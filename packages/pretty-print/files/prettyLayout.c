@@ -411,6 +411,16 @@ static void ppPaint(uint8_t n, int16_t x, int16_t baseline) {
 }
 
 
+void ppSetFontDeep(uint8_t n, uint8_t fontId) {
+  if(n == PP_NONE || n >= ppNodeCount) {
+    return;
+  }
+  ppPool[n].fontId = fontId;
+  for(uint8_t c = ppPool[n].firstChild; c != PP_NONE; c = ppPool[c].nextSibling) {
+    ppSetFontDeep(c, fontId);
+  }
+}
+
 void ppPaintAt(uint8_t root, int16_t x, int16_t baseline) {
   if(root < ppNodeCount && ppMetricsOk()) {
     ppPaint(root, x, baseline);

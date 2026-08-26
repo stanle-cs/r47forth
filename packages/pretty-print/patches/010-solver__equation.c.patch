@@ -1,0 +1,17 @@
+diff --git a/src/c47/solver/equation.c b/src/c47/solver/equation.c
+index ca3da3341ccc17998627221684ba14c7f7559138..7a1e390b9967f21665af1d1768ebb6510a6320b1 100644
+--- a/src/c47/solver/equation.c
++++ b/src/c47/solver/equation.c
+@@ -657,7 +657,11 @@ void showEquation(uint16_t equationId, uint16_t startAt, uint16_t cursorAt, bool
+     }
+ 
+     if((!dryRun) && (*cursorShown || cursorAt == EQUATION_NO_CURSOR)) {
+-      showString(tmpString, &standardFont, 1 + X_OFF, SCREEN_HEIGHT - SOFTMENU_HEIGHT * 3 + 2 , vmNormal, true, true);
++      /* pretty-print package: 2D strip rendering when not editing; a
++       * false return paints nothing and the linear line runs unchanged */
++      if(cursorAt != EQUATION_NO_CURSOR || !prettyTryEquation(tmpString, (int16_t)(1 + X_OFF))) {
++        showString(tmpString, &standardFont, 1 + X_OFF, SCREEN_HEIGHT - SOFTMENU_HEIGHT * 3 + 2 , vmNormal, true, true);
++      }
+     }
+   }
+ }

@@ -2,13 +2,14 @@
   "base_commit": "70f8b7db7425422ec80e0342e627ed3e2cfd71a6",
   "files": {
     "prettyCapture.c": "591ca76f9b8c1d715fb74460efa266f7a0701b2ba34b1ba687635ca38d331e06",
+    "prettyEquation.c": "999aee35f9af2f6e94503fe237b08bbca58183397c7636bfc1cc9cfe98e9dd8d",
     "prettyFormula.c": "c96f40c2ae56c2d92f383b1d809df802bb996485399d2ee5922a7815ecdc4462",
-    "prettyInternal.h": "5b9be1fc9ad65da83ab66148df22a2481566500a6801d6658f64e321a08d7eaa",
-    "prettyLayout.c": "f5d190b7609a12b90385daa21f1defd92ca832ec64b3b9e2de24d2b6ac8dd26f",
-    "prettyPrint.h": "a6b66d281977c3cb3058d57b695fb7f7c19b71ef43ca12b745b2f03440be88fe",
-    "prettyTest.c": "114af4296cdcab1b888f97ed50dd4566df3a53cbf89fdea754466c461e937609",
+    "prettyInternal.h": "cb148336b84384a69b453a02fe9230b625df8d210897f2a0981c79caeecdbf50",
+    "prettyLayout.c": "5b7f5ada14f6b9948ce04b9c26e485333c76977ec34735816d973c1874275e46",
+    "prettyPrint.h": "09628f3d545e392918dd79fcdcc03866607ce44b7af5e405d1bbd6acc712bc2a",
+    "prettyTest.c": "c9e9fde67be4d07e4373f6a1d940e4a4121cf0c9ef574bdecaddfb9c48364926",
     "prettyValue.c": "abf2f49521fa8f463c362c88e0580458ad971ce33b50a63cd9c8bd3ed42ae333",
-    "testSuite/tests/pretty_print.txt": "9b950b106428df864155fd66121bd7426ddac9d2e1567b47932c2a79178ca9af"
+    "testSuite/tests/pretty_print.txt": "d6d62fcf3590bd5c8e9ec2fe9ff3984a27025b3950d4881867982d540dcfe9fe"
   },
   "patches": {
     "010-bufferize.c.patch": "03977a78177c15a757ccd5882b671a6d82a79b0aaeca3b67bab78d607d2842f4",
@@ -18,7 +19,8 @@
     "010-items.c.patch": "a636ccc89ee2800527091dae9e42e60b46d7e901f3d4bb056d39736901b10355",
     "010-items.h.patch": "41925ad0e3cc8c25c856ac3036f526ff0759e1d0f0de149521d362b8bc1e048b",
     "010-screen.c.patch": "2d96c47aaef360f5297f6bb3917f03b1e09c271a9bf819733d16964a7c0fbe2d",
-    "010-testSuite__testSuite.c.patch": "927a41345996ae61c627e9346ab97c73f7bee5fe27dff5429c9c9ab4882bf5ac",
+    "010-solver__equation.c.patch": "ef875998c004ef8ade4eafb0e38e26ff1ae48e4c76ee07d7b912ee2eb694b7b1",
+    "010-testSuite__testSuite.c.patch": "5be374ae3f7fbe10998dcb0cf81abc1526f62b94551da35335e0e53e57b37049",
     "010-testSuite__tests__testSuiteList.txt.patch": "7602270613b0807bd2f56e6a3bba266176226695f6f2ba3de0fbe99cf53bf666"
   }
 }

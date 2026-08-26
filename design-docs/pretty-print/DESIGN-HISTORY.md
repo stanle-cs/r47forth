@@ -2,6 +2,24 @@
 
 Non-normative amendment trail. DESIGN.md is authoritative.
 
+## 2026-08-26 — PP5 (EQN strip 2D)
+
+- The EQN prettifier parses showEquation's DISPLAY string, not the
+  stored source — superscript exponents are already glyphs there, so the
+  grammar only owns what it improves: '/' terms stack as
+  standard-context/tiny-child fractions (17 px, inside the 23 px strip
+  row) and √ gets its vinculum. `ppSetFontDeep` re-fonts a built subtree
+  instead of re-parsing per rung.
+- The grammar is deliberately strict: numbers (with verbatim ·₁₀ⁿ
+  tails), ASCII names (+ subscript digits), + − × · / ( ) √ = and
+  attached sup-runs. Ellipsis truncation, unknown glyphs, or any
+  unconsumed tail decline to the linear line. A parse with no fraction
+  and no radical also declines — nothing 2D is gained.
+- Hook: one hunk at the solver/equation.c paint site, gated to the
+  no-cursor path — editing always shows the linear form the cursor
+  logic was built for. solver/equation.c was a virgin file (no sibling
+  package touches it).
+
 ## 2026-08-26 — PP4 (formula view)
 
 - **The browser became a pager (RULED).** The plan's CM-mode browser

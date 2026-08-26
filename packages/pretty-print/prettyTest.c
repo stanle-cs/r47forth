@@ -1045,4 +1045,73 @@ void prettyTestFormula(uint16_t unusedButMandatoryParameter) {
   ppTestWriteLonI(REGISTER_X, ppTestFailures);
 }
 
+/* ==== prettyTestEquation ================================================ */
+
+void prettyTestEquation(uint16_t unusedButMandatoryParameter) {
+  (void)unusedButMandatoryParameter;
+  ppTestFailures = 0;
+  uint8_t root;
+
+  // EQ1: '/' binds factors, not the whole expression
+  ppReset();
+  if(!ppqParse("1/X+2", &root)) {
+    ppTestFail("EQ1 parse");
+  }
+  else {
+    ppfTestExpect("EQ1 precedence", root, "[F(1|X) + 2]");
+  }
+
+  // EQ2: parens unwrap under the bar
+  ppReset();
+  if(!ppqParse("(A+B)/C", &root)) {
+    ppTestFail("EQ2 parse");
+  }
+  else {
+    ppfTestExpect("EQ2 unwrap", root, "F([A + B]|C)");
+  }
+
+  // EQ3: vinculum over a parenthesized radicand
+  ppReset();
+  if(!ppqParse("\xa2\x1a" "(X+1)", &root)) {
+    ppTestFail("EQ3 parse");
+  }
+  else {
+    ppfTestExpect("EQ3 radical", root, "R([X + 1])");
+  }
+
+  // EQ4: declines — no 2D gain, dangling operator, ellipsis, unknown glyph
+  ppReset();
+  if(ppqParse("A+B", &root))            ppTestFail("EQ4 no-frac accepted");
+  ppReset();
+  if(ppqParse("1/X+", &root))           ppTestFail("EQ4 dangling accepted");
+  ppReset();
+  if(ppqParse("1/X" "\xa0\x1b", &root)) ppTestFail("EQ4 ellipsis accepted");
+  ppReset();
+  if(ppqParse("\x83\xc0" "/2", &root))  ppTestFail("EQ4 unknown glyph accepted");
+
+  // EQ5: the strip render paints the bar in the equation's own row
+  {
+    lcd_fill_rect(0, 171, SCREEN_WIDTH, 23, LCD_SET_VALUE);
+    prettySetEnabled(true);
+    if(!prettyTryEquation("1/X", 1)) {
+      ppTestFail("EQ5 render declined");
+    }
+    else {
+      // FRAC ctx standard, tiny children: ascent 14, descent 3 ->
+      // baseline 188, bar row 182 (barTopRel -6, thickness 1)
+      bool_t any = false;
+      for(uint32_t x = 1; x < 60 && !any; x++) {
+        any = lcd_buffer_pixel_on(x, 182);
+      }
+      if(!any) ppTestFail("EQ5 bar row 182 missing");
+      if(ppTestRectAnyLit(194, 200, 0, 60)) ppTestFail("EQ5 ink below the strip");
+    }
+    lcd_fill_rect(0, 171, SCREEN_WIDTH, 23, LCD_SET_VALUE);
+  }
+
+  ppTestWriteLonI(REGISTER_X, ppTestFailures);
+}
+
+
+
 #endif // PC_BUILD

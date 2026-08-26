@@ -49,6 +49,7 @@ bool_t          ppRenderRightAligned(uint8_t root, int16_t xRight,
                                      int16_t bandTop, int16_t bandBottom,
                                      int16_t preferredBase);
 void            ppPaintAt(uint8_t root, int16_t x, int16_t baseline);
+void            ppSetFontDeep(uint8_t n, uint8_t fontId);
 int16_t         ppPreferredBase(int16_t baseY);   ///< baseY + numericFont box ascent
 
 /* ==== capture engine (prettyCapture.c) ==================================
@@ -84,6 +85,9 @@ typedef struct {
   uint8_t  pad[2];      ///< VAL: tag, payloadBytes
   uint8_t  payload[16]; ///< LIT text / VAL raw register payload
 } ppcNode_t;
+
+// prettyEquation.c — EQN display-string -> 2D strip layout
+bool_t ppqParse(const char *src, uint8_t *rootOut);
 
 // prettyFormula.c — capture tree / token stream -> infix layout
 bool_t ppfBuildCurrent(uint8_t ctxFont, uint8_t childFont, uint8_t *rootOut);
