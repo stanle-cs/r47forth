@@ -413,15 +413,58 @@ bool_t ppfBuildEntry(const uint8_t *entry, uint8_t ctxFont, uint8_t childFont,
 
 /* ==== PHIST — the history pager ========================================= */
 
-#define PPF_BAND_TOP    21
-#define PPF_BAND_BOTTOM 167
-#define PPF_ROW_H       36
+// Inset 4 px from the frame lines at 20/168: glyph BOXES extend past the
+// ink by their padding rows (standardFont boxAscent 16 vs digit ink 12),
+// and showGlyphCode's pre-clear would wipe a frame line the ink never
+// touches (found by FV5 after the variable-height rewrite).
+#define PPF_BAND_TOP    25
+#define PPF_BAND_BOTTOM 163
+#define PPF_ROW_GAP     5
 
 static uint8_t ppfPage = 0;
 
 void fnPrettyHistClear(uint16_t unusedButMandatoryParameter) {
   (void)unusedButMandatoryParameter;
   ppcHistoryClear();
+}
+
+// Build + measure one pager row (row 0 = the current formula when open).
+// Standard rung first, then the whole tree re-fonted tiny — fraction
+// children are built in the context font, so childFont alone cannot
+// shrink a nested stack (found by the continued-fraction stress test).
+static bool_t ppfBuildRow(uint8_t row, uint8_t haveCurrent, uint8_t *rootOut, int16_t *ascOut, int16_t *hOut) {
+  for(int rung = 0; rung < 2; rung++) {
+    uint8_t cf = (rung == 0) ? PP_FONT_STANDARD : PP_FONT_TINY;
+    uint8_t root;
+    bool_t built;
+    ppReset();
+    if(haveCurrent && row == 0) {
+      built = ppfBuildCurrent(PP_FONT_STANDARD, cf, &root);
+    }
+    else {
+      const uint8_t *e = ppcHistoryEntry((uint8_t)(row - haveCurrent), NULL, NULL);
+      built = ppfBuildEntry(e, PP_FONT_STANDARD, cf, true, &root);
+    }
+    if(!built) {
+      return false;
+    }
+    if(rung == 1) {
+      ppSetFontDeep(root, PP_FONT_TINY);
+    }
+    if(!ppMeasure(root, 0)) {
+      continue;
+    }
+    const ppNode_t *n = ppNodeAt(root);
+    int16_t h = (int16_t)(n->ascent + n->descent);
+    if(n->width > SCREEN_WIDTH - 8 || h > PPF_BAND_BOTTOM - PPF_BAND_TOP + 1) {
+      continue;   // try the tiny rung; a full-band overflow there skips the row
+    }
+    *rootOut = root;
+    *ascOut = n->ascent;
+    *hOut = h;
+    return true;
+  }
+  return false;
 }
 
 void fnPrettyHist(uint16_t unusedButMandatoryParameter) {
@@ -442,10 +485,26 @@ void fnPrettyHist(uint16_t unusedButMandatoryParameter) {
   uint8_t histN = ppcHistoryCount();
   uint8_t haveCurrent = (ppcCurrentFormulaRoot() != PPC_NIL) ? 1 : 0;
   uint8_t totalRows = (uint8_t)(histN + haveCurrent);
-  uint8_t perPage = (PPF_BAND_BOTTOM - PPF_BAND_TOP + 1) / PPF_ROW_H;   // 4
-  uint8_t pages = (uint8_t)((totalRows + perPage - 1) / perPage);
-  if(pages == 0) {
-    pages = 1;
+  uint8_t root;
+  int16_t asc, h;
+
+  // Pass 1 — variable-height packing to count pages (rows pack until the
+  // band fills; heights vary from one text line to a nested stack)
+  uint8_t pages = 1;
+  {
+    uint8_t page = 0;
+    int16_t y = PPF_BAND_TOP;
+    for(uint8_t row = 0; row < totalRows; row++) {
+      if(!ppfBuildRow(row, haveCurrent, &root, &asc, &h)) {
+        continue;
+      }
+      if(y + h - 1 > PPF_BAND_BOTTOM) {
+        page++;
+        y = PPF_BAND_TOP;
+      }
+      y = (int16_t)(y + h + PPF_ROW_GAP);
+    }
+    pages = (uint8_t)(page + 1);
   }
   ppfPage = (uint8_t)(ppfPage % pages);
 
@@ -453,40 +512,22 @@ void fnPrettyHist(uint16_t unusedButMandatoryParameter) {
   drawSinglePixelFullWidthLine(20);
   drawSinglePixelFullWidthLine(168);
 
-  for(uint8_t r = 0; r < perPage; r++) {
-    uint8_t row = (uint8_t)(ppfPage * perPage + r);
-    if(row >= totalRows) {
-      break;
-    }
-    int16_t bandTop = (int16_t)(PPF_BAND_TOP + r * PPF_ROW_H);
-    int16_t bandBottom = (int16_t)(bandTop + PPF_ROW_H - 1);
-
-    // two rungs: standard/standard, then standard/tiny
-    for(int rung = 0; rung < 2; rung++) {
-      uint8_t cf = (rung == 0) ? PP_FONT_STANDARD : PP_FONT_TINY;
-      uint8_t root;
-      bool_t built;
-      ppReset();
-      if(haveCurrent && row == 0) {
-        built = ppfBuildCurrent(PP_FONT_STANDARD, cf, &root);
-      }
-      else {
-        const uint8_t *e = ppcHistoryEntry((uint8_t)(row - haveCurrent), NULL, NULL);
-        built = ppfBuildEntry(e, PP_FONT_STANDARD, cf, true, &root);
-      }
-      if(!built) {
-        break;
-      }
-      if(!ppMeasure(root, 0)) {
+  // Pass 2 — paint the selected page with the same packing walk
+  {
+    uint8_t page = 0;
+    int16_t y = PPF_BAND_TOP;
+    for(uint8_t row = 0; row < totalRows && page <= ppfPage; row++) {
+      if(!ppfBuildRow(row, haveCurrent, &root, &asc, &h)) {
         continue;
       }
-      const ppNode_t *n = ppNodeAt(root);
-      if(n->width > SCREEN_WIDTH - 8 || n->ascent + n->descent > PPF_ROW_H - 2) {
-        continue;   // next rung
+      if(y + h - 1 > PPF_BAND_BOTTOM) {
+        page++;
+        y = PPF_BAND_TOP;
       }
-      int16_t base = (int16_t)((bandTop + bandBottom - (n->ascent + n->descent)) / 2 + n->ascent);
-      ppPaintAt(root, 4, base);
-      break;
+      if(page == ppfPage) {
+        ppPaintAt(root, 4, (int16_t)(y + asc));
+      }
+      y = (int16_t)(y + h + PPF_ROW_GAP);
     }
   }
 

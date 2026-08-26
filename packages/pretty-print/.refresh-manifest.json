@@ -3,11 +3,11 @@
   "files": {
     "prettyCapture.c": "591ca76f9b8c1d715fb74460efa266f7a0701b2ba34b1ba687635ca38d331e06",
     "prettyEquation.c": "999aee35f9af2f6e94503fe237b08bbca58183397c7636bfc1cc9cfe98e9dd8d",
-    "prettyFormula.c": "c96f40c2ae56c2d92f383b1d809df802bb996485399d2ee5922a7815ecdc4462",
+    "prettyFormula.c": "61dafc407800c7a68624b1fc631a74a183b52c069310206070aaec1d6c0917d4",
     "prettyInternal.h": "cb148336b84384a69b453a02fe9230b625df8d210897f2a0981c79caeecdbf50",
     "prettyLayout.c": "5b7f5ada14f6b9948ce04b9c26e485333c76977ec34735816d973c1874275e46",
     "prettyPrint.h": "09628f3d545e392918dd79fcdcc03866607ce44b7af5e405d1bbd6acc712bc2a",
-    "prettyTest.c": "c9e9fde67be4d07e4373f6a1d940e4a4121cf0c9ef574bdecaddfb9c48364926",
+    "prettyTest.c": "74bf8460f0aa29b663258e44df37ef529a828abbd5f0bffbb702d5c31b571631",
     "prettyValue.c": "abf2f49521fa8f463c362c88e0580458ad971ce33b50a63cd9c8bd3ed42ae333",
     "testSuite/tests/pretty_print.txt": "d6d62fcf3590bd5c8e9ec2fe9ff3984a27025b3950d4881867982d540dcfe9fe"
   },

@@ -75,6 +75,12 @@ does this first, always.
 
 ### PP4 additions
 
+- **`prettyTestFormula`** FV6 (stress, post-PP5): the three-level
+  continued fraction 1/(2+3/(4+5/6)) keyed through the real paths must
+  appear in the pager — pins the variable-height packing and the
+  whole-tree tiny re-font (both were missing; FV6 was red first, and the
+  packing rewrite turned FV5 red once by wiping the frame line with
+  glyph-box pre-clears — hence the 4 px band inset).
 - **`prettyTestFormula`** — layout-signature pins over the infix
   renderer (RUN text / `[hbox]` / `F(a|b)` / `S(a|b)` / `R(a)` / `P(a)`,
   expectations built from catalog names): FV1 `(2+3)×4` keeps its

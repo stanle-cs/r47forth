@@ -2,6 +2,32 @@
 
 Non-normative amendment trail. DESIGN.md is authoritative.
 
+## 2026-08-26 — post-PP5 stress test (continued fractions)
+
+Stan asked for a complex-expression trial. `1/(2+3/(4+5/6))` keyed through
+the real paths (6 ENTER 5 x<>y ÷ 4 x<>y + 3 x<>y ÷ 2 x<>y + 1 x<>y ÷):
+
+- The capture engine held ONE open formula through all eleven operations
+  (history stayed empty — every op consumed the previous root), and the
+  layout engine rendered the full three-level nest with correctly nested
+  bars. Depth headroom: a run at nesting level 6 hits PP_MAX_DEPTH — one
+  more fraction level than this test would decline.
+- **Found: the pager's fixed 36 px rows silently dropped tall formulas**
+  (the rung ladder only re-fonted leaf runs, and even all-tiny the nest
+  measures 37 px). Fixed red-first (FV6): `ppSetFontDeep` on the tiny
+  rung AND the pager rewritten to variable-height packing — rows pack
+  until the band fills, pages fall out of the packing walk.
+- **Found: rows packed flush against the frame lines wipe them** — glyph
+  boxes overhang their ink by the font padding and the pre-clear erases
+  the frame (FV5 went red the moment packing started at the band edge).
+  The packing band is inset 4 px from both frames.
+- Σ+ after a chain: the shadow invalidated truthfully and emitted both
+  finished formulas first — integration/summation internals stay outside
+  capture scope by the standing ruling (solver/integrator storms), and
+  the unknown-item default handles the items themselves.
+- EQN strip: `(A+B)/C+1/D` renders as two stacked fractions in the 23 px
+  row; nested `1/(2+3/4)` declines to the linear line as designed.
+
 ## 2026-08-26 — PP5 (EQN strip 2D)
 
 - The EQN prettifier parses showEquation's DISPLAY string, not the

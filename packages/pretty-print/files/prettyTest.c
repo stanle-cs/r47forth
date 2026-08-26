@@ -1041,6 +1041,37 @@ void prettyTestFormula(uint16_t unusedButMandatoryParameter) {
   screenUpdatingMode = SCRUPD_AUTO;
   screenHoldsDrawnPixels = false;
 
+  // FV6: a formula too tall for the pager's standard rung must still
+  // show — the tiny rung re-fonts the whole tree. Build the 3-level
+  // continued fraction 1/(2+3/(4+5/6)) through the real key paths.
+  ppcTestReset();
+  ppcTestType("6");
+  ppcTestOp(ITM_ENTER);
+  ppcTestType("5");
+  ppcTestOp(ITM_XexY);
+  ppcTestOp(ITM_DIV);
+  ppcTestType("4");
+  ppcTestOp(ITM_XexY);
+  ppcTestOp(ITM_ADD);
+  ppcTestType("3");
+  ppcTestOp(ITM_XexY);
+  ppcTestOp(ITM_DIV);
+  ppcTestType("2");
+  ppcTestOp(ITM_XexY);
+  ppcTestOp(ITM_ADD);
+  ppcTestType("1");
+  ppcTestOp(ITM_XexY);
+  ppcTestOp(ITM_DIV);
+  screenUpdatingMode = SCRUPD_AUTO;
+  screenHoldsDrawnPixels = false;
+  temporaryInformation = TI_NO_INFO;
+  fnPrettyHist(NOPARAM);
+  if(!ppTestRectAnyLit(21, 56, 0, SCREEN_WIDTH - 1)) {
+    ppTestFail("FV6 tall formula missing from the pager");
+  }
+  screenUpdatingMode = SCRUPD_AUTO;
+  screenHoldsDrawnPixels = false;
+
   ppcTestReset();
   ppTestWriteLonI(REGISTER_X, ppTestFailures);
 }
