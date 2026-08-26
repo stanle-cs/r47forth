@@ -2,6 +2,18 @@
 
 Non-normative amendment trail. DESIGN.md is authoritative.
 
+## 2026-08-26 — post-PP11 capture polish
+
+- The PP6-PP11 showcase captures found one cosmetic defect: the ⁿ√
+  index kerned into the RAISED-GLYPH sign's own hook. Fixed: an indexed
+  root always synthesizes its stroke sign (measure and paint recompute
+  the same test). Also a capture-driver lesson worth keeping: CHS during
+  NIM is a buffer EDIT, not a dispatch — a fixture that dispatched it
+  left the NIM open and the following digits appended, producing
+  ³√(-527) on screen. The engine rendered that truthfully, which is the
+  invariant doing its job; the fixture now closes NIM through the real
+  keypress pattern.
+
 ## 2026-08-26 — PP11 (the toggle becomes a persisted system flag)
 
 - FLAG_PRETTYP (0x8071, bit 50) replaces the package bool: PPON now

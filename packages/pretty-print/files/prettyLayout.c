@@ -246,9 +246,12 @@ bool_t ppMeasure(uint8_t n, uint8_t depth) {
         return false;
       }
       // Short radicands use the raised font glyph; taller ones get a
-      // synthesized stroke sign spanning the full height (PP6). The
+      // synthesized stroke sign spanning the full height (PP6). An
+      // INDEXED root always synthesizes — the raised glyph's own hook
+      // collides with the tucked index (seen in the PP6 capture). The
       // paint pass recomputes this same test.
-      bool_t synth = (ppPool[child].ascent + ppPool[child].descent > m->radInk + 3);
+      bool_t synth = (ppPool[child].ascent + ppPool[child].descent > m->radInk + 3)
+                     || (index != PP_NONE);
       int16_t signW = synth ? 10 : m->radAdvance;
       int16_t idxW = 0;
       if(index != PP_NONE) {
@@ -472,7 +475,8 @@ static void ppPaint(uint8_t n, int16_t x, int16_t baseline) {
       // before their glyphs.
       uint8_t child = nd->firstChild;
       uint8_t index = ppPool[child].nextSibling;
-      bool_t synth = (ppPool[child].ascent + ppPool[child].descent > m->radInk + 3);
+      bool_t synth = (ppPool[child].ascent + ppPool[child].descent > m->radInk + 3)
+                     || (index != PP_NONE);
       int16_t signW = synth ? 10 : m->radAdvance;
       int16_t signX = (int16_t)(x + ppPool[child].relX - signW);
       int16_t vincTop = baseline - ppPool[child].ascent - m->radGap - m->vincThick;
