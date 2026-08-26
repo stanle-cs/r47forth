@@ -1230,6 +1230,11 @@ static void ppfTestSigNode(uint8_t n, char *out, size_t cap) {
       ppfTestSigNode(nd->firstChild, out, cap);
       strcat(out, ")");
       break;
+    case PP_INT:
+      strcat(out, "I(");
+      ppfTestSigNode(nd->firstChild, out, cap);
+      strcat(out, ")");
+      break;
     case PP_BIGOP: {
       uint8_t body  = nd->firstChild;
       uint8_t under = ppNodeAt(body)->nextSibling;
@@ -1761,6 +1766,63 @@ void prettyTestEquation(uint16_t unusedButMandatoryParameter) {
     }
     screenUpdatingMode = hadScrUpd;
     screenHoldsDrawnPixels = hadHolds;
+  }
+
+  /* ==== PP13: solver-surface frames ==================================== */
+  {
+    uint16_t hadStatus = currentSolverStatus;
+    uint16_t hadVar = currentSolverVariable;
+    uint8_t eq;
+
+    // EQ10: interactive integrate frames with the REAL limits and d<var>
+    currentSolverVariable = findOrAllocateNamedVariable("X");
+    currentSolverStatus = (uint16_t)(SOLVER_STATUS_INTERACTIVE | SOLVER_STATUS_EQUATION_INTEGRATE);
+    reallocateRegister(RESERVED_VARIABLE_LLIM, dtReal34, 0, amNone);
+    reallocateRegister(RESERVED_VARIABLE_ULIM, dtReal34, 0, amNone);
+    int32ToReal34(0, REGISTER_REAL34_DATA(RESERVED_VARIABLE_LLIM));
+    int32ToReal34(1, REGISTER_REAL34_DATA(RESERVED_VARIABLE_ULIM));
+    ppReset();
+    if(!ppqParse("1/X", PP_FONT_STANDARD, PP_FONT_TINY, &eq)) {
+      ppTestFail("EQ10 parse");
+    }
+    else {
+      ppfTestExpect("EQ10 integral frame", ppqFrameIntegral(eq), "B([F(1|X) dX]|0.|1.)");
+    }
+
+    // EQ11: without INTERACTIVE the limits are not the session's — the
+    // bare stroke integral, as PP7 shipped it
+    currentSolverStatus = SOLVER_STATUS_EQUATION_INTEGRATE;
+    ppReset();
+    if(!ppqParse("1/X", PP_FONT_STANDARD, PP_FONT_TINY, &eq)) {
+      ppTestFail("EQ11 parse");
+    }
+    else {
+      ppfTestExpect("EQ11 bare fallback", ppqFrameIntegral(eq), "I(F(1|X))");
+    }
+
+    // EQ12: first derivative frames d/dX (var name decoded live)
+    currentSolverStatus = (uint16_t)(SOLVER_STATUS_INTERACTIVE | SOLVER_STATUS_EQUATION_1ST_DERIVATIVE);
+    ppReset();
+    if(!ppqParse("1/X", PP_FONT_STANDARD, PP_FONT_TINY, &eq)) {
+      ppTestFail("EQ12 parse");
+    }
+    else {
+      ppfTestExpect("EQ12 d/dx", ppqFrameDerivative(eq, false), "[F(d|dX) P(F(1|X))]");
+    }
+
+    // EQ13: second derivative carries the superscript-2 glyphs
+    ppReset();
+    if(!ppqParse("1/X", PP_FONT_STANDARD, PP_FONT_TINY, &eq)) {
+      ppTestFail("EQ13 parse");
+    }
+    else {
+      char expect13[64];
+      sprintf(expect13, "[F(d" "\xa1\x62" "|dX" "\xa1\x62" ") P(F(1|X))]");
+      ppfTestExpect("EQ13 d2/dx2", ppqFrameDerivative(eq, true), expect13);
+    }
+
+    currentSolverStatus = hadStatus;
+    currentSolverVariable = hadVar;
   }
 
   ppTestWriteLonI(REGISTER_X, ppTestFailures);

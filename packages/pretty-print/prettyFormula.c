@@ -266,6 +266,18 @@ static uint8_t ppfCombine1(uint16_t item, uint8_t a, int aPrec,
  * lookup is display-time best-effort — a program edit between capture
  * and display falls back to the numeric form. */
 
+void ppfVariableName(uint16_t varId, char *out) {
+  strcpy(out, "x");
+  if(varId >= FIRST_NAMED_VARIABLE
+      && (uint32_t)(varId - FIRST_NAMED_VARIABLE) < numberOfNamedVariables) {
+    const uint8_t *vn = allNamedVariables[varId - FIRST_NAMED_VARIABLE].variableName;
+    if(vn[0] > 0 && vn[0] <= 15) {
+      xcopy(out, vn + 1, vn[0]);
+      out[vn[0]] = 0;
+    }
+  }
+}
+
 static void ppfLabelName(uint16_t param, char *out) {
   if(param >= FIRST_LABEL && (uint32_t)(param - FIRST_LABEL) < numberOfLabels) {
     const uint8_t *p = labelList[param - FIRST_LABEL].labelPointer;
@@ -299,17 +311,8 @@ static uint8_t ppfBigop(uint16_t item, uint16_t label, const uint8_t *stepBytes,
   if(isInt) {
     // the d-variable rides in the step payload; decode its name,
     // display-time best-effort like the label
-    uint16_t dvar = (uint16_t)(stepBytes[0] | ((uint16_t)stepBytes[1] << 8));
     char dv[20];
-    strcpy(dv, "x");
-    if(dvar >= FIRST_NAMED_VARIABLE
-        && (uint32_t)(dvar - FIRST_NAMED_VARIABLE) < numberOfNamedVariables) {
-      const uint8_t *vn = allNamedVariables[dvar - FIRST_NAMED_VARIABLE].variableName;
-      if(vn[0] > 0 && vn[0] <= 15) {
-        xcopy(dv, vn + 1, vn[0]);
-        dv[vn[0]] = 0;
-      }
-    }
+    ppfVariableName((uint16_t)(stepBytes[0] | ((uint16_t)stepBytes[1] << 8)), dv);
     sprintf(text, "%s(%s)d%s", lbl, dv, dv);
   }
   else {

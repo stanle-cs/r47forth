@@ -278,6 +278,20 @@ access), `ppHistoryCount()` / `ppHistoryEntry(idx, &len, &seq)`,
   keyboard.c is the project's riskiest three-package composition surface,
   not because the pager is the end state.
 
+### Solver-surface frames (PP13)
+
+EQSHW frames the equation with the interactive solver's own numbers:
+integrate mode shows a PP_BIGOP ∫ whose under/over limits are the REAL
+`RESERVED_VARIABLE_LLIM/ULIM` values and whose body appends ` d<var>`
+(the variable name decoded live via `ppfVariableName`); without
+`SOLVER_STATUS_INTERACTIVE` (or non-real limit registers) it falls back
+to PP7's bare stroke ∫. The derivative modes prefix `d/d<var>` (first)
+or `d²/d<var>²` (second) with the equation in tall parens. Solve
+framing (`f(x)=0`) is deliberately absent:
+`SOLVER_STATUS_EQUATION_SOLVER` is the zero value of the mode field, so
+a stale INTERACTIVE bit would frame a plain view with an `= 0` the user
+never asked for — un-determinable state stays unframed.
+
 ## §7 Composition claims (BINDING for other packages)
 
 Verified against the tree at branch point (undo-history/stage-u2 tip,

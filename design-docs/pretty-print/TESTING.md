@@ -132,6 +132,19 @@ does this first, always.
   `currentMvarLabel`: the ∫/Σ dispatches retarget the solver, and
   later suite files (deriv_cov) assume the status they inherited.
 
+### PP13 additions
+
+- **`prettyTestEquation` EQ10-EQ13** — the solver-surface frames, tested
+  structurally through the exported builders (`ppqFrameIntegral` /
+  `ppqFrameDerivative`) plus the existing EQ8 pixel pin for the render
+  path: EQ10 interactive integrate shows the REAL limits and d<var>
+  (`B([F(1|X) dX]|0.|1.)`), EQ11 without INTERACTIVE falls back to the
+  bare stroke ∫ (`I(F(1|X))` — the walker gained a PP_INT arm), EQ12
+  d/dX with the variable name decoded live, EQ13 d²/dX² carries the
+  superscript-2 glyphs. Solve framing (f(x)=0) was SKIPPED and the
+  reason recorded: `SOLVER_STATUS_EQUATION_SOLVER` is the zero value,
+  so a stale INTERACTIVE bit is indistinguishable from a live session.
+
 ## Mutation pins (run each separately, battery green between restores)
 
 All six demonstrated red on 2026-08-26 (targeted single-file battery), green
@@ -180,6 +193,9 @@ after restore.
 | MUT-39 | BIGOP limits swapped at STAGE (PP12) | B4 (under/over flip in the decoded layout) |
 | MUT-40 | PPN_BIGOP dropped from emit eligibility (PP12) | B3 (hist stays 0), B4/B7 (no entry to decode) |
 | MUT-41 | Σ strokes deleted from the PP_BIGOP paint arm (PP12) | B8 (operator column dark) |
+| MUT-42 | derivative frame ignores the order (PP13) | EQ13 (superscript-2 glyphs missing; the FAIL line holds glyph bytes — trust the counts) |
+| MUT-43 | integral frame limits swapped (PP13) | EQ10 (under/over flip) |
+| MUT-44 | EQSHW integrate arm dropped (PP13) | EQ8 (∫ sign missing) |
 
 Two lessons from the first mutation run, kept for honesty: (a) the original
 MUT-4 ("drop the dtReal34 type gate") stays GREEN — a non-real register's

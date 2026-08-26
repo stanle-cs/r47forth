@@ -102,6 +102,11 @@ typedef struct {
 // prettyEquation.c — EQN display-string -> 2D strip layout
 bool_t ppqParse(const char *src, uint8_t ctxFont, uint8_t childFont, uint8_t *rootOut);
 bool_t ppqShowRender(const char *src);
+uint8_t ppqFrameIntegral(uint8_t eq);                    ///< PP13: ∫ with real ULIM/LLIM limits + d<var>; bare PP_INT without them
+uint8_t ppqFrameDerivative(uint8_t eq, bool_t second);   ///< PP13: d/dx (d²/dx²) framing
+
+// prettyFormula.c — display-time name decodes (best-effort, fall back)
+void ppfVariableName(uint16_t varId, char *out);         ///< out cap >= 17; falls back to "x"
 
 // prettyFormula.c — capture tree / token stream -> infix layout
 bool_t ppfBuildCurrent(uint8_t ctxFont, uint8_t childFont, uint8_t *rootOut);

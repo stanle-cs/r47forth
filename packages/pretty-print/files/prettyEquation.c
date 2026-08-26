@@ -390,6 +390,79 @@ bool_t prettyTryEquation(const char *src, int16_t xLeft) {
  * function aliases), so this solver mode is the one honest input a big
  * operator has; a Σ template would be dead code and was skipped. */
 
+/* PP13: the interactive solver's own numbers frame the equation. The
+ * integral shows its REAL limits (RESERVED_VARIABLE_ULIM/LLIM) and the
+ * d-variable when the session is interactive; the derivative modes get
+ * the d/dx (d²/dx²) prefix. Solve framing (f(x)=0) is SKIPPED:
+ * SOLVER_STATUS_EQUATION_SOLVER is the zero value, indistinguishable
+ * from no session at all — a stale INTERACTIVE bit would frame a plain
+ * view with an = 0 the user never asked for. */
+
+uint8_t ppqFrameIntegral(uint8_t eq) {
+  if(eq == PP_NONE) {
+    return PP_NONE;
+  }
+  if((currentSolverStatus & SOLVER_STATUS_INTERACTIVE)
+      && getRegisterDataType(RESERVED_VARIABLE_LLIM) == dtReal34
+      && getRegisterDataType(RESERVED_VARIABLE_ULIM) == dtReal34) {
+    char dv[20], lo[48], hi[48], dtext[24];
+    ppfVariableName(currentSolverVariable, dv);
+    real34ToDisplayString(REGISTER_REAL34_DATA(RESERVED_VARIABLE_LLIM), amNone, lo,
+                          &standardFont, 110, 6, LIMITEXP, !FRONTSPACE, NOIRFRAC);
+    real34ToDisplayString(REGISTER_REAL34_DATA(RESERVED_VARIABLE_ULIM), amNone, hi,
+                          &standardFont, 110, 6, LIMITEXP, !FRONTSPACE, NOIRFRAC);
+    sprintf(dtext, " d%s", dv);
+    uint8_t big   = ppNewBox(PP_BIGOP, PP_FONT_STANDARD);
+    uint8_t body  = ppNewBox(PP_HBOX, PP_FONT_STANDARD);
+    uint8_t dRun  = ppNewRun(dtext, (uint16_t)strlen(dtext), PP_FONT_STANDARD);
+    uint8_t under = ppNewRun(lo, (uint16_t)strlen(lo), PP_FONT_TINY);
+    uint8_t over  = ppNewRun(hi, (uint16_t)strlen(hi), PP_FONT_TINY);
+    if(big != PP_NONE && body != PP_NONE && dRun != PP_NONE
+        && under != PP_NONE && over != PP_NONE) {
+      ppSetBoxTag(big, ITM_INTEGRAL_YX);
+      ppAppendChild(body, eq);
+      ppAppendChild(body, dRun);
+      ppAppendChild(big, body);
+      ppAppendChild(big, under);
+      ppAppendChild(big, over);
+      return big;
+    }
+  }
+  // no live limits to show: the bare stroke ∫, as PP7 shipped it
+  uint8_t bare = ppNewBox(PP_INT, PP_FONT_STANDARD);
+  if(bare != PP_NONE) {
+    ppAppendChild(bare, eq);
+    return bare;
+  }
+  return eq;
+}
+
+uint8_t ppqFrameDerivative(uint8_t eq, bool_t second) {
+  if(eq == PP_NONE) {
+    return PP_NONE;
+  }
+  char dv[20], num[8], den[28];
+  ppfVariableName(currentSolverVariable, dv);
+  // 0xa162 is the superscript-2 glyph
+  strcpy(num, second ? "d" "\xa1\x62" : "d");
+  sprintf(den, second ? "d%s" "\xa1\x62" : "d%s", dv);
+  uint8_t hb   = ppNewBox(PP_HBOX, PP_FONT_STANDARD);
+  uint8_t frac = ppNewBox(PP_FRAC, PP_FONT_STANDARD);
+  uint8_t nRun = ppNewRun(num, (uint16_t)strlen(num), PP_FONT_STANDARD);
+  uint8_t dRun = ppNewRun(den, (uint16_t)strlen(den), PP_FONT_STANDARD);
+  uint8_t par  = ppNewBox(PP_PAREN, PP_FONT_STANDARD);
+  if(hb == PP_NONE || frac == PP_NONE || nRun == PP_NONE
+      || dRun == PP_NONE || par == PP_NONE) {
+    return eq;
+  }
+  ppAppendChild(frac, nRun);
+  ppAppendChild(frac, dRun);
+  ppAppendChild(par, eq);
+  ppAppendChild(hb, frac);
+  ppAppendChild(hb, par);
+  return hb;
+}
+
 bool_t ppqShowRender(const char *src) {
   lcd_fill_rect(0, 16, SCREEN_WIDTH, SCREEN_HEIGHT - 16, LCD_SET_VALUE);
   drawSinglePixelFullWidthLine(20);
@@ -399,12 +472,13 @@ bool_t ppqShowRender(const char *src) {
   bool_t pretty = false;
   ppReset();
   if(ppqParse(src, PP_FONT_STANDARD, PP_FONT_STANDARD, &root)) {
-    if((currentSolverStatus & SOLVER_STATUS_EQUATION_MODE) == SOLVER_STATUS_EQUATION_INTEGRATE) {
-      uint8_t big = ppNewBox(PP_INT, PP_FONT_STANDARD);
-      if(big != PP_NONE) {
-        ppAppendChild(big, root);
-        root = big;
-      }
+    uint16_t eqMode = (uint16_t)(currentSolverStatus & SOLVER_STATUS_EQUATION_MODE);
+    if(eqMode == SOLVER_STATUS_EQUATION_INTEGRATE) {
+      root = ppqFrameIntegral(root);
+    }
+    else if(eqMode == SOLVER_STATUS_EQUATION_1ST_DERIVATIVE
+         || eqMode == SOLVER_STATUS_EQUATION_2ND_DERIVATIVE) {
+      root = ppqFrameDerivative(root, eqMode == SOLVER_STATUS_EQUATION_2ND_DERIVATIVE);
     }
     if(ppMeasure(root, 0)) {
       const ppNode_t *n = ppNodeAt(root);

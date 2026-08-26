@@ -2,6 +2,29 @@
 
 Non-normative amendment trail. DESIGN.md is authoritative.
 
+## 2026-08-26 — PP13 (solver-surface templates)
+
+- EQSHW's integrate frame graduated from the bare PP7 stroke ∫ to a
+  PP_BIGOP carrying the session's REAL limits (RESERVED_VARIABLE_LLIM/
+  ULIM formatted through the standard builder) and the d-variable name;
+  the PP12 layout arm needed nothing new — the same node kind serves
+  capture decode and the solver surface.
+- The d-variable decode was refactored out of PP12's ppfBigop into the
+  exported `ppfVariableName` so both TUs share one best-effort rule.
+- **Solve framing (f(x)=0) skipped, with the reason ruled into DESIGN.md:**
+  `SOLVER_STATUS_EQUATION_SOLVER` is the ZERO value of the mode field —
+  a stale INTERACTIVE bit after any past session is indistinguishable
+  from a live solve, and the frame would decorate a plain view with an
+  `= 0` the user never asked for. Un-determinable state stays unframed.
+- The limits render with the real marker (`0.`, `1.`) exactly as the
+  reserved registers hold them — same acceptance as PP12's step.
+- EQ8's PP7-era fixture (mode bits only, no INTERACTIVE) keeps passing
+  by design: the frame builder's fallback IS the old behaviour, so the
+  fixture now pins the fallback rather than needing an update.
+- MUT-42's red run is only visible in the pass/fail COUNTS — the EQ13
+  FAIL line carries superscript-2 glyph bytes and grep's binary mode
+  suppresses it (the TESTING.md trap, now hit from the harness side).
+
 ## 2026-08-26 — PP12 (captured Σ/Π/∫ big-operator nodes)
 
 - **The capture hooks were not nesting-safe — latent since PP3, load-bearing
