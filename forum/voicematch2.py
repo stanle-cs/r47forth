@@ -31,7 +31,7 @@ CORPUS = "forum/reference/reddit-trungdle.md"
 
 # key, corpus regex, human name, chat floor /600w, release floor /600w, release cap
 CONSTRUCTIONS = [
-    ("i_hedge",   r"\bI(?:'m (?:not )?sure|'d)\b|\bI (?:think|guess|would|tend to|hope|found|feel|mean)\b|\bIn my opinion\b|\bMy personal\b", "first-person hedge (I think / I'm sure / I'd)", 2, 1, 3),
+    ("i_hedge",   r"\bI(?:'m (?:not )?sure|'d)\b|\bI (?:think|guess|would|tend to|hope|found|feel|mean)\b|\bIn my opinion\b|\bMy personal\b", "first-person hedge (I think / I'm sure / I'd)", 2, 0, 3),
     ("direct_you",r"\b[Yy]ou (?:can|need|should|have to|want|get|just)\b", "direct-you instruction", 2, 1, None),
     ("hedge_adv", r"\b(?:maybe|probably|likely|kinda|pretty much|somewhat)\b", "hedging adverb beside the claim", 1, 1, None),
     ("fronted",   r"(?:^|[.!?]\s+)(?:But|So|And|Also|Anyways?|Btw)\b", "fronted connector (But/So/And/Also/Anyways/Btw)", 2, 1, None),

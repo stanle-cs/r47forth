@@ -111,3 +111,10 @@ restore path by B3.
 3. `undo-attach-3-restored.png` — the normal screen after ENTER on the
    SLVQ level: [3x2 Matrix], 1., -3., 2 back on the stack, the complete
    pre-solver state.
+
+4. `undo-attach-4-sysfl-uhist.png` — added 2026-08-25 on Stan's request:
+   the SYSFL picker page that holds UHIST, flag set so the radiobutton
+   shows filled. UHIST sits at index 100 of the generated menu_SYSFL
+   catalog (113 entries); the shot renders the 18-item page starting at
+   90 through the real refreshScreen path. Same marker-block driver
+   mechanism, removed after capture, full gate green.

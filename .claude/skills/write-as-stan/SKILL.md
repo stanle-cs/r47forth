@@ -245,3 +245,14 @@ v0.1 had none of his constructions, r2 had all of them AS ORNAMENTS.
   red (absence), r2 red (stuffing), the published v0.3 post green. A
   framework change that cannot re-derive his past verdicts is not an
   iteration, it is drift.
+
+Same-day addendum: his own final edit of the announcement post is the
+strongest calibration artifact yet. He deleted both I-hedge lines and
+the emulator analogy, opened impersonally ("This is a package that"),
+and KEPT the mid-flow design question, the parenthetical-reason
+bullets, direct-you, "probably", fronted So, and stake-where-he-acts
+("I haven't flashed", "I can create a pull request"). voicematch2's
+release i_hedge floor dropped to 0 on this evidence. When he hands you
+an edited post: adopt it byte-for-byte, fact-check every claim inside
+it, and confine drafting to the additions he asked for — each new
+sentence still runs the full loop.

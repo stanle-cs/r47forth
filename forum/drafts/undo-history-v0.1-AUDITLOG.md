@@ -182,3 +182,41 @@ post-removal gate green); zip rebuilt; flash re-measured +3904 B total
 (was +3896). Post change is one factual marker in the same sentence
 ("a dash" -> "(val)"), battery re-run clean; no new lane round for a
 verified-fact substitution, logged as such.
+
+## Stan's edit adopted; flag-picker shot; PR line (2026-08-25)
+
+Stan reviewed r3 and returned his own rewrite — adopted byte-for-byte
+as undo-history-v0.1-final.txt (his grammar untouched, per the standing
+rule). Every claim his edit changed was re-verified: "HCLR ... does not
+affect stock UNDO" (fnHistoryClear touches only package counters, never
+thereIsSomethingToUndo or the SAVED_* bank), the shortened REDO bullet,
+the reworded ~ paragraph, all numbers unchanged. His deltas are logged
+as register calibration in the voice profile: both I-hedge lines and
+the analogy deleted, impersonal open, the design-justification question
+KEPT — voicematch2's release i_hedge floor is now 0; the tool flagged
+his own text before the fix, which is the definition of a wrong floor.
+
+Two additions he asked for, drafted clean and gated: the SYSFL picker
+shot (undo-attach-4-sysfl-uhist.png — UHIST is index 100 of the
+GENERATED 113-entry menu_SYSFL catalog, so the picker carries it with
+no menu patch; page 90 rendered via refreshScreen, flag set for the
+filled radiobutton; two wrong-page attempts recorded: 108 showed the
+printer flags, 114 was off the 18-alignment and drew blank) with the
+one-line caption, and the closing PR-offer sentence built from his own
+words ("If people think it's useful I can create a pull request for
+it, since it's made with that in mind"). Battery on the assembled
+final: aiaudit 5 (the kept question's instead-of + 4 factual
+enumerations), framescan no tails/shingles, voicematch2 clean after
+the floor fix. Cross-model round on the final launched; only the two
+added sentences are actionable — his text is the author's.
+
+Cross-model round on the final (readers verified: Gemini 3.1 Pro,
+GPT-5): no actionable findings. Gemini's "slogan-like fragments" are
+Stan's own Limits bullets (author's text, not in scope); Codex flags
+the PR line's "since it's made with that in mind" as an impersonal
+tail — it is Stan's own phrasing from his request, used nearly
+verbatim per the ruled procedure, KEPT. Both lanes independently chose
+to leave the Why-skip question; Stan's own edit had already kept it.
+Exit criterion met. Remaining are his-side items: upload order decides
+the attachment indices (post encodes 3/2/0/1), the base commit line
+needs the branch pushed or restated, thread placement.

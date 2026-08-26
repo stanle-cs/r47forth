@@ -1,0 +1,49 @@
+[b]undo-history v0.1[/b]
+This is a package that gives R47 a multi-level undo and a history screen to look at previous steps. Stock R47 UNDO only remembers one step, this package keeps the last couple dozen states around. To use it, press UNDO again for two operations back, again for three, as deep as the history goes.
+[list]
+[*]UNDO steps back one level per press (the first press is the stock undo, the rest come from the package).
+[*]REDO steps forward until you run something new (a new operation drops the redo trail).
+[*]U.HIST opens the history view. UP and DOWN move the selection, ENTER restores the selected level, press EXIT leave.
+[*]HCLR empties the history (does not affect stock UNDO).
+[*]All four sit on the STK menu and in the catalog, and they can be assigned to keys.
+[*]The UHIST system flag routes f-shifted UP to the view (normal mode only, BST everywhere else is untouched). Off by default, set it with SF in SYSFL.
+[/list]
+The most convenience way to use this package is to keep the flag set and press f-UP for history.
+
+[attachment=3]undo-attach-4-sysfl-uhist.png[/attachment]
+
+That's UHIST in the SYSFL menu with the flag set.
+
+[attachment=2]undo-attach-1-history-view.png[/attachment]
+
+That shot is the view after a session with some arithmetic, a transposed 2x3 matrix, SLVQ on 1 -3 2, and a complex number, then one press of UNDO. Each row is one level, newest on top. The columns are: level number, operation, and what X held at that moment. (val) is a plain value entry, and (now) is where you were when you started undoing. The * marks where undo currently stands and the highlighted row is current selection.
+Each history level holds the full stack plus LASTx, the flags, and the stat sums if you have any.
+
+[attachment=0]undo-attach-3-restored.png[/attachment]
+
+That's ENTER on the SLVQ row from the first shot. The matrix is back in T and the three coefficients sit in Z, Y and X as they were before the solver ran.
+[b]The ~ mark[/b]
+
+[attachment=1]undo-attach-2-gap.png[/attachment]
+
+Every level stores a full copy of the stack, and the history data lives in 4 KB (the pool only has about 5 KB to spare before upstream's own matrix tests start failing). A state over about 1 KB is just too big to store. Why skip instead of dropping older levels to make room? One big matrix would push out most of the trail for a single slot. Instead, the next stored level gets a ~ to say something happened between it and the row below that isn't recorded. Most people will probably never see it (hopefully) since you need a decently large matrix or a long string on the stack to trigger it. Undo still works across the gap.
+
+[b]Limits[/b]
+[list]
+[*]History is session-only. RESET and loading a saved state clear it.
+[*]Depth depends on the values. Plain reals give about 25 levels at stack size 4, about 16 with SSIZE8, 48 at most.
+[*]Solver and integrator internals stay out of the history (SLV alone would flood it with iteration states). One solver call is one level.
+[*]A running program doesn't capture (the stock undo skips those too).
+[*]Undo restores system flags along with the stack. Stock UNDO already did that.
+[/list]
+
+[b]Install[/b]
+
+Unzip the attachment into packages/undo-history and build with the package active:
+[code]make sim CUSTOM_PKG=packages/undo-history[/code]
+It composes with forth-core if you run both:
+[code]make sim CUSTOM_PKG=packages/forth-core,packages/undo-history[/code]
+For the calculator it's make dmcp5r47 with the same CUSTOM_PKG. The firmware grows by 3.9 KB, and the history takes its 4 KB from the memory pool at reset, you'll see the difference in the FLGS free-memory line.
+Package base is r47forth commit faf9d698c. Upstream's full test suite runs green with the package active, alone and combined with forth-core, and my own tests add about thirty cases on top. Everything above is from the simulator, I haven't flashed a real DM42n with this yet. So make a calculator backup and flash at your own risk. The zip has COPYING inside, the licence is GPL-3.0-only, inherited from c43.
+
+If people think it's useful I can create a pull request for it, since it's made with that in mind.

@@ -38,6 +38,19 @@ wording.
   value entry rendered "- -3.". Fixed red-first with a namespace class
   test, B8; both synthetic labels are parenthesized now.)
 
+- 4th screenshot (2026-08-25, his request): the SYSFL picker page holding
+  UHIST with the flag set (filled radiobutton), undo-attach-4-sysfl-uhist
+  .png. UHIST is index 100 of the GENERATED menu_SYSFL catalog (113
+  entries, built from the CAT_SYFL item rows at build time, sort order
+  checked by upstream's own suite) — the "set it with SF in SYSFL" claim
+  is backed by the generator, not by a hand-added menu entry.
+- Attachment indices in the final post (3=picker, 2=history view,
+  0=restored, 1=gap) encode a phpBB upload order — YOUR upload order
+  decides the real numbers; renumber at post time if it differs.
+- The PR-offer line is factual: the package was designed as an upstream
+  feature patch from the first ruling (UPSTREAMING.md in
+  design-docs/undo-history/ carries the submission notes).
+
 ## Numbers (all measured)
 - History buffer: 4 KB, one block from the C47 memory pool, allocated at
   RESET. Visible in FLGS free-RAM line.
