@@ -193,3 +193,13 @@
   identity). Report: AUDIT_round1_2026-08-25.md. Findings, not fixes:
   the tree ends the round as it began; fixes are the next work, each
   red-first with its class pin.
+- **2026-08-25 audit round 1 fixes.** A1/A2/A3 landed red-first (B15,
+  R12, B7-TAM: seven asserts red on the shipped code, green after).
+  A2's shape: the mint now owns gap+cursor bookkeeping and fnUndo takes
+  a package step for the gap case instead of upstream undo(), consuming
+  thereIsSomethingToUndo so the press cannot re-mint. Process note paid
+  for twice today: a python edit heredoc that asserts inside a
+  BACKGROUND task dies silently and the gate then runs the unfixed
+  tree — edits land foreground with a landed-sentinel, gates run
+  separately. Round 2 on these fix commits is owed before the audit can
+  close.

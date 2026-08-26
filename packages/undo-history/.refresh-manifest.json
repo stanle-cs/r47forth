@@ -4,8 +4,8 @@
     "browsers/historyBrowser.c": "2f2f8972b440ee81dfdb8baa776a2a7192fca954f0f72b8f864196ff7ce204db",
     "browsers/historyBrowser.h": "538f651f61774264b293864744a55f4c63559cbf5d1ebfd300c6440763c3872d",
     "testSuite/tests/undo_history.txt": "cda5209cd37a3a726d4492054a9fb6a9a7db43d12671966315cee80994fd4b76",
-    "undoHistory.c": "79561a03d2e2249ccdd4f1ea21fcc7fb63455f7a38d7bf6eb7cb694098363a70",
-    "undoHistory.h": "0a06cc29bd82c15ca75525c3f3374852b03916728376603a41c6af9ed8983a73"
+    "undoHistory.c": "0d08895fca53413c7a6f47f6dad29313f769627e09d5545ef55676509a3de5ef",
+    "undoHistory.h": "327db2ac2dcd8299547231ef53f44bf4534ec3eebd5c0af2df6bc4135730b92e"
   },
   "patches": {
     "010-browsers__browsers.h.patch": "2683e909fb7d1ceb21e93806b3f4b443278b990d5130338b663275010c10edf3",
@@ -22,7 +22,7 @@
     "010-saveRestoreBackup.c.patch": "21ab821bd71553d45bb9df98ed9c958a06308e6be048d3aed90a978eab398bc0",
     "010-screen.c.patch": "fe398fd6917b8e324a4d58adfca60eebc65b8e66482ca12213237b9d4447b3ba",
     "010-softmenus.c.patch": "d67ce8ca900fd992f00b73c1dba5d15421789083c9758145e5c842591d21e1b6",
-    "010-stack.c.patch": "a9aa0b72e7a16e46e9a79523e869e275f504aea30663a1cce14db28072afd714",
+    "010-stack.c.patch": "a0955b38388d1f1f242bec58d645b6df6324161db11224bb0d31d62c06e99b1a",
     "010-statusBar.c.patch": "e8e3fef2dbb9461095e8859dda1c569bc0db204a2868868dd3ac1f9482f831c3",
     "010-testSuite__testSuite.c.patch": "9d933c4c93207df06eaf5dc7c923451f0fd2e2922f63f1d965fd3651622eb2ba",
     "010-testSuite__tests__testSuiteList.txt.patch": "555c339d0194851711cc63219773f173c4e547f09843bee230725d7a2ef8f134"

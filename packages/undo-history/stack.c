@@ -331,8 +331,16 @@ void fnUndo(uint16_t unusedButMandatoryParameter) {
                                   print_caller(NULL);
                                 #endif
   if(thereIsSomethingToUndo) {
-    undoHistoryNoteFirstUndo();
-    undo();
+    if(undoHistoryNoteFirstUndo()) {
+      // The state under the anchor was an oversized skip: step straight
+      // to the last ring level (the press is consumed — the buffer's
+      // un-ringed state cannot be landed on; audit A2).
+      undoHistoryStepBack();
+      thereIsSomethingToUndo = false;
+    }
+    else {
+      undo();
+    }
   }
   else if(undoHistoryUserContext() && undoHistoryCanStepBack()) {
     // The single-level buffer is spent: walk the history ring one state

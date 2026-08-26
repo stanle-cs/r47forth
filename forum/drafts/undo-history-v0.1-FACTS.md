@@ -62,7 +62,7 @@ wording.
   Undo works across the gap; the skipped state cannot be returned to.
 - Depth: ~25 levels of plain reals at stack size 4; ~16 at SSIZE8; hard
   cap 48.
-- Flash cost: +3992 bytes (1090504 -> 1094496, make dmcp5r47, re-measured after the numbering + key-blanket fixes). The post's "3.9 KB" stays right (3,992 B = 3.9 KiB).
+- Flash cost: +4208 bytes (1090504 -> 1094712, make dmcp5r47, re-measured after the audit round 1 fixes). NOTE: 4,208 B = 4.1 KiB — the post's "grows by 3.9 KB" line needs its number changed to 4.1 KB before posting.
 - SRAM4 statics: +124 bytes.
 - Zip: 44 KB.
 
@@ -155,3 +155,11 @@ wording.
   choose, the trail truncated on a second choose. One exclusion in the
   save block fixes all three; B13/B14 pin it through the real keys.
   (now) now appears on every browser restore from live. Zip rebuilt.
+
+## Audit round 1 (2026-08-25): three fixes after your "more bugs" call
+- A failed restore can no longer destroy the level it refused (fit
+  pre-check before the anchor mint commits anything).
+- First UNDO across an oversized skip now lands on the last stored
+  level with the ~ on the anchor (never forward; redo returns).
+- f-UP no longer opens the view while a command prompt (TAM) is
+  pending. Zip rebuilt again — attach the latest.

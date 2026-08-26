@@ -280,3 +280,18 @@ that one lump: ENTER falls through to fnKeyEnter's case exactly like
 ENTER in CM_NORMAL (name shows at press, runs at release). B9 pins the
 whole contract by driving btnPressed/btnReleased for DOWN, ENTER and
 EXIT with runtime-resolved key numbers.
+
+### Audit round 1 fixes (2026-08-25)
+
+A1: a live-state restore pre-checks the anchor mint's fit (the extracted
+historySerializeSize + free-plus-older-than-target bytes) and refuses
+BEFORE committing when the mint would evict the selected level — a
+refusal leaves the cursor live and every level intact. A2: the anchor
+mint applies a pending gap (~ on the anchor), owns the cursor, and
+reports a takeover: the first UNDO across an oversized skip steps
+straight to the last ring level and consumes the press — the un-ringed
+state cannot be landed on; with no older level it falls back to the
+single-press undo (documented corner: that landing is unredoable). A3:
+the f-UP reroute requires !tam.mode — TAM runs inside CM_NORMAL and
+would otherwise eat the browser's keys. Pinned by B15, R12, and B7's
+TAM leg.

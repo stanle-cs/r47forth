@@ -52,7 +52,7 @@
    * also uses saveForUndo()/fnUndo() as an internal error-rollback
    * transaction (e.g. RANI#).
    */
-  void   undoHistoryNoteFirstUndo(void);
+  bool_t undoHistoryNoteFirstUndo(void);
 
   /**
    * True when a deeper state than the single-level buffer is available.

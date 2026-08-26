@@ -142,6 +142,20 @@ static uint32_t historyPayloadBytesOf(calcRegister_t regist) {
  * \return 0 = skipped (too large / cannot allocate), 1 = pushed, 2 = merged
  *         into the identical top entry
  */
+static uint32_t historySerializeSize(bool_t fromSaved) {
+  uint8_t regCount = (uint8_t)(getStackTop() - REGISTER_X + 1) + 1;   // stack + L
+  const void *sumsSource = fromSaved ? (const void *)savedStatisticalSumsPointer : (const void *)statisticalSumsPointer;
+  uint32_t total = historyRound8(sizeof(historyEntryHeader_t));
+  for(uint8_t i = 0; i < regCount; i++) {
+    uint8_t slot = i == regCount - 1 ? HISTORY_SLOT_L : i;
+    total += sizeof(historyRegRecord_t) + historyRound4(historyPayloadBytesOf(historySourceRegister(slot, fromSaved)));
+  }
+  if(sumsSource != NULL) {
+    total += HISTORY_SUMS_BYTES;
+  }
+  return historyRound8(total);
+}
+
 static int historySerializePush(bool_t fromSaved, int16_t labelItem, uint8_t extraFlags) {
   historyEntryHeader_t h;
   uint8_t regCount, slot;
@@ -151,16 +165,7 @@ static int historySerializePush(bool_t fromSaved, int16_t labelItem, uint8_t ext
 
   regCount = (uint8_t)(regTop - REGISTER_X + 1) + 1;   // stack + L
 
-  // Size pass.
-  total = historyRound8(sizeof(historyEntryHeader_t));
-  for(uint8_t i = 0; i < regCount; i++) {
-    slot = i == regCount - 1 ? HISTORY_SLOT_L : i;
-    total += sizeof(historyRegRecord_t) + historyRound4(historyPayloadBytesOf(historySourceRegister(slot, fromSaved)));
-  }
-  if(sumsSource != NULL) {
-    total += HISTORY_SUMS_BYTES;
-  }
-  total = historyRound8(total);
+  total = historySerializeSize(fromSaved);
 
   if(total > HISTORY_ENTRY_MAX_BYTES || total > 0xffff) {
     return 0;
@@ -303,17 +308,30 @@ bool_t undoHistoryUserContext(void) {
   return programRunStop != PGM_RUNNING && !getSystemFlag(FLAG_SOLVING) && !getSystemFlag(FLAG_INTING);
 }
 
-void undoHistoryNoteFirstUndo(void) {
+bool_t undoHistoryNoteFirstUndo(void) {
   int result;
+  bool_t gapAnchor;
   if(!undoHistoryUserContext() || lastErrorCode != ERROR_NONE) {
-    return;   // upstream error-rollback transaction, not a user UNDO
+    return false;   // upstream error-rollback transaction, not a user UNDO
   }
   if(historyRing == NULL || historyEntryCount == 0) {
-    return;
+    return false;
   }
   historyCursor = HISTORY_CURSOR_NONE;
-  result = historySerializePush(false, 0, HISTORY_ENTRY_LIVEANCHOR);
+  gapAnchor = historyGapPending;
+  result = historySerializePush(false, 0, (uint8_t)(HISTORY_ENTRY_LIVEANCHOR | (gapAnchor ? HISTORY_ENTRY_GAPBEFORE : 0)));
   if(result == 1) {
+    if(gapAnchor) {
+      // The anchor is the first stored level after an oversized skip: it
+      // carries the ~, and the state under it cannot be landed on (it
+      // never fit the ring). The caller steps straight to the last ring
+      // level — one press covers the gap, as documented — so the cursor
+      // sits on the anchor for that step. With no older level, the
+      // caller falls back to the plain single-level undo (audit A2).
+      historyGapPending = false;
+      historyCursor = historyEntryCount - 1;
+      return historyEntryCount >= 2;
+    }
     historyCursor = (historyEntryCount >= 2 && historyLastCaptureSeq != 0 && historySeqOf(historyEntryCount - 2) == historyLastCaptureSeq)
                     ? historyEntryCount - 2 : HISTORY_CURSOR_NONE;
   }
@@ -321,6 +339,7 @@ void undoHistoryNoteFirstUndo(void) {
     historyCursor = (historyLastCaptureSeq != 0 && historySeqOf(historyEntryCount - 1) == historyLastCaptureSeq)
                     ? historyEntryCount - 1 : HISTORY_CURSOR_NONE;
   }
+  return false;
 }
 
 /**
@@ -492,7 +511,7 @@ bool_t undoHistoryStagePreview(uint8_t logical) {
 }
 
 bool_t undoHistoryKeyReroute(bool_t shiftFActive, int16_t keyPrimary) {
-  return shiftFActive && keyPrimary == ITM_UP1 && calcMode == CM_NORMAL && getSystemFlag(FLAG_UHIST);
+  return shiftFActive && keyPrimary == ITM_UP1 && calcMode == CM_NORMAL && !tam.mode && getSystemFlag(FLAG_UHIST);
 }
 
 bool_t undoHistoryRestoreLevel(uint8_t logical) {
@@ -502,12 +521,28 @@ bool_t undoHistoryRestoreLevel(uint8_t logical) {
   if(historyCursor == HISTORY_CURSOR_NONE) {
     // A restore from the LIVE state is a jump the user must be able to
     // redo out of: mint the (now) anchor exactly like the first UNDO
-    // press. The push can evict oldest levels (or dedupe-merge), so the
-    // target is re-found by its seq; if the anchor push evicted it, the
-    // restore refuses rather than land on the wrong level.
+    // press. The mint evicts oldest-first, so refuse BEFORE it commits
+    // anything if fitting the anchor would take the selected level with
+    // it (audit A1: the old refuse path minted, evicted the target, and
+    // left the cursor claiming a state the machine does not hold). An
+    // oversized live state (needed > cap) mints nothing and commits
+    // nothing, so it passes through. The seq re-find below stays as the
+    // belt for index shifts from ordinary eviction.
     uint16_t targetSeq = historySeqOf(logical);
     int16_t found = -1;
-    undoHistoryNoteFirstUndo();
+    uint32_t needed = historySerializeSize(false);
+    if(needed <= HISTORY_ENTRY_MAX_BYTES && needed <= 0xffffu) {
+      uint32_t sparable = HISTORY_RING_BYTES - historyUsedBytes;
+      for(uint8_t l = 0; l < logical; l++) {
+        historyEntryHeader_t hh;
+        historyHeaderOf(l, &hh);
+        sparable += hh.totalBytes;
+      }
+      if(needed > sparable || (historyEntryCount >= HISTORY_MAX_ENTRIES && logical == 0)) {
+        return false;
+      }
+    }
+    (void)undoHistoryNoteFirstUndo();
     for(uint8_t l = 0; l < historyEntryCount; l++) {
       if(historySeqOf(l) == targetSeq) {
         found = l;
@@ -943,6 +978,45 @@ void historyTestRing(uint16_t unusedButMandatoryParameter) {
     }
   }
 
+  { // R12 (audit A2): first UNDO with a pending oversized skip must not
+    // land inside the gap — the anchor carries ~, the machine steps
+    // straight to the last ring level, and a second UNDO never moves
+    // forward.
+    historyEntryHeader_t h;
+    historyTestBaseline();
+    historyTestWriteLonI(REGISTER_X, 1);
+    saveForUndo();                       // P {1}
+    reallocateRegister(REGISTER_X, dtString, TO_BLOCKS(HISTORY_ENTRY_MAX_BYTES + 512), amNone);
+    memset(REGISTER_STRING_DATA(REGISTER_X), 'A', HISTORY_ENTRY_MAX_BYTES + 400);
+    REGISTER_STRING_DATA(REGISTER_X)[HISTORY_ENTRY_MAX_BYTES + 400] = 0;
+    saveForUndo();                       // A oversized -> skipped, gap pending
+    historyTestWriteLonI(REGISTER_X, 5); // live C {5}
+    fnUndo(NOPARAM);
+    if(!historyTestIsLonI(REGISTER_X, 1)) {
+      historyTestFail("R12 first undo across a skip must land on the last ring level");
+    }
+    if(undoHistoryDepth() != 2) {
+      historyTestFail("R12 the skip-undo should leave P plus the anchor");
+    }
+    else {
+      historyHeaderOf(1, &h);
+      if(!(h.flags & HISTORY_ENTRY_GAPBEFORE) || !(h.flags & HISTORY_ENTRY_LIVEANCHOR)) {
+        historyTestFail("R12 the anchor after a skip must carry the gap mark");
+      }
+    }
+    if(undoHistoryCursorIndex() != 0) {
+      historyTestFail("R12 cursor must sit on the restored ring level");
+    }
+    fnUndo(NOPARAM);                     // nothing older: must NOT move forward
+    if(!historyTestIsLonI(REGISTER_X, 1)) {
+      historyTestFail("R12 a second undo must never move the machine forward");
+    }
+    fnRedo(NOPARAM);
+    if(!historyTestIsLonI(REGISTER_X, 5)) {
+      historyTestFail("R12 redo must return to the pre-undo live state");
+    }
+  }
+
   historyTestBaseline();                 // leave no half-navigated state behind
   historyTestWriteLonI(REGISTER_X, historyTestFailures);
 }
@@ -1045,6 +1119,11 @@ void historyTestBrowser(uint16_t unusedButMandatoryParameter) {
       historyTestFail("B7 reroute must stay out of program-entry mode");
     }
     calcMode = CM_NORMAL;
+    tam.mode = TM_VALUE;                 // TAM runs WITH calcMode CM_NORMAL
+    if(undoHistoryKeyReroute(true, ITM_UP1)) {
+      historyTestFail("B7 reroute must stay out of TAM (audit A3)");
+    }
+    tam.mode = 0;
     if(was) { setSystemFlag(FLAG_UHIST); } else { clearSystemFlag(FLAG_UHIST); }
   }
 
@@ -1350,6 +1429,56 @@ void historyTestBrowser(uint16_t unusedButMandatoryParameter) {
       historyTestFail("B14 choose B must jump within the trail, not rewrite it");
     }
     xcopy(kbd_usr, savedKbd3, sizeof(savedKbd3));
+  }
+
+  { // B15 (audit A1): a live-state restore whose anchor mint would evict
+    // the selected level must refuse WITHOUT committing anything — cursor
+    // stays live, the target survives, nothing is destroyed by trying.
+    uint16_t targetSeq;
+    uint16_t seq;
+    int16_t li;
+    uint8_t fl;
+    bool_t ok, targetStillThere;
+    historyTestBaseline();
+    for(uint32_t i = 1; i <= 44; i++) {  // ~44 small levels: ring nearly full
+      historyTestWriteLonI(REGISTER_X, i);
+      saveForUndo();
+    }
+    undoHistoryLevelInfo(0, &targetSeq, &li, &fl);
+    reallocateRegister(REGISTER_X, dtString, TO_BLOCKS(700), amNone);
+    memset(REGISTER_STRING_DATA(REGISTER_X), 'B', 690);
+    REGISTER_STRING_DATA(REGISTER_X)[690] = 0;   // large live state: the mint must evict
+    calcMode = CM_NORMAL;
+    ok = undoHistoryRestoreLevel(0);             // the oldest level
+    if(!ok) {
+      targetStillThere = false;
+      for(uint8_t l = 0; l < undoHistoryDepth(); l++) {
+        if(undoHistoryLevelInfo(l, &seq, &li, &fl) && seq == targetSeq) {
+          targetStillThere = true;
+        }
+      }
+      if(undoHistoryCursorIndex() != -1) {
+        historyTestFail("B15 a refused restore must leave the cursor live");
+      }
+      if(!targetStillThere) {
+        historyTestFail("B15 a refused restore must not destroy the level it refused");
+      }
+    }
+    else if(!historyTestIsLonI(REGISTER_X, 1)) {
+      historyTestFail("B15 a restore that reports success must have restored");
+    }
+    historyTestBaseline();
+    for(uint32_t i = 1; i <= 44; i++) {
+      historyTestWriteLonI(REGISTER_X, i);
+      saveForUndo();
+    }
+    reallocateRegister(REGISTER_X, dtString, TO_BLOCKS(700), amNone);
+    memset(REGISTER_STRING_DATA(REGISTER_X), 'B', 690);
+    REGISTER_STRING_DATA(REGISTER_X)[690] = 0;
+    calcMode = CM_NORMAL;
+    if(!undoHistoryRestoreLevel((uint8_t)(undoHistoryDepth() - 1))) {
+      historyTestFail("B15 a newest-level restore must not be refused by the fit check");
+    }
   }
 
   historyTestBaseline();
