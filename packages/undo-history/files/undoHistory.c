@@ -495,6 +495,26 @@ bool_t undoHistoryRestoreLevel(uint8_t logical) {
   if(!undoHistoryUserContext() || historyRing == NULL || logical >= historyEntryCount) {
     return false;
   }
+  if(historyCursor == HISTORY_CURSOR_NONE) {
+    // A restore from the LIVE state is a jump the user must be able to
+    // redo out of: mint the (now) anchor exactly like the first UNDO
+    // press. The push can evict oldest levels (or dedupe-merge), so the
+    // target is re-found by its seq; if the anchor push evicted it, the
+    // restore refuses rather than land on the wrong level.
+    uint16_t targetSeq = historySeqOf(logical);
+    int16_t found = -1;
+    undoHistoryNoteFirstUndo();
+    for(uint8_t l = 0; l < historyEntryCount; l++) {
+      if(historySeqOf(l) == targetSeq) {
+        found = l;
+        break;
+      }
+    }
+    if(found < 0) {
+      return false;
+    }
+    logical = (uint8_t)found;
+  }
   return historyRestoreToIndex(logical);
 }
 #if defined(PC_BUILD)
@@ -1120,6 +1140,41 @@ void historyTestBrowser(uint16_t unusedButMandatoryParameter) {
       }
       if(hadUser) { setSystemFlag(FLAG_USER); }
       xcopy(kbd_usr, savedKbd, sizeof(savedKbd));
+    }
+  }
+
+  { // B10: ENTER-restore from the LIVE state must mint the (now) anchor —
+    // a browser jump with no undo pressed was unredoable: the pre-restore
+    // state was lost and no (now) row appeared.
+    uint16_t seq;
+    int16_t li;
+    uint8_t fl;
+    bool_t anchorSeen = false;
+    historyTestBaseline();
+    historyTestWriteLonI(REGISTER_X, 1);
+    saveForUndo();
+    historyTestWriteLonI(REGISTER_X, 2);
+    saveForUndo();
+    historyTestWriteLonI(REGISTER_X, 3);
+    saveForUndo();
+    historyTestWriteLonI(REGISTER_X, 4);           // live {4}, cursor NONE
+    calcMode = CM_NORMAL;
+    historyBrowser(NOPARAM);
+    historyBrowserDown();                          // an older level
+    historyBrowserEnter();                         // restore from LIVE
+    for(uint8_t l = 0; l < undoHistoryDepth(); l++) {
+      if(undoHistoryLevelInfo(l, &seq, &li, &fl) && (fl & HISTORY_ENTRY_LIVEANCHOR)) {
+        anchorSeen = true;
+      }
+    }
+    if(!anchorSeen) {
+      historyTestFail("B10 a live-state restore must mint the (now) anchor");
+    }
+    for(int i = 0; i < 6; i++) {
+      fnRedo(NOPARAM);                             // walk back up, extra calls no-op
+    }
+    if(!historyTestIsLonI(REGISTER_X, 4)) {
+      historyTestFail("B10 redo after a live-state restore must reach the pre-restore state");
     }
   }
 

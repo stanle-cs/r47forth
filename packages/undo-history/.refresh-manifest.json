@@ -4,7 +4,7 @@
     "browsers/historyBrowser.c": "2f2f8972b440ee81dfdb8baa776a2a7192fca954f0f72b8f864196ff7ce204db",
     "browsers/historyBrowser.h": "538f651f61774264b293864744a55f4c63559cbf5d1ebfd300c6440763c3872d",
     "testSuite/tests/undo_history.txt": "cda5209cd37a3a726d4492054a9fb6a9a7db43d12671966315cee80994fd4b76",
-    "undoHistory.c": "cc4edca0ac21d64c937149d52d0484d94769e545c4c8413d1a41f2a0852b401c",
+    "undoHistory.c": "ad7da1da9f0f1b8a9f1073987bbcbbd82c720f918123100113431a493d676424",
     "undoHistory.h": "0a06cc29bd82c15ca75525c3f3374852b03916728376603a41c6af9ed8983a73"
   },
   "patches": {

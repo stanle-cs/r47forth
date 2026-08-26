@@ -62,7 +62,7 @@ wording.
   Undo works across the gap; the skipped state cannot be returned to.
 - Depth: ~25 levels of plain reals at stack size 4; ~16 at SSIZE8; hard
   cap 48.
-- Flash cost: +3896 bytes (1090504 -> 1094400, make dmcp5r47, re-measured after the ENTER fix — removing the swallow dropped the 8 bytes the label fix added).
+- Flash cost: +3960 bytes (1090504 -> 1094464, make dmcp5r47, re-measured after the live-restore anchor fix). The post's "3.9 KB" stays right.
 - SRAM4 statics: +124 bytes.
 - Zip: 44 KB.
 
@@ -127,3 +127,10 @@ wording.
 - REDO paths (both true in the post as written): the REDO item on the
   STK menu / catalog / assignable key, and now ENTER on a level above
   the * in the view.
+
+## Live-state ENTER mints (now) (2026-08-25, your third find)
+- ENTER-restore from the view with NO undo in progress now saves the
+  departure state as the (now) anchor first (same rule as the first
+  UNDO press): the jump is redoable and (now) appears. Before the fix
+  the pre-restore state was silently lost. Pinned by B10. Zip rebuilt
+  again — re-attach if uploaded.

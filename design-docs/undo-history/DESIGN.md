@@ -230,6 +230,16 @@ browsers/historyBrowser.c/.h. All patch content is submission-ready
 upstream code; comments explain invariants in upstream's own voice, and no
 package markers are used.
 
+### Restore from the live state mints the anchor (2026-08-25)
+
+`undoHistoryRestoreLevel` from a live cursor (no undo in progress) runs
+`undoHistoryNoteFirstUndo()` before the jump: a browser ENTER from live
+is the same user action as a first UNDO — the pre-jump state must be a
+`(now)` anchor or the jump is lossy (unredoable) and the view shows no
+(now) row. The anchor push can evict oldest levels or dedupe-merge, so
+the target level is re-found by seq after the mint; if the push evicted
+the very target, the restore refuses. Pinned by B10.
+
 ### The ENTER exception (2026-08-25)
 
 The CM_ASN_BROWSER precedent sweep is correct for every key EXCEPT

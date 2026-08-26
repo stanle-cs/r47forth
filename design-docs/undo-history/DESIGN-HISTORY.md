@@ -134,3 +134,15 @@
   preamble). On device the browser cannot coexist with SHOW — the
   entry keypress dismisses it before the browser opens — so the
   dismissal is test-context pinning, not a firmware change.
+- **2026-08-25 (third use-report).** Stan: "(now) did not trigger if we
+  use the ENTER key." Real gap, sharper than the first read of it: the
+  anchor was minted only in fnUndo's first-undo branch, so a browser
+  ENTER from the LIVE state (no undo pressed) jumped away without
+  saving the departure state — unredoable, and no (now) row. Fixed in
+  undoHistoryRestoreLevel: a live-cursor restore runs
+  undoHistoryNoteFirstUndo() first (same gates), re-finding the target
+  by seq because the anchor push can evict or dedupe-merge; a push that
+  evicts the very target makes the restore refuse rather than land
+  wrong. B10 pins both halves red-first (anchor present + redo reaches
+  the pre-restore state). The (now) lifecycle explanation given for the
+  second report stands; this closes the one entry path that skipped it.
