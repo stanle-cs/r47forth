@@ -229,3 +229,16 @@ browsers/browsers.h (one include). New files: undoHistory.c/.h,
 browsers/historyBrowser.c/.h. All patch content is submission-ready
 upstream code; comments explain invariants in upstream's own voice, and no
 package markers are used.
+
+### The ENTER exception (2026-08-25)
+
+The CM_ASN_BROWSER precedent sweep is correct for every key EXCEPT
+ENTER: upstream browsers ignore ENTER, so processKeyAction's
+`case ITM_ENTER:` carries a browser ignore lump, and sweeping
+CM_HIST_BROWSER into it silently killed the browser's restore key on
+the real keyboard while the battery (driving historyBrowserEnter()
+directly) stayed green. CM_HIST_BROWSER is deliberately absent from
+that one lump: ENTER falls through to fnKeyEnter's case exactly like
+ENTER in CM_NORMAL (name shows at press, runs at release). B9 pins the
+whole contract by driving btnPressed/btnReleased for DOWN, ENTER and
+EXIT with runtime-resolved key numbers.

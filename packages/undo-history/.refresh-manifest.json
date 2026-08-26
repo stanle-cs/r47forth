@@ -4,7 +4,7 @@
     "browsers/historyBrowser.c": "2f2f8972b440ee81dfdb8baa776a2a7192fca954f0f72b8f864196ff7ce204db",
     "browsers/historyBrowser.h": "538f651f61774264b293864744a55f4c63559cbf5d1ebfd300c6440763c3872d",
     "testSuite/tests/undo_history.txt": "cda5209cd37a3a726d4492054a9fb6a9a7db43d12671966315cee80994fd4b76",
-    "undoHistory.c": "a0472dfb8fae570814b432d9c585a13e3fd4c24b685a16f74a32c414901aba29",
+    "undoHistory.c": "cc4edca0ac21d64c937149d52d0484d94769e545c4c8413d1a41f2a0852b401c",
     "undoHistory.h": "0a06cc29bd82c15ca75525c3f3374852b03916728376603a41c6af9ed8983a73"
   },
   "patches": {
@@ -18,7 +18,7 @@
     "010-defines.h.patch": "a8148141cd9ec5b79344d60d9d2da155e24e50e4d34c56ee0119193f13e1d0eb",
     "010-items.c.patch": "5f496e9664f7bd253ffe420e80a48be713e0ee1472ac952c028ba875eacf1659",
     "010-items.h.patch": "ccc2798fd7798415cabcf835de92dc785c5b03dfa65350490fc89d1b5c21af9f",
-    "010-keyboard.c.patch": "c3703885fa3a110fd9eaa3a0f11c1ad0031da9ff088c45db022b80fd6022a9bb",
+    "010-keyboard.c.patch": "428aec44faf8b33ee4b8b810b268df6151907e9a036d91feef11875b373cc096",
     "010-saveRestoreBackup.c.patch": "21ab821bd71553d45bb9df98ed9c958a06308e6be048d3aed90a978eab398bc0",
     "010-screen.c.patch": "fe398fd6917b8e324a4d58adfca60eebc65b8e66482ca12213237b9d4447b3ba",
     "010-softmenus.c.patch": "d67ce8ca900fd992f00b73c1dba5d15421789083c9758145e5c842591d21e1b6",

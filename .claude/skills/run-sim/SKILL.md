@@ -265,6 +265,15 @@ window and the traps behind each rule, is `.claude/skills/run-sim/SKILL.md`.
 
 ## Traps added 2026-08-04 (README-verification session)
 
+- **A refresh + bare `ninja` only rebuilds `+files`, never patches.**
+  pkg_patch_refresh regenerates patches/, but PATCHED upstream files
+  materialize into the build shadow at meson CONFIGURE time — after
+  editing one, `ninja` alone compiles the OLD shadow while your +file
+  edits (test drivers) compile fresh, so the binary half-updates and a
+  fix can test false-red (cost a full debugging cycle, 2026-08-25,
+  keyboard.c ENTER swallow). `meson setup --reconfigure build.sim`
+  or the full gate; check the shadow file for your change when in
+  doubt.
 - **`--build` can hand you a stale shadow.** `build-test.sh --build`
   refreshed `files/` but the binary still ran the previous runner — the
   same stamp trap as `build.dmcp5`, now confirmed for `build.sim`. If

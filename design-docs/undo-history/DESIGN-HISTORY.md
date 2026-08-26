@@ -108,3 +108,29 @@
   (`(entry)` at 7 glyphs touched it). All three post screenshots
   re-captured with the recovered marker-block drivers, removed again
   after capture, full gate green.
+- **2026-08-25 (later).** Stan, using the build: "why can't I press
+  enter to select the undo level in browsing mode?" Real: the
+  CM_ASN_BROWSER precedent sweep had added CM_HIST_BROWSER to
+  processKeyAction's ITM_ENTER browser ignore lump — correct for
+  upstream browsers, which all ignore ENTER, fatal for the one browser
+  that acts on it. The fnKeyEnter case was unreachable dead code on the
+  real path; the battery stayed green because it called
+  historyBrowserEnter() directly ("silence is not-run" class). Fixed
+  red-first: B9 drives the real btnPressed/btnReleased chain (key
+  numbers resolved from kbd_std at runtime, GdkEvent per the
+  btnClickedP idiom) for DOWN, ENTER, EXIT — red on the swallow, green
+  after removing CM_HIST_BROWSER from that one lump. Two detours worth
+  their lines. (1) The first fix attempt tested red WRONGLY because
+  pkg_patch_refresh + bare ninja does not re-materialize PATCHED
+  upstream files into the build shadow (only +files ride ninja); meson
+  --reconfigure is required — the stale-shadow trap in its patched-file
+  form. (2) B9 passed isolated and failed under the full suite: a
+  latched SHOW state from an earlier test (btnPressed's own first act
+  is `showScreenDismissed = (SHOWMODE || currentMenu() == -MNU_SHOW)`
+  followed by closeShowMenu(), which resets calcMode) ate the first
+  press — found with a gdb hardware watchpoint on calcMode after two
+  wrong hypotheses (ambient kbd_usr assignments, a stale TO_FN_EXEC
+  queue; both normalizations kept as the pin's defined-context
+  preamble). On device the browser cannot coexist with SHOW — the
+  entry keypress dismisses it before the browser opens — so the
+  dismissal is test-context pinning, not a firmware change.

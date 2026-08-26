@@ -2617,7 +2617,11 @@ RELEASE_END:
             }
             keyActionProcessed = true;
           }
-          else if(calcMode == CM_REGISTER_BROWSER || calcMode == CM_FLAG_BROWSER || calcMode == CM_ASN_BROWSER || calcMode == CM_FONT_BROWSER || calcMode == CM_HIST_BROWSER) {
+          // CM_HIST_BROWSER deliberately absent: upstream browsers ignore
+          // ENTER, this one restores on it — the item must fall through to
+          // fnKeyEnter's case like ENTER in CM_NORMAL does (B9 pins the
+          // whole real-key-path contract).
+          else if(calcMode == CM_REGISTER_BROWSER || calcMode == CM_FLAG_BROWSER || calcMode == CM_ASN_BROWSER || calcMode == CM_FONT_BROWSER) {
             keyActionProcessed = true;
           }
           else if(calcMode == CM_CONFIRMATION) {

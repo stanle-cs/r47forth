@@ -1042,6 +1042,87 @@ void historyTestBrowser(uint16_t unusedButMandatoryParameter) {
     }
   }
 
+  { // B9: every browser key the post documents must act through the REAL
+    // btnPressed/btnReleased chain, not only through direct handler calls —
+    // ENTER was wired in fnKeyEnter but swallowed by processKeyAction's
+    // browser ignore list, so the battery was green while the key was dead.
+    int16_t kEnter = -1, kUp = -1, kDown = -1, kExit = -1;
+    for(int16_t k = 0; k < 37; k++) {
+      if(kbd_std[k].primary == ITM_ENTER) { kEnter = k; }
+      if(kbd_std[k].primary == ITM_UP1)   { kUp    = k; }
+      if(kbd_std[k].primary == ITM_DOWN1) { kDown  = k; }
+      if(kbd_std[k].primary == ITM_EXIT1) { kExit  = k; }
+    }
+    if(kEnter < 0 || kUp < 0 || kDown < 0 || kExit < 0) {
+      historyTestFail("B9 the active key layout misses a required primary");
+    }
+    else {
+      char kbuf[4];
+      GdkEvent ev;                       // the btnClickedP/btnClickedR idiom
+      // The chain runs under whatever ~13k earlier suite tests left behind:
+      // user key maps, TAM, SHOW, stale temporary info. Pin a defined
+      // context, restore what other suites may rely on.
+      bool_t hadUser = getSystemFlag(FLAG_USER);
+      calcKey_t savedKbd[37];            // earlier assign tests leave kbd_usr
+      xcopy(savedKbd, kbd_usr, sizeof(savedKbd));
+      xcopy(kbd_usr, kbd_std, sizeof(savedKbd));   // the config.c reset idiom
+      ev.button.button = 1;
+      historyTestBaseline();
+      clearSystemFlag(FLAG_USER);
+      tam.mode = 0;
+      tam.alpha = false;
+      temporaryInformation = TI_NO_INFO;
+      lastErrorCode = ERROR_NONE;
+      historyTestWriteLonI(REGISTER_X, 1);
+      saveForUndo();
+      historyTestWriteLonI(REGISTER_X, 2);
+      saveForUndo();
+      historyTestWriteLonI(REGISTER_X, 3);
+      saveForUndo();
+      calcMode = CM_NORMAL;
+      shiftF = shiftG = false;
+      fnTimerExec(TO_FN_EXEC);           // drain a stale queued fn in CM_NORMAL
+      if(SHOWMODE || currentMenu() == -MNU_SHOW) {
+        closeShowMenu();                 // a latched SHOW screen or menu eats
+      }                                  // the first press (btnPressed's own
+                                         // dismissal resets calcMode) — on
+                                         // device the browser can never
+                                         // coexist with SHOW: the entry
+                                         // keypress dismisses it first
+      historyBrowser(NOPARAM);
+      {
+        int16_t sel0 = historyBrowserSelection();
+        sprintf(kbuf, "%02d", kDown);
+        ev.type = 0;
+        btnPressed(NULL, &ev, kbuf);
+        btnReleased(NULL, &ev, kbuf);
+        if(calcMode != CM_HIST_BROWSER || historyBrowserSelection() != sel0 - 1) {
+          historyTestFail("B9 DOWN through the real key path must move the selection");
+        }
+      }
+      sprintf(kbuf, "%02d", kEnter);
+      ev.type = 0;
+      btnPressed(NULL, &ev, kbuf);
+      btnReleased(NULL, &ev, kbuf);
+      if(calcMode != CM_NORMAL) {
+        historyTestFail("B9 ENTER through the real key path must restore and leave");
+      }
+      if(undoHistoryCursorIndex() != historyBrowserSelection()) {
+        historyTestFail("B9 ENTER must move the undo cursor to the restored level");
+      }
+      historyBrowser(NOPARAM);
+      sprintf(kbuf, "%02d", kExit);
+      ev.type = 0;
+      btnPressed(NULL, &ev, kbuf);
+      btnReleased(NULL, &ev, kbuf);
+      if(calcMode != CM_NORMAL) {
+        historyTestFail("B9 EXIT through the real key path must leave the browser");
+      }
+      if(hadUser) { setSystemFlag(FLAG_USER); }
+      xcopy(kbd_usr, savedKbd, sizeof(savedKbd));
+    }
+  }
+
   historyTestBaseline();
   historyTestWriteLonI(REGISTER_X, historyTestFailures);
 }

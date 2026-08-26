@@ -71,6 +71,7 @@ restores:
 | F1 | wrong flag in the SYSFL row 2299 item | browser battery B7 (the SFL_MONIT offset arithmetic) |
 | F2 | drop the flag check in `undoHistoryKeyReroute` | browser battery B7 (reroute must be off while the flag is clear) |
 | L1 | a synthetic browser label equal to an item catalog name | browser battery B8 (whole-namespace scan; red-first against the shipped `-`, which collided with ITM_SUB) |
+| K1 | a browser key wired in fnKey* but swallowed upstream (processKeyAction ignore lists) | browser battery B9 (real btnPressed/btnReleased chain for DOWN, ENTER, EXIT; red-first against the shipped ENTER swallow) |
 
 R10 carries no mutation pin: it pins an **upstream** contract, not package
 code — if it ever goes red, TMP_STR_LENGTH stopped being enough and the U2

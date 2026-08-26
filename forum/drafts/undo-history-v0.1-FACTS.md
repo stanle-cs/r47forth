@@ -62,7 +62,7 @@ wording.
   Undo works across the gap; the skipped state cannot be returned to.
 - Depth: ~25 levels of plain reals at stack size 4; ~16 at SSIZE8; hard
   cap 48.
-- Flash cost: +3904 bytes (1090504 -> 1094408, make dmcp5r47, re-measured after the (val) label fix).
+- Flash cost: +3896 bytes (1090504 -> 1094400, make dmcp5r47, re-measured after the ENTER fix — removing the swallow dropped the 8 bytes the label fix added).
 - SRAM4 statics: +124 bytes.
 - Zip: 44 KB.
 
@@ -114,3 +114,16 @@ wording.
 - The package-manager thread URL in Install
   (viewtopic.php?f=46&t=4876) is Stan's own thread; external fetch
   returns 403 to non-browsers, so it is author-verified only.
+
+## ENTER-in-browser fix (2026-08-25, your bug report)
+- "why can't I press enter to select the undo level in browsing mode?"
+  was a real defect: processKeyAction's ITM_ENTER browser ignore lump
+  (upstream browsers all ignore ENTER) swallowed the key before
+  dispatch; the fnKeyEnter case was dead code on the real path and the
+  battery, calling historyBrowserEnter() directly, stayed green.
+  Fixed by removing CM_HIST_BROWSER from that one lump; B9 now drives
+  the real btnPressed/btnReleased chain for DOWN, ENTER, EXIT.
+  The zip is rebuilt with the fix — re-attach it if already uploaded.
+- REDO paths (both true in the post as written): the REDO item on the
+  STK menu / catalog / assignable key, and now ENTER on a level above
+  the * in the view.
