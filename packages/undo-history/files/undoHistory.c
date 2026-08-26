@@ -248,6 +248,7 @@ static int historySerializePush(bool_t fromSaved, int16_t labelItem, uint8_t ext
         top.labelItem = labelItem;
       }
       top.flags &= (uint8_t)~HISTORY_ENTRY_LIVEANCHOR;   // a merged anchor is a plain state again
+      top.flags |= (uint8_t)(extraFlags & HISTORY_ENTRY_GAPBEFORE);   // but a gap below it is real either way (audit r2)
       xcopy(historyRing + historyEntryOffset[historyEntryCount - 1], &top, sizeof(top));
       return 2;
     }
@@ -336,6 +337,14 @@ bool_t undoHistoryNoteFirstUndo(void) {
                     ? historyEntryCount - 2 : HISTORY_CURSOR_NONE;
   }
   else if(result == 2) {
+    if(gapAnchor) {
+      // The mint merged into the top, which now carries the ~: same gap
+      // semantics as the push path — step over, never land on the
+      // skipped state (audit r2, both readers convergent).
+      historyGapPending = false;
+      historyCursor = historyEntryCount - 1;
+      return historyEntryCount >= 2;
+    }
     historyCursor = (historyLastCaptureSeq != 0 && historySeqOf(historyEntryCount - 1) == historyLastCaptureSeq)
                     ? historyEntryCount - 1 : HISTORY_CURSOR_NONE;
   }
@@ -542,17 +551,31 @@ bool_t undoHistoryRestoreLevel(uint8_t logical) {
         return false;
       }
     }
-    (void)undoHistoryNoteFirstUndo();
-    for(uint8_t l = 0; l < historyEntryCount; l++) {
-      if(historySeqOf(l) == targetSeq) {
-        found = l;
-        break;
+    {
+      uint8_t countBefore = historyEntryCount;
+      (void)undoHistoryNoteFirstUndo();
+      for(uint8_t l = 0; l < historyEntryCount; l++) {
+        if(historySeqOf(l) == targetSeq) {
+          found = l;
+          break;
+        }
       }
+      if(found < 0) {
+        return false;
+      }
+      logical = (uint8_t)found;
+      if(!historyRestoreToIndex(logical)) {
+        // The machine still holds the live state: if the mint pushed, the
+        // top IS that state — point the cursor at it instead of at
+        // whatever the mint guessed (audit r2, RAM_FULL mid-restore).
+        historyCursor = historyEntryCount > countBefore ? historyEntryCount - 1 : HISTORY_CURSOR_NONE;
+        return false;
+      }
+      // The un-captured live branch is abandoned, its pending gap with
+      // it — the restored branch starts clean (audit r2).
+      historyGapPending = false;
+      return true;
     }
-    if(found < 0) {
-      return false;
-    }
-    logical = (uint8_t)found;
   }
   return historyRestoreToIndex(logical);
 }
@@ -1017,6 +1040,71 @@ void historyTestRing(uint16_t unusedButMandatoryParameter) {
     }
   }
 
+  { // R13 (audit r2, convergent): a gap-pending mint that DEDUPE-MERGES
+    // must still step over the gap — the merged top carries the ~, the
+    // pending flag clears, and the machine never lands on the skipped
+    // state.
+    historyEntryHeader_t h;
+    historyTestBaseline();
+    historyTestWriteLonI(REGISTER_X, 1);
+    saveForUndo();                       // Q {1}
+    historyTestWriteLonI(REGISTER_X, 2);
+    saveForUndo();                       // P {2}
+    reallocateRegister(REGISTER_X, dtString, TO_BLOCKS(HISTORY_ENTRY_MAX_BYTES + 512), amNone);
+    memset(REGISTER_STRING_DATA(REGISTER_X), 'A', HISTORY_ENTRY_MAX_BYTES + 400);
+    REGISTER_STRING_DATA(REGISTER_X)[HISTORY_ENTRY_MAX_BYTES + 400] = 0;
+    saveForUndo();                       // oversized -> skipped, gap pending
+    historyTestWriteLonI(REGISTER_X, 2); // live byte-identical to P
+    fnUndo(NOPARAM);
+    if(!historyTestIsLonI(REGISTER_X, 1)) {
+      historyTestFail("R13 a merged gap-mint must still step to the last ring level");
+    }
+    if(undoHistoryDepth() != 2) {
+      historyTestFail("R13 the merge must not grow the ring");
+    }
+    else {
+      historyHeaderOf(1, &h);
+      if(!(h.flags & HISTORY_ENTRY_GAPBEFORE)) {
+        historyTestFail("R13 the merged top must carry the gap mark");
+      }
+      if(h.flags & HISTORY_ENTRY_LIVEANCHOR) {
+        historyTestFail("R13 a merged anchor stays a plain state (ruling)");
+      }
+    }
+    if(undoHistoryCursorIndex() != 0) {
+      historyTestFail("R13 cursor must sit on the restored ring level");
+    }
+    fnRedo(NOPARAM);
+    if(!historyTestIsLonI(REGISTER_X, 2)) {
+      historyTestFail("R13 redo must return to the merged top");
+    }
+  }
+
+  { // R14 (audit r2): a successful restore from live ABANDONS the live
+    // branch, pending gap included — the next capture on the restored
+    // branch must not carry a ~ from the branch that was left.
+    historyEntryHeader_t h;
+    historyTestBaseline();
+    historyTestWriteLonI(REGISTER_X, 1);
+    saveForUndo();
+    historyTestWriteLonI(REGISTER_X, 2);
+    saveForUndo();
+    reallocateRegister(REGISTER_X, dtString, TO_BLOCKS(HISTORY_ENTRY_MAX_BYTES + 512), amNone);
+    memset(REGISTER_STRING_DATA(REGISTER_X), 'A', HISTORY_ENTRY_MAX_BYTES + 400);
+    REGISTER_STRING_DATA(REGISTER_X)[HISTORY_ENTRY_MAX_BYTES + 400] = 0;
+    saveForUndo();                       // skipped -> gap pending; live STAYS oversized
+    calcMode = CM_NORMAL;
+    if(!undoHistoryRestoreLevel(0)) {    // oversized live: mint returns 0, jump proceeds
+      historyTestFail("R14 setup restore should succeed");
+    }
+    historyTestWriteLonI(REGISTER_X, 9);
+    saveForUndo();                       // first capture on the restored branch
+    historyHeaderOf((uint8_t)(undoHistoryDepth() - 1), &h);
+    if(h.flags & HISTORY_ENTRY_GAPBEFORE) {
+      historyTestFail("R14 the abandoned branch's gap must not mark the new branch");
+    }
+  }
+
   historyTestBaseline();                 // leave no half-navigated state behind
   historyTestWriteLonI(REGISTER_X, historyTestFailures);
 }
@@ -1449,7 +1537,13 @@ void historyTestBrowser(uint16_t unusedButMandatoryParameter) {
     memset(REGISTER_STRING_DATA(REGISTER_X), 'B', 690);
     REGISTER_STRING_DATA(REGISTER_X)[690] = 0;   // large live state: the mint must evict
     calcMode = CM_NORMAL;
+    if(historySerializeSize(false) <= HISTORY_RING_BYTES - historyUsedBytes) {
+      historyTestFail("B15 fixture must actually require eviction (self-pin)");
+    }
     ok = undoHistoryRestoreLevel(0);             // the oldest level
+    if(ok) {
+      historyTestFail("B15 the eviction-of-target case must refuse");
+    }
     if(!ok) {
       targetStillThere = false;
       for(uint8_t l = 0; l < undoHistoryDepth(); l++) {

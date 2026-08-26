@@ -86,3 +86,9 @@ render plan needs revisiting, which is precisely the alarm it exists to
 raise.
 
 Run results are recorded in the stage commit message, not here.
+
+Round-2 additions: R13 (merge-path gap step-over, red-first x4), R14
+(abandoned-branch gap does not mark the restored branch, red-first),
+B15 self-pin + refusal assert (mutation-proven: pre-flight disabled ->
+red). R2-3's cursor repair is trace-verified only — RAM_FULL
+mid-restore is not batteries-enumerable (R10 precedent).

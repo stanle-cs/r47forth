@@ -203,3 +203,11 @@
   tree — edits land foreground with a landed-sentinel, gates run
   separately. Round 2 on these fix commits is owed before the audit can
   close.
+- **2026-08-26 audit round 2** (on round 1's fixes; the fix trap held —
+  4 of 4 confirmed findings were in the fixes). Convergent R2-1: the
+  dedupe-merge path ignored a pending gap and the fallback landed on
+  the skipped state; fixed in push (merge keeps GAPBEFORE) + the mint's
+  result-2 branch (step-over). R2-2 ruled: a restore-from-live abandons
+  the live branch's pending gap. R2-3: restore failure now repairs the
+  cursor to the pushed anchor. R2-4: B15 made self-pinning and
+  mutation-proven. Pins R13/R14; gate green; round 3 owed.
