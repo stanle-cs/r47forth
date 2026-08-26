@@ -108,7 +108,9 @@ the template and the linter; the linter's HARD hits are non-negotiable.
   trace; "BORROWED = the user's own row" licenses it (cost two runs).
 - **Size:** 3–11 KB proven to answer in minutes; rounds 9 and 10 extended
   the proven range to 23.9 KB (Gemini) and 19.2 KB (Sol, self-contained
-  design packet). Keep packets small for depth, not from fear of size —
+  design packet); the undo-history round-1 refutation packets extended it
+  again to 27.9 KB (Gemini) and 26.6 KB (Sol) — both fully structured
+  answers. Keep packets small for depth, not from fear of size —
   the old 13 KB failure was over-read. Round 10 split two oversized
   packets and the splits cost nothing, so **split on the QUESTION, not on
   the byte count**: one packet, one question, and the size follows.
@@ -168,6 +170,12 @@ workflow; it may not be one of the readers.
   violate (fix the mutation), or unfalsifiable-by-construction (record it
   as a documented gap, as round 4's hardening was). Check for redundant
   paths that self-heal the mutation before crediting any of the three.
+- **An operator-run probe transcript is the cheapest refutation
+  evidence.** undo-history round 1: a five-line real-key probe transcript
+  supplied as a pre-verified fact killed a "stuck state" finding in one
+  paragraph, where a code trace would have had to reconstruct the shift
+  state machine. When a finding claims an interactive stuck state, run
+  the keys first and hand the refuter the transcript.
 - **A refuted finding is not a worthless one.** Round 4: both readers
   refuted a fix with the same wrong trace, and a mutation reverting the
   fix reproduced their exact failure in the code it replaced. Before

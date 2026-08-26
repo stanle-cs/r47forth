@@ -184,3 +184,12 @@
   and its side effects landed three reports later — when a fix opens
   a new dispatch path, audit what upstream runs on EITHER side of the
   handler, not just the handler.
+- **2026-08-25 audit round 1** (cross-model, out-of-family only —
+  Claude-authored package, family exclusion): three CONFIRMED (A1
+  failed-restore corrupts cursor and destroys the selected level; A2
+  anchor mint bypasses gap bookkeeping, second UNDO walks forward; A3
+  browser opens mid-TAM and TAM eats its keys), three refuted (S3
+  correct-by-construction, G1 empirically dead, G3 wrong item
+  identity). Report: AUDIT_round1_2026-08-25.md. Findings, not fixes:
+  the tree ends the round as it began; fixes are the next work, each
+  red-first with its class pin.
