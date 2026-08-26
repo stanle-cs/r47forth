@@ -414,7 +414,7 @@ static void ppcInvalidate(bool_t emitCurrent) {
 static uint8_t ppcClassify(int16_t func) {
   switch(func) {
     case ITM_ADD: case ITM_SUB: case ITM_MULT: case ITM_DIV:
-    case ITM_YX: case ITM_XTHROOT:
+    case ITM_YX: case ITM_XTHROOT: case ITM_LOGXY:
       return PPC_DY;
 
     case ITM_SQUAREROOTX: case ITM_SQUARE: case ITM_CUBE: case ITM_CUBEROOT:

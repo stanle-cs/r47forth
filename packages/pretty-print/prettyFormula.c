@@ -119,6 +119,32 @@ static uint8_t ppfCombine2(uint16_t item, uint8_t a, int aPrec, uint8_t b, int b
       ppAppendChild(sup, b);
       return sup;
     }
+    case ITM_XTHROOT: {
+      // ˣ√y: index = X (right operand b), radicand = Y (left operand a)
+      uint8_t rad = ppNewBox(PP_RAD, ctxFont);
+      uint8_t idx = b;
+      if(rad == PP_NONE || a == PP_NONE || idx == PP_NONE) {
+        return PP_NONE;
+      }
+      ppAppendChild(rad, a);
+      ppAppendChild(rad, idx);
+      return rad;
+    }
+    case ITM_LOGXY: {
+      // LOGₓy: base = X (right operand b), argument = Y (left operand a)
+      uint8_t box = ppNewBox(PP_HBOX, ctxFont);
+      uint8_t sub = ppNewBox(PP_SUB, ctxFont);
+      uint8_t name = ppfRun("log", ctxFont);
+      if(box == PP_NONE || sub == PP_NONE || name == PP_NONE
+          || a == PP_NONE || b == PP_NONE) {
+        return PP_NONE;
+      }
+      ppAppendChild(sub, name);
+      ppAppendChild(sub, b);
+      ppAppendChild(box, sub);
+      ppAppendChild(box, ppfParen(a, ctxFont));
+      return box;
+    }
     case ITM_ADD: case ITM_SUB: case ITM_MULT: {
       int myPrec = (item == ITM_MULT) ? PPF_PREC_MUL : PPF_PREC_ADD;
       uint8_t box = ppNewBox(PP_HBOX, ctxFont);
@@ -166,6 +192,24 @@ static uint8_t ppfCombine1(uint16_t item, uint8_t a, int aPrec,
       }
       ppAppendChild(rad, a);   // the vinculum scopes: no parens
       return rad;
+    }
+    case ITM_CUBEROOT: {
+      uint8_t rad = ppNewBox(PP_RAD, ctxFont);
+      uint8_t idx = ppfRun("3", childFont);
+      if(rad == PP_NONE || a == PP_NONE || idx == PP_NONE) {
+        return PP_NONE;
+      }
+      ppAppendChild(rad, a);
+      ppAppendChild(rad, idx);
+      return rad;
+    }
+    case ITM_ABS: case ITM_MAGNITUDE: {
+      uint8_t bars = ppNewBox(PP_BARS, ctxFont);
+      if(bars == PP_NONE || a == PP_NONE) {
+        return PP_NONE;
+      }
+      ppAppendChild(bars, a);
+      return bars;
     }
     case ITM_1ONX: {
       uint8_t frac = ppNewBox(PP_FRAC, ctxFont);

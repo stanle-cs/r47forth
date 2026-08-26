@@ -232,25 +232,94 @@ bool_t ppMeasure(uint8_t n, uint8_t depth) {
 
     case PP_RAD: {
       uint8_t child = nd->firstChild;
+      if(child == PP_NONE) {
+        return false;
+      }
+      uint8_t index = ppPool[child].nextSibling;   // optional ⁿ√ index
+      if(index != PP_NONE && ppPool[index].nextSibling != PP_NONE) {
+        return false;
+      }
+      if(!ppMeasure(child, depth + 1)) {
+        return false;
+      }
+      if(index != PP_NONE && !ppMeasure(index, depth + 1)) {
+        return false;
+      }
+      // Short radicands use the raised font glyph; taller ones get a
+      // synthesized stroke sign spanning the full height (PP6). The
+      // paint pass recomputes this same test.
+      bool_t synth = (ppPool[child].ascent + ppPool[child].descent > m->radInk + 3);
+      int16_t signW = synth ? 10 : m->radAdvance;
+      int16_t idxW = 0;
+      if(index != PP_NONE) {
+        // the index tucks above-left; roughly half of it overlaps the sign
+        idxW = ppPool[index].width - signW / 2;
+        if(idxW < 0) {
+          idxW = 0;
+        }
+      }
+      ppPool[child].relX    = (int16_t)(idxW + signW);
+      ppPool[child].relBase = 0;
+      nd->width   = (int16_t)(idxW + signW + ppPool[child].width + m->overhang);
+      nd->ascent  = ppPool[child].ascent + m->radGap + m->vincThick;
+      nd->descent = ppPool[child].descent;
+      if(!synth && m->radInk - nd->ascent > nd->descent) {
+        nd->descent = m->radInk - nd->ascent;   // the raised glyph's tail
+      }
+      if(index != PP_NONE) {
+        // index baseline: its ink bottom near the sign's upper third
+        int16_t h = ppPool[child].ascent + ppPool[child].descent;
+        ppPool[index].relX    = 0;
+        ppPool[index].relBase = (int16_t)(-nd->ascent + m->vincThick + h / 3 + ppPool[index].descent);
+        int16_t idxAsc = (int16_t)(-ppPool[index].relBase + ppPool[index].ascent);
+        if(idxAsc > nd->ascent) {
+          nd->ascent = idxAsc;
+        }
+      }
+      return true;
+    }
+
+    case PP_SUB: {
+      uint8_t base = nd->firstChild;
+      if(base == PP_NONE) {
+        return false;
+      }
+      uint8_t script = ppPool[base].nextSibling;
+      if(script == PP_NONE || ppPool[script].nextSibling != PP_NONE) {
+        return false;
+      }
+      if(!ppMeasure(base, depth + 1) || !ppMeasure(script, depth + 1)) {
+        return false;
+      }
+      ppPool[base].relX      = 0;
+      ppPool[base].relBase   = 0;
+      ppPool[script].relX    = ppPool[base].width + 1;
+      ppPool[script].relBase = m->supDrop / 2 + 2;   // lowered, mirror of PP_SUP
+      nd->width   = ppPool[base].width + 1 + ppPool[script].width;
+      nd->ascent  = ppPool[base].ascent;
+      if(ppPool[script].ascent - ppPool[script].relBase > nd->ascent) {
+        nd->ascent = ppPool[script].ascent - ppPool[script].relBase;
+      }
+      nd->descent = ppPool[base].descent;
+      if(ppPool[script].relBase + ppPool[script].descent > nd->descent) {
+        nd->descent = ppPool[script].relBase + ppPool[script].descent;
+      }
+      return true;
+    }
+
+    case PP_BARS: {
+      uint8_t child = nd->firstChild;
       if(child == PP_NONE || ppPool[child].nextSibling != PP_NONE) {
         return false;
       }
       if(!ppMeasure(child, depth + 1)) {
         return false;
       }
-      // The raised sign glyph must cover the radicand's height; taller
-      // radicands would need a synthesized sign (deferred past PP2).
-      if(ppPool[child].ascent + ppPool[child].descent > m->radInk + 3) {
-        return false;
-      }
-      ppPool[child].relX    = m->radAdvance;
+      ppPool[child].relX    = 4;
       ppPool[child].relBase = 0;
-      nd->width   = m->radAdvance + ppPool[child].width + m->overhang;
-      nd->ascent  = ppPool[child].ascent + m->radGap + m->vincThick;
-      nd->descent = ppPool[child].descent;
-      if(m->radInk - nd->ascent > nd->descent) {
-        nd->descent = m->radInk - nd->ascent;   // the raised sign's tail
-      }
+      nd->width   = ppPool[child].width + 8;
+      nd->ascent  = ppPool[child].ascent + 1;
+      nd->descent = ppPool[child].descent + 1;
       return true;
     }
 
@@ -345,6 +414,32 @@ bool_t ppMeasure(uint8_t n, uint8_t depth) {
 }
 
 
+// integer Bresenham over setBlackPixel — the synthesized radical sign
+static void ppDrawLine(int16_t x0, int16_t y0, int16_t x1, int16_t y1) {
+  int16_t dx = (int16_t)(x1 > x0 ? x1 - x0 : x0 - x1);
+  int16_t dy = (int16_t)(y1 > y0 ? y1 - y0 : y0 - y1);
+  int16_t sx = (int16_t)(x0 < x1 ? 1 : -1);
+  int16_t sy = (int16_t)(y0 < y1 ? 1 : -1);
+  int16_t err = (int16_t)(dx - dy);
+  for(;;) {
+    if(x0 >= 0 && y0 >= 0) {
+      setBlackPixel((uint32_t)x0, (uint32_t)y0);
+    }
+    if(x0 == x1 && y0 == y1) {
+      break;
+    }
+    int16_t e2 = (int16_t)(2 * err);
+    if(e2 > -dy) {
+      err = (int16_t)(err - dy);
+      x0 = (int16_t)(x0 + sx);
+    }
+    if(e2 < dx) {
+      err = (int16_t)(err + dx);
+      y0 = (int16_t)(y0 + sy);
+    }
+  }
+}
+
 static void ppPaint(uint8_t n, int16_t x, int16_t baseline) {
   const ppNode_t *nd = &ppPool[n];
   const ppMetrics_t *m = &ppMet[nd->fontId];
@@ -355,14 +450,43 @@ static void ppPaint(uint8_t n, int16_t x, int16_t baseline) {
       return;
 
     case PP_RAD: {
-      // Sign first (own columns), then the radicand, then the vinculum
-      // LAST — the binding paint-order rule: glyph-box pre-clears wipe
-      // any rule painted before their glyphs.
-      int16_t vincTop = baseline - ppPool[nd->firstChild].ascent - m->radGap - m->vincThick;
-      showString("\xa2\x1a", m->font, x, vincTop - m->radAbove, vmNormal, false, true);
-      ppPaint(nd->firstChild, x + m->radAdvance, baseline);
-      lcd_fill_rect(x + m->radAdvance - 1, vincTop,
-                    nd->width - m->radAdvance + 1, m->vincThick, LCD_EMPTY_VALUE);
+      // Index, sign, radicand, then the vinculum LAST — the binding
+      // paint-order rule: glyph-box pre-clears wipe any rule painted
+      // before their glyphs.
+      uint8_t child = nd->firstChild;
+      uint8_t index = ppPool[child].nextSibling;
+      bool_t synth = (ppPool[child].ascent + ppPool[child].descent > m->radInk + 3);
+      int16_t signW = synth ? 10 : m->radAdvance;
+      int16_t signX = (int16_t)(x + ppPool[child].relX - signW);
+      int16_t vincTop = baseline - ppPool[child].ascent - m->radGap - m->vincThick;
+      if(index != PP_NONE) {
+        ppPaint(index, x + ppPool[index].relX, baseline + ppPool[index].relBase);
+      }
+      if(!synth) {
+        showString("\xa2\x1a", m->font, signX, vincTop - m->radAbove, vmNormal, false, true);
+      }
+      else {
+        int16_t yBot = baseline + ppPool[child].descent - 1;
+        int16_t yMid = (int16_t)((vincTop + yBot) / 2);
+        for(int16_t t = 0; t < ((m->vincThick > 1) ? 2 : 1); t++) {
+          ppDrawLine((int16_t)(signX + t), yMid, (int16_t)(signX + 3 + t), yBot);
+          ppDrawLine((int16_t)(signX + 3 + t), yBot, (int16_t)(signX + signW - 1 + t), vincTop);
+        }
+      }
+      ppPaint(child, x + ppPool[child].relX, baseline);
+      lcd_fill_rect((uint32_t)(x + ppPool[child].relX - 1), (uint32_t)vincTop,
+                    (uint32_t)(ppPool[child].width + m->overhang + 1), (uint32_t)m->vincThick,
+                    LCD_EMPTY_VALUE);
+      return;
+    }
+
+    case PP_BARS: {
+      uint8_t child = nd->firstChild;
+      ppPaint(child, x + ppPool[child].relX, baseline);
+      int16_t top = baseline - nd->ascent;
+      int16_t hh = nd->ascent + nd->descent;
+      lcd_fill_rect((uint32_t)(x + 1), (uint32_t)top, 2, (uint32_t)hh, LCD_EMPTY_VALUE);
+      lcd_fill_rect((uint32_t)(x + nd->width - 3), (uint32_t)top, 2, (uint32_t)hh, LCD_EMPTY_VALUE);
       return;
     }
 
@@ -389,6 +513,7 @@ static void ppPaint(uint8_t n, int16_t x, int16_t baseline) {
       return;
     }
 
+    case PP_SUB:
     case PP_SUP:
     case PP_FRAC:
     case PP_HBOX:

@@ -911,8 +911,26 @@ static void ppfTestSigNode(uint8_t n, char *out, size_t cap) {
       ppfTestSigNode(ppNodeAt(nd->firstChild)->nextSibling, out, cap);
       strcat(out, ")");
       break;
-    case PP_RAD:
+    case PP_RAD: {
       strcat(out, "R(");
+      ppfTestSigNode(nd->firstChild, out, cap);
+      uint8_t idx = ppNodeAt(nd->firstChild)->nextSibling;
+      if(idx != PP_NONE) {
+        strcat(out, ";");
+        ppfTestSigNode(idx, out, cap);
+      }
+      strcat(out, ")");
+      break;
+    }
+    case PP_SUB:
+      strcat(out, "U(");
+      ppfTestSigNode(nd->firstChild, out, cap);
+      strcat(out, "|");
+      ppfTestSigNode(ppNodeAt(nd->firstChild)->nextSibling, out, cap);
+      strcat(out, ")");
+      break;
+    case PP_BARS:
+      strcat(out, "A(");
       ppfTestSigNode(nd->firstChild, out, cap);
       strcat(out, ")");
       break;
@@ -1071,6 +1089,111 @@ void prettyTestFormula(uint16_t unusedButMandatoryParameter) {
   }
   screenUpdatingMode = SCRUPD_AUTO;
   screenHoldsDrawnPixels = false;
+
+  // FV7 (PP6): sqrt over a fraction — the synthesized tall sign; measure
+  // must succeed and the sign strokes must leave ink left of the vinculum
+  ppcTestReset();
+  ppcTestType("2");
+  ppcTestOp(ITM_ENTER);
+  ppcTestType("3");
+  ppcTestOp(ITM_DIV);
+  ppcTestOp(ITM_SQUAREROOTX);
+  ppReset();
+  {
+    uint8_t root7;
+    if(!ppfBuildCurrent(PP_FONT_STANDARD, PP_FONT_STANDARD, &root7)) {
+      ppTestFail("FV7 build");
+    }
+    else {
+      ppfTestExpect("FV7 sqrt of fraction", root7, "R(F(2|3))");
+      if(!ppMeasure(root7, 0)) {
+        ppTestFail("FV7 tall radical declined");
+      }
+      else {
+        lcd_fill_rect(0, 60, 120, 80, LCD_SET_VALUE);
+        const ppNode_t *n7 = ppNodeAt(root7);
+        ppPaintAt(root7, 10, 100);
+        // columns 10..17 hold ONLY the stroke sign — the vinculum starts
+        // at column 19 (child relX-1) and once satisfied this pin by
+        // accident (MUT-23 stayed green)
+        if(!ppTestRectAnyLit((uint32_t)(100 - n7->ascent), (uint32_t)(100 + n7->descent - 1), 10, 17)) {
+          ppTestFail("FV7 synthesized sign missing");
+        }
+        lcd_fill_rect(0, 60, 120, 80, LCD_SET_VALUE);
+      }
+    }
+  }
+
+  // FV8 (PP6): xth-root carries its index at the crook
+  ppcTestReset();
+  ppcTestType("27");
+  ppcTestOp(ITM_ENTER);
+  ppcTestType("3");
+  ppcTestOp(ITM_XTHROOT);
+  ppReset();
+  {
+    uint8_t root8;
+    if(!ppfBuildCurrent(PP_FONT_STANDARD, PP_FONT_STANDARD, &root8)) {
+      ppTestFail("FV8 build");
+    }
+    else {
+      ppfTestExpect("FV8 indexed root", root8, "R(27;3)");
+    }
+  }
+
+  // FV9 (PP6): log with a subscript base; the script is LOWERED (a SUB
+  // node's descent grows — a SUP-flipped mutation zeroes it)
+  ppcTestReset();
+  ppcTestType("8");
+  ppcTestOp(ITM_ENTER);
+  ppcTestType("2");
+  ppcTestOp(ITM_LOGXY);
+  ppReset();
+  {
+    uint8_t root9;
+    if(!ppfBuildCurrent(PP_FONT_STANDARD, PP_FONT_STANDARD, &root9)) {
+      ppTestFail("FV9 build");
+    }
+    else {
+      ppfTestExpect("FV9 log base", root9, "[U(log|2) P(8)]");
+      if(ppMeasure(root9, 0)) {
+        // assert the SCRIPT node itself is lowered: relBase must be
+        // positive (the root-descent version was satisfied by 'log's own
+        // descender — MUT-25 stayed green)
+        const ppNode_t *r9 = ppNodeAt(root9);
+        uint8_t sub9 = r9->firstChild;
+        uint8_t script9 = (sub9 != PP_NONE) ? ppNodeAt(ppNodeAt(sub9)->firstChild)->nextSibling : PP_NONE;
+        if(script9 == PP_NONE || ppNodeAt(script9)->relBase < 3) {
+          ppTestFailInt("FV9 subscript not lowered", 3,
+                        script9 == PP_NONE ? -99 : ppNodeAt(script9)->relBase);
+        }
+      }
+    }
+  }
+
+  // FV10 (PP6): absolute-value bars
+  ppcTestReset();
+  ppcTestType("5");
+  ppcTestOp(ITM_MAGNITUDE);
+  ppReset();
+  {
+    uint8_t root10;
+    if(!ppfBuildCurrent(PP_FONT_STANDARD, PP_FONT_STANDARD, &root10)) {
+      ppTestFail("FV10 build");
+    }
+    else {
+      ppfTestExpect("FV10 abs bars", root10, "A(5)");
+      if(ppMeasure(root10, 0)) {
+        lcd_fill_rect(0, 60, 120, 60, LCD_SET_VALUE);
+        const ppNode_t *n10 = ppNodeAt(root10);
+        ppPaintAt(root10, 10, 100);
+        if(!ppTestRowAllLit((uint32_t)(100 - n10->ascent), 11, 12)) {
+          ppTestFail("FV10 left bar missing");
+        }
+        lcd_fill_rect(0, 60, 120, 60, LCD_SET_VALUE);
+      }
+    }
+  }
 
   ppcTestReset();
   ppTestWriteLonI(REGISTER_X, ppTestFailures);

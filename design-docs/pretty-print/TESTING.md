@@ -140,6 +140,10 @@ after restore.
 | MUT-20 | equation grammar accepts trailing content (PP5) | EQ4 |
 | MUT-21 | paren unwrap under bar/vinculum dropped (PP5) | EQ2, EQ3 |
 | MUT-22 | '/' swallows the whole expression instead of a factor (PP5) | EQ1 |
+| MUT-23 | synthesized radical strokes deleted (PP6) | FV7 (probe excludes the vinculum column — the first version didn't and stayed green) |
+| MUT-24 | ⁿ√ index dropped (PP6) | FV8 |
+| MUT-25 | SUB script raised instead of lowered (PP6) | FV9 (pin reads the script node's relBase — root descent was satisfied by "log"'s descender) |
+| MUT-26 | absolute-value bars deleted (PP6) | FV10 |
 
 Two lessons from the first mutation run, kept for honesty: (a) the original
 MUT-4 ("drop the dtReal34 type gate") stays GREEN — a non-real register's

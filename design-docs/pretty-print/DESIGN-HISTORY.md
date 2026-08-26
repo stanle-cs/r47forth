@@ -2,6 +2,24 @@
 
 Non-normative amendment trail. DESIGN.md is authoritative.
 
+## 2026-08-26 — PP6 (typographic trio; gap-closure wave, Stan's selection)
+
+- PP_RAD grew a synthesized stroke sign (Bresenham over setBlackPixel,
+  2 px in numeric contexts) for radicands taller than the font glyph —
+  √(fraction) now renders instead of declining — and an optional second
+  child: the ⁿ√ index tucked above-left with ~half overlapping the sign.
+  XTHROOT and CUBEROOT render as indexed radicals (index = X operand for
+  ˣ√y, verified against fnXthRoot's register use).
+- New node kinds: PP_SUB (log_b subscripts; LOGXY verified as log base X
+  of Y from WP34S_Logxy's argument order — also had to JOIN the capture
+  dyadic table, which is how FV9 found it missing) and PP_BARS (|x| for
+  ABS/MAGNITUDE, two 2 px strokes one row proud of the child).
+- Two pins were born decorative and sharpened same-day: FV7's sign probe
+  included the vinculum's first column (any-ink satisfied without
+  strokes), and FV9's root-descent assert was satisfied by "log"'s own
+  descender — the pin now reads the script node's relBase directly. The
+  mutation sweep exists precisely to catch pins like these.
+
 ## 2026-08-26 — post-PP5 stress test (continued fractions)
 
 Stan asked for a complex-expression trial. `1/(2+3/(4+5/6))` keyed through

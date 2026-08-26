@@ -16,7 +16,11 @@
 #if !defined(PRETTYINTERNAL_H)
 #define PRETTYINTERNAL_H
 
-enum { PP_RUN = 0, PP_HBOX = 1, PP_FRAC = 2, PP_RAD = 3, PP_SUP = 4, PP_PAREN = 5 };
+enum { PP_RUN = 0, PP_HBOX = 1, PP_FRAC = 2, PP_RAD = 3, PP_SUP = 4, PP_PAREN = 5,
+       PP_SUB = 6, PP_BARS = 7 };
+// PP_RAD children: radicand, then an OPTIONAL second child = the index
+// (ⁿ√), tucked above-left of the sign. PP_SUB mirrors PP_SUP downward
+// (log_b). PP_BARS wraps its child in |absolute-value| strokes.
 enum { PP_FONT_NUMERIC = 0, PP_FONT_STANDARD = 1, PP_FONT_TINY = 2 };
 
 #define PP_NONE        0xFF
