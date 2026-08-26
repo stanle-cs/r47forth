@@ -1,12 +1,13 @@
 diff --git a/src/c47/c47Extensions/addons.c b/src/c47/c47Extensions/addons.c
-index 26d98873518bcec7a4eb2bc5a9bd2f069318300c..06eb50ccaf06cfb1cc7907b6031a8003ac8b5ea0 100644
+index 26d98873518bcec7a4eb2bc5a9bd2f069318300c..88ad096f56bd0c3bd2de466edf58bbf8cbcc3104 100644
 --- a/src/c47/c47Extensions/addons.c
 +++ b/src/c47/c47Extensions/addons.c
-@@ -1427,6 +1427,7 @@ void fnTo_ms(uint16_t unusedButMandatoryParameter) {
+@@ -1427,6 +1427,8 @@ void fnTo_ms(uint16_t unusedButMandatoryParameter) {
        case CM_ASN_BROWSER:
        case CM_FLAG_BROWSER:
        case CM_FONT_BROWSER:
 +      case CM_HIST_BROWSER:
++      case 20: /* pretty-print browser */
        case CM_PLOT_STAT:
        case CM_LISTXY: //JM
        case CM_GRAPH:  //JM

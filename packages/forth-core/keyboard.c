@@ -1844,6 +1844,7 @@ endReturnTrue:
       result = key->primaryTam; // No shifted function in TAM
     }
     else if(calcMode == CM_NORMAL || calcMode == CM_NIM || calcMode == CM_MIM || calcMode == CM_FONT_BROWSER || calcMode == CM_FLAG_BROWSER || calcMode == CM_ASN_BROWSER || calcMode == CM_REGISTER_BROWSER || calcMode == CM_BUG_ON_SCREEN || calcMode == CM_CONFIRMATION || calcMode == CM_PEM || GRAPHMODE || calcMode == CM_ASSIGN || calcMode == CM_TIMER  || calcMode == CM_LISTXY
+            || (calcMode >= 20 && calcMode <= 23) /* package browsers without their own resolution branch (claims registry; 19 has one) */
             || (calcMode == CM_AIM && forthCapInteractiveLive() && forthCapKeysMode())) {
       result = shiftF ? key->fShifted :
                shiftG ? key->gShifted :

@@ -1,5 +1,5 @@
 diff --git a/src/c47/defines.h b/src/c47/defines.h
-index 63b9c1a7692f24da093a882ffa1f3be1625bb7a8..442e7d86c7d1145cf0d2783e1b9613bd5084735b 100644
+index 63b9c1a7692f24da093a882ffa1f3be1625bb7a8..c0f2838efd8abe5d7c5961a79e2093a235be4777 100644
 --- a/src/c47/defines.h
 +++ b/src/c47/defines.h
 @@ -1015,8 +1015,9 @@
@@ -9,7 +9,7 @@ index 63b9c1a7692f24da093a882ffa1f3be1625bb7a8..442e7d86c7d1145cf0d2783e1b9613bd
 +#define FLAG_UHIST                            0x8070 //49 f-shifted UP opens the undo history browser
  
 -#define NUMBER_OF_SYSTEM_FLAGS                 64+48 // We can have a maximum of 128 system flags
-+#define NUMBER_OF_SYSTEM_FLAGS                 64+49 // We can have a maximum of 128 system flags
++#define NUMBER_OF_SYSTEM_FLAGS                 64+50 // We can have a maximum of 128 system flags; 50 = one reserved for pretty-print's FLAG_PRETTYP (claims registry) — pretty-print's defines.h carries the IDENTICAL count edit so the 3-way merge unifies
  
                                                       // only used as bit count for setting change detection
  #define SETTING_AMODE                         0x0080 // current angle mode

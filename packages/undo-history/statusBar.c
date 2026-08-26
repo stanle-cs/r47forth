@@ -573,6 +573,7 @@ void drawBattery(uint16_t voltage);
         case CM_ASN_BROWSER:
         case CM_FONT_BROWSER:
         case CM_HIST_BROWSER:
+        case 20: /* pretty-print browser */
         case CM_PLOT_STAT:
         case CM_CONFIRMATION:
         case CM_MIM:
@@ -789,6 +790,7 @@ void drawBattery(uint16_t voltage) {
         case CM_ASN_BROWSER:
         case CM_FONT_BROWSER:
         case CM_HIST_BROWSER:
+        case 20: /* pretty-print browser */
         case CM_PLOT_STAT:
         case CM_CONFIRMATION:
         case CM_MIM:

@@ -1,5 +1,5 @@
 diff --git a/src/c47/keyboard.c b/src/c47/keyboard.c
-index bc44026016e94a8865b8acc886386341596641c6..6bc8e7d26d67a17aec14cec8801410b57e75c70b 100644
+index bc44026016e94a8865b8acc886386341596641c6..a425e78a39571e7e2b11cdcdd7e4cf7475c3b487 100644
 --- a/src/c47/keyboard.c
 +++ b/src/c47/keyboard.c
 @@ -687,7 +687,7 @@ static void executeFunction(const char *data, int16_t item_);
@@ -7,7 +7,7 @@ index bc44026016e94a8865b8acc886386341596641c6..6bc8e7d26d67a17aec14cec8801410b5
          _closeCatalog();
        }
 -      else if(calcMode != CM_REGISTER_BROWSER && calcMode != CM_FLAG_BROWSER && calcMode != CM_ASN_BROWSER && calcMode != CM_FONT_BROWSER) {
-+      else if(calcMode != CM_REGISTER_BROWSER && calcMode != CM_FLAG_BROWSER && calcMode != CM_ASN_BROWSER && calcMode != CM_FONT_BROWSER && calcMode != CM_HIST_BROWSER) {
++      else if(calcMode != CM_REGISTER_BROWSER && calcMode != CM_FLAG_BROWSER && calcMode != CM_ASN_BROWSER && calcMode != CM_FONT_BROWSER && calcMode < 19 /* package browsers 19-23, claims registry */) {
  
                      #if defined(VERBOSEKEYS)
                      printf(">>>>Z 0012 btnFnPressed >>determineFunctionKeyItem_C47; data=|%s| data[0]=%d shiftF=%d shiftG=%d\n", (char*)data, ((char*)data)[0], shiftF, shiftG);
@@ -16,7 +16,7 @@ index bc44026016e94a8865b8acc886386341596641c6..6bc8e7d26d67a17aec14cec8801410b5
      }
  
 -    if(calcMode != CM_REGISTER_BROWSER && calcMode != CM_FLAG_BROWSER && calcMode != CM_ASN_BROWSER && calcMode != CM_FONT_BROWSER) {
-+    if(calcMode != CM_REGISTER_BROWSER && calcMode != CM_FLAG_BROWSER && calcMode != CM_ASN_BROWSER && calcMode != CM_FONT_BROWSER && calcMode != CM_HIST_BROWSER) {
++    if(calcMode != CM_REGISTER_BROWSER && calcMode != CM_FLAG_BROWSER && calcMode != CM_ASN_BROWSER && calcMode != CM_FONT_BROWSER && calcMode < 19 /* package browsers 19-23, claims registry */) {
        if(tam.mode == TM_KEY && !tam.keyInputFinished) {
          if(tam.digitsSoFar == 0) {
            switch(((char *)data)[0]) {
@@ -25,7 +25,7 @@ index bc44026016e94a8865b8acc886386341596641c6..6bc8e7d26d67a17aec14cec8801410b5
                      #endif //VERBOSEKEYS
  
 -    if(calcMode != CM_REGISTER_BROWSER && calcMode != CM_FLAG_BROWSER && calcMode != CM_ASN_BROWSER && calcMode != CM_FONT_BROWSER) {
-+    if(calcMode != CM_REGISTER_BROWSER && calcMode != CM_FLAG_BROWSER && calcMode != CM_ASN_BROWSER && calcMode != CM_FONT_BROWSER && calcMode != CM_HIST_BROWSER) {
++    if(calcMode != CM_REGISTER_BROWSER && calcMode != CM_FLAG_BROWSER && calcMode != CM_ASN_BROWSER && calcMode != CM_FONT_BROWSER && calcMode < 19 /* package browsers 19-23, claims registry */) {
  
        if(data[0] == 0) {
          item = item_;
@@ -34,7 +34,7 @@ index bc44026016e94a8865b8acc886386341596641c6..6bc8e7d26d67a17aec14cec8801410b5
  
      //handle the shift button processing
 -    if((calcMode == CM_NORMAL || calcMode == CM_AIM || calcMode == CM_NIM  || calcMode == CM_MIM || calcMode == CM_EIM || calcMode == CM_PEM || calcMode == CM_PLOT_STAT || calcMode == CM_GRAPH || calcMode == CM_ASSIGN || calcMode == CM_ASN_BROWSER || calcMode == CM_REGISTER_BROWSER || calcMode == CM_FLAG_BROWSER || calcMode == CM_FONT_BROWSER || calcMode == CM_TIMER)) {
-+    if((calcMode == CM_NORMAL || calcMode == CM_AIM || calcMode == CM_NIM  || calcMode == CM_MIM || calcMode == CM_EIM || calcMode == CM_PEM || calcMode == CM_PLOT_STAT || calcMode == CM_GRAPH || calcMode == CM_ASSIGN || calcMode == CM_ASN_BROWSER || calcMode == CM_REGISTER_BROWSER || calcMode == CM_FLAG_BROWSER || calcMode == CM_FONT_BROWSER || calcMode == CM_HIST_BROWSER || calcMode == CM_TIMER)) {
++    if((calcMode == CM_NORMAL || calcMode == CM_AIM || calcMode == CM_NIM  || calcMode == CM_MIM || calcMode == CM_EIM || calcMode == CM_PEM || calcMode == CM_PLOT_STAT || calcMode == CM_GRAPH || calcMode == CM_ASSIGN || calcMode == CM_ASN_BROWSER || calcMode == CM_REGISTER_BROWSER || calcMode == CM_FLAG_BROWSER || calcMode == CM_FONT_BROWSER || (calcMode >= 19 && calcMode <= 23) /* package browsers */ || calcMode == CM_TIMER)) {
        if(((key->primary == ITM_SHIFTf || ShiftOverride == ITM_SHIFTf))) {
          commonShiftProcessing(ITM_SHIFTf);
          return ITM_NOP;
@@ -55,26 +55,27 @@ index bc44026016e94a8865b8acc886386341596641c6..6bc8e7d26d67a17aec14cec8801410b5
        result = shiftF ? key->fShifted :
                 shiftG ? key->gShifted :
                          key->primaryAim;
-@@ -2305,7 +2313,8 @@ RELEASE_END:
+@@ -2305,7 +2313,9 @@ RELEASE_END:
          case CM_REGISTER_BROWSER:
          case CM_FLAG_BROWSER:
          case CM_ASN_BROWSER:
 -        case CM_FONT_BROWSER: {
 +        case CM_FONT_BROWSER:
-+        case CM_HIST_BROWSER: {
++        case CM_HIST_BROWSER:
++        case 20: /* pretty-print browser, claims registry */ {
            screenUpdatingMode = SCRUPD_AUTO;
            break;
          }
-@@ -2571,7 +2580,7 @@ RELEASE_END:
+@@ -2571,7 +2581,7 @@ RELEASE_END:
              }
              keyActionProcessed = true;
            }
 -          else if(calcMode == CM_REGISTER_BROWSER || calcMode == CM_FLAG_BROWSER || calcMode == CM_ASN_BROWSER || calcMode == CM_FONT_BROWSER || calcMode == CM_TIMER) {
-+          else if(calcMode == CM_REGISTER_BROWSER || calcMode == CM_FLAG_BROWSER || calcMode == CM_ASN_BROWSER || calcMode == CM_FONT_BROWSER || calcMode == CM_HIST_BROWSER || calcMode == CM_TIMER) {
++          else if(calcMode == CM_REGISTER_BROWSER || calcMode == CM_FLAG_BROWSER || calcMode == CM_ASN_BROWSER || calcMode == CM_FONT_BROWSER || (calcMode >= 19 && calcMode <= 23) /* package browsers */ || calcMode == CM_TIMER) {
              keyActionProcessed = true;
            }
            break;
-@@ -2608,6 +2617,10 @@ RELEASE_END:
+@@ -2608,6 +2618,10 @@ RELEASE_END:
              }
              keyActionProcessed = true;
            }
@@ -85,7 +86,7 @@ index bc44026016e94a8865b8acc886386341596641c6..6bc8e7d26d67a17aec14cec8801410b5
            else if(calcMode == CM_REGISTER_BROWSER || calcMode == CM_FLAG_BROWSER || calcMode == CM_ASN_BROWSER || calcMode == CM_FONT_BROWSER) {
              keyActionProcessed = true;
            }
-@@ -3098,10 +3111,11 @@ RELEASE_END:
+@@ -3098,10 +3112,12 @@ RELEASE_END:
  
                case CM_FLAG_BROWSER:
                case CM_FONT_BROWSER:
@@ -93,6 +94,7 @@ index bc44026016e94a8865b8acc886386341596641c6..6bc8e7d26d67a17aec14cec8801410b5
 -              case CM_BUG_ON_SCREEN: {
 -                keyActionProcessed = true;
 -                break;
++              case 20:                 /* pretty-print browser */
 +              case CM_HIST_BROWSER:    // unhandled keys must not act on the
 +              case CM_ERROR_MESSAGE:   // machine under the browser (B12);
 +              case CM_BUG_ON_SCREEN: { // UP/DOWN/ENTER/EXIT/BACKSPACE have
@@ -101,7 +103,7 @@ index bc44026016e94a8865b8acc886386341596641c6..6bc8e7d26d67a17aec14cec8801410b5
                }
  
                case CM_GRAPH:
-@@ -3565,6 +3579,11 @@ void fnKeyEnter(uint16_t unusedButMandatoryParameter) {
+@@ -3565,6 +3581,11 @@ void fnKeyEnter(uint16_t unusedButMandatoryParameter) {
          break;
        }
  
@@ -113,23 +115,25 @@ index bc44026016e94a8865b8acc886386341596641c6..6bc8e7d26d67a17aec14cec8801410b5
        case CM_REGISTER_BROWSER:
        case CM_FLAG_BROWSER:
        case CM_ASN_BROWSER:
-@@ -3654,6 +3673,7 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
+@@ -3654,6 +3675,8 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
          case CM_FLAG_BROWSER:
          case CM_ASN_BROWSER:
          case CM_FONT_BROWSER:
 +        case CM_HIST_BROWSER:
++        case 20: /* pretty-print browser */
          case CM_CONFIRMATION:
          case CM_ERROR_MESSAGE:
          case CM_BUG_ON_SCREEN: {
-@@ -3728,6 +3748,7 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
+@@ -3728,6 +3751,8 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
        case CM_FLAG_BROWSER:
        case CM_ASN_BROWSER:
        case CM_FONT_BROWSER:
 +      case CM_HIST_BROWSER:
++      case 20: /* pretty-print browser */
        case CM_CONFIRMATION:
        case CM_ERROR_MESSAGE:
        case CM_BUG_ON_SCREEN: {
-@@ -3927,6 +3948,11 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
+@@ -3927,6 +3952,11 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
          break;
        }
  
@@ -141,15 +145,16 @@ index bc44026016e94a8865b8acc886386341596641c6..6bc8e7d26d67a17aec14cec8801410b5
        case CM_REGISTER_BROWSER:
        case CM_FLAG_BROWSER:
        case CM_FONT_BROWSER: {
-@@ -4200,6 +4226,7 @@ void fnKeyCC(uint16_t complex_Type) {    //JM Using 'unusedButMandatoryParameter
+@@ -4200,6 +4230,8 @@ void fnKeyCC(uint16_t complex_Type) {    //JM Using 'unusedButMandatoryParameter
        case CM_FLAG_BROWSER:
        case CM_ASN_BROWSER:
        case CM_FONT_BROWSER:
 +      case CM_HIST_BROWSER:
++      case 20: /* pretty-print browser */
        case CM_PLOT_STAT:
        case CM_TIMER:
        case CM_LISTXY:
-@@ -4336,6 +4363,11 @@ void fnKeyBackspace(uint16_t unusedButMandatoryParameter) {
+@@ -4336,6 +4368,11 @@ void fnKeyBackspace(uint16_t unusedButMandatoryParameter) {
          break;
        }
  
@@ -161,7 +166,7 @@ index bc44026016e94a8865b8acc886386341596641c6..6bc8e7d26d67a17aec14cec8801410b5
        case CM_REGISTER_BROWSER:
        case CM_FLAG_BROWSER:
        case CM_FONT_BROWSER: {
-@@ -4597,6 +4629,11 @@ void fnKeyUp(uint16_t unusedButMandatoryParameter) {
+@@ -4597,6 +4634,11 @@ void fnKeyUp(uint16_t unusedButMandatoryParameter) {
          break;
        }
  
@@ -173,7 +178,7 @@ index bc44026016e94a8865b8acc886386341596641c6..6bc8e7d26d67a17aec14cec8801410b5
        case CM_ASN_BROWSER: {
          currentAsnScr++;                          //JM removed the 3-x part
          if(currentAsnScr == 0 ||currentAsnScr >= 7) {
-@@ -4823,6 +4860,11 @@ void fnKeyDown(uint16_t unusedButMandatoryParameter) {
+@@ -4823,6 +4865,11 @@ void fnKeyDown(uint16_t unusedButMandatoryParameter) {
          break;
        }
  
@@ -185,7 +190,7 @@ index bc44026016e94a8865b8acc886386341596641c6..6bc8e7d26d67a17aec14cec8801410b5
        case CM_FONT_BROWSER: {
          if(currentFntScr < numScreensNumericFont + numScreensNumericFontBold + numScreensStandardFont + numScreensTinyFont) {
            currentFntScr++;
-@@ -4935,6 +4977,7 @@ void fnKeyDotD(uint16_t unusedButMandatoryParameter) {
+@@ -4935,6 +4982,7 @@ void fnKeyDotD(uint16_t unusedButMandatoryParameter) {
        case CM_FLAG_BROWSER:
        case CM_ASN_BROWSER:
        case CM_FONT_BROWSER:

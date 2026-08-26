@@ -1,5 +1,5 @@
 diff --git a/src/c47/screen.c b/src/c47/screen.c
-index d2ac868bd18f9f4c20608f5dc90d5652844afcc6..aff166fea55ff354812e02c34042bd467bc92513 100644
+index d2ac868bd18f9f4c20608f5dc90d5652844afcc6..028539ed449e36c10647a5a5245652ae2204a2a1 100644
 --- a/src/c47/screen.c
 +++ b/src/c47/screen.c
 @@ -648,7 +648,7 @@ void execTimerApp(uint16_t timerType) {
@@ -7,7 +7,7 @@ index d2ac868bd18f9f4c20608f5dc90d5652844afcc6..aff166fea55ff354812e02c34042bd46
    uint16_t yUnderlined = 3;
    void underline_softkey(uint16_t xSoftkeyMask, uint16_t ySoftkey) {
 -    if(calcMode == CM_REGISTER_BROWSER || calcMode == CM_FLAG_BROWSER || calcMode == CM_FONT_BROWSER || (!getSystemFlag(FLAG_FGLNFUL) && !getSystemFlag(FLAG_FGLNLIM))  ) {
-+    if(calcMode == CM_REGISTER_BROWSER || calcMode == CM_FLAG_BROWSER || calcMode == CM_FONT_BROWSER || calcMode == CM_HIST_BROWSER || (!getSystemFlag(FLAG_FGLNFUL) && !getSystemFlag(FLAG_FGLNLIM))  ) {
++    if(calcMode == CM_REGISTER_BROWSER || calcMode == CM_FLAG_BROWSER || calcMode == CM_FONT_BROWSER || (calcMode >= 19 && calcMode <= 23) /* package browsers */ || (!getSystemFlag(FLAG_FGLNFUL) && !getSystemFlag(FLAG_FGLNLIM))  ) {
        return;
      }
      xSoftkeyMask &= (GRAPHMODE ? 0b000011u : 0b111111u);

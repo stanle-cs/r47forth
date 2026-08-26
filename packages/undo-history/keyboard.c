@@ -687,7 +687,7 @@ static void executeFunction(const char *data, int16_t item_);
       #pragma GCC diagnostic pop
         _closeCatalog();
       }
-      else if(calcMode != CM_REGISTER_BROWSER && calcMode != CM_FLAG_BROWSER && calcMode != CM_ASN_BROWSER && calcMode != CM_FONT_BROWSER && calcMode != CM_HIST_BROWSER) {
+      else if(calcMode != CM_REGISTER_BROWSER && calcMode != CM_FLAG_BROWSER && calcMode != CM_ASN_BROWSER && calcMode != CM_FONT_BROWSER && calcMode < 19 /* package browsers 19-23, claims registry */) {
 
                     #if defined(VERBOSEKEYS)
                     printf(">>>>Z 0012 btnFnPressed >>determineFunctionKeyItem_C47; data=|%s| data[0]=%d shiftF=%d shiftG=%d\n", (char*)data, ((char*)data)[0], shiftF, shiftG);
@@ -829,7 +829,7 @@ endReturnTrue:
       return;
     }
 
-    if(calcMode != CM_REGISTER_BROWSER && calcMode != CM_FLAG_BROWSER && calcMode != CM_ASN_BROWSER && calcMode != CM_FONT_BROWSER && calcMode != CM_HIST_BROWSER) {
+    if(calcMode != CM_REGISTER_BROWSER && calcMode != CM_FLAG_BROWSER && calcMode != CM_ASN_BROWSER && calcMode != CM_FONT_BROWSER && calcMode < 19 /* package browsers 19-23, claims registry */) {
       if(tam.mode == TM_KEY && !tam.keyInputFinished) {
         if(tam.digitsSoFar == 0) {
           switch(((char *)data)[0]) {
@@ -937,7 +937,7 @@ endReturnTrue:
                       printf("keyboard.c: executeFunction %i (beginning of executeFunction): %i, %s tam.mode=%i calcMode=%u aimBuffer=%s\n", item, currentMenu(), indexOfItems[-currentMenu()].itemSoftmenuName, tam.mode, calcMode, aimBuffer);
                     #endif //VERBOSEKEYS
 
-    if(calcMode != CM_REGISTER_BROWSER && calcMode != CM_FLAG_BROWSER && calcMode != CM_ASN_BROWSER && calcMode != CM_FONT_BROWSER && calcMode != CM_HIST_BROWSER) {
+    if(calcMode != CM_REGISTER_BROWSER && calcMode != CM_FLAG_BROWSER && calcMode != CM_ASN_BROWSER && calcMode != CM_FONT_BROWSER && calcMode < 19 /* package browsers 19-23, claims registry */) {
 
       if(data[0] == 0) {
         item = item_;
@@ -1601,7 +1601,7 @@ endReturnTrue:
     }
 
     //handle the shift button processing
-    if((calcMode == CM_NORMAL || calcMode == CM_AIM || calcMode == CM_NIM  || calcMode == CM_MIM || calcMode == CM_EIM || calcMode == CM_PEM || calcMode == CM_PLOT_STAT || calcMode == CM_GRAPH || calcMode == CM_ASSIGN || calcMode == CM_ASN_BROWSER || calcMode == CM_REGISTER_BROWSER || calcMode == CM_FLAG_BROWSER || calcMode == CM_FONT_BROWSER || calcMode == CM_HIST_BROWSER || calcMode == CM_TIMER)) {
+    if((calcMode == CM_NORMAL || calcMode == CM_AIM || calcMode == CM_NIM  || calcMode == CM_MIM || calcMode == CM_EIM || calcMode == CM_PEM || calcMode == CM_PLOT_STAT || calcMode == CM_GRAPH || calcMode == CM_ASSIGN || calcMode == CM_ASN_BROWSER || calcMode == CM_REGISTER_BROWSER || calcMode == CM_FLAG_BROWSER || calcMode == CM_FONT_BROWSER || (calcMode >= 19 && calcMode <= 23) /* package browsers */ || calcMode == CM_TIMER)) {
       if(((key->primary == ITM_SHIFTf || ShiftOverride == ITM_SHIFTf))) {
         commonShiftProcessing(ITM_SHIFTf);
         return ITM_NOP;
@@ -2314,7 +2314,8 @@ RELEASE_END:
         case CM_FLAG_BROWSER:
         case CM_ASN_BROWSER:
         case CM_FONT_BROWSER:
-        case CM_HIST_BROWSER: {
+        case CM_HIST_BROWSER:
+        case 20: /* pretty-print browser, claims registry */ {
           screenUpdatingMode = SCRUPD_AUTO;
           break;
         }
@@ -2580,7 +2581,7 @@ RELEASE_END:
             }
             keyActionProcessed = true;
           }
-          else if(calcMode == CM_REGISTER_BROWSER || calcMode == CM_FLAG_BROWSER || calcMode == CM_ASN_BROWSER || calcMode == CM_FONT_BROWSER || calcMode == CM_HIST_BROWSER || calcMode == CM_TIMER) {
+          else if(calcMode == CM_REGISTER_BROWSER || calcMode == CM_FLAG_BROWSER || calcMode == CM_ASN_BROWSER || calcMode == CM_FONT_BROWSER || (calcMode >= 19 && calcMode <= 23) /* package browsers */ || calcMode == CM_TIMER) {
             keyActionProcessed = true;
           }
           break;
@@ -3111,6 +3112,7 @@ RELEASE_END:
 
               case CM_FLAG_BROWSER:
               case CM_FONT_BROWSER:
+              case 20:                 /* pretty-print browser */
               case CM_HIST_BROWSER:    // unhandled keys must not act on the
               case CM_ERROR_MESSAGE:   // machine under the browser (B12);
               case CM_BUG_ON_SCREEN: { // UP/DOWN/ENTER/EXIT/BACKSPACE have
@@ -3674,6 +3676,7 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
         case CM_ASN_BROWSER:
         case CM_FONT_BROWSER:
         case CM_HIST_BROWSER:
+        case 20: /* pretty-print browser */
         case CM_CONFIRMATION:
         case CM_ERROR_MESSAGE:
         case CM_BUG_ON_SCREEN: {
@@ -3749,6 +3752,7 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
       case CM_ASN_BROWSER:
       case CM_FONT_BROWSER:
       case CM_HIST_BROWSER:
+      case 20: /* pretty-print browser */
       case CM_CONFIRMATION:
       case CM_ERROR_MESSAGE:
       case CM_BUG_ON_SCREEN: {
@@ -4227,6 +4231,7 @@ void fnKeyCC(uint16_t complex_Type) {    //JM Using 'unusedButMandatoryParameter
       case CM_ASN_BROWSER:
       case CM_FONT_BROWSER:
       case CM_HIST_BROWSER:
+      case 20: /* pretty-print browser */
       case CM_PLOT_STAT:
       case CM_TIMER:
       case CM_LISTXY:

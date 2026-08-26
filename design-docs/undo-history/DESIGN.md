@@ -171,6 +171,17 @@ work for the upstream MR, not v1.
   resolves SF/CF menu presses as `indexOfItems[(offset & 0x3f) +
   SFL_MONIT]`, so the SYSFL row position IS the flag number (class-tested
   in B7).
+- **AMENDED 2026-08-26 (browser-range coordination, for pretty-print
+  PP10/PP11):** the shared browser exclusion/inclusion CONDITION lines
+  this package edits (keyboard.c ×5, keyboardTweak.c, screen.c
+  underline) now use the range form `calcMode 19..23 = package
+  browsers` instead of naming CM_HIST_BROWSER — same-line edits cannot
+  compose across packages, ranges can. The case-LIST insertions carry a
+  literal `case 20:` for pretty-print's browser (solo-safe, no foreign
+  define). NUMBER_OF_SYSTEM_FLAGS is bumped to 64+50, reserving one
+  flag for pretty-print's FLAG_PRETTYP; pretty-print's defines.h
+  carries the IDENTICAL count edit so the 3-way merge unifies. Future
+  browsers claim 21-23 and get the condition lines for free.
 - keyboard.c's combined key-resolution list in determineItem (the big
   `else if(calcMode == CM_NORMAL || …)` chain) is **rewritten by
   forth-core's patch** — editing that line, or inserting adjacent to it,

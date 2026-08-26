@@ -1,20 +1,22 @@
 diff --git a/src/c47/statusBar.c b/src/c47/statusBar.c
-index 5a3f9926a221147d25991fecb03c23d0c771c3e2..c5c97ec51109238bf7488a45157a6337f996da1c 100644
+index 5a3f9926a221147d25991fecb03c23d0c771c3e2..9bbe1e2e8bb8b80537d4776f308a02597e391eb0 100644
 --- a/src/c47/statusBar.c
 +++ b/src/c47/statusBar.c
-@@ -572,6 +572,7 @@ void drawBattery(uint16_t voltage);
+@@ -572,6 +572,8 @@ void drawBattery(uint16_t voltage);
          case CM_FLAG_BROWSER:
          case CM_ASN_BROWSER:
          case CM_FONT_BROWSER:
 +        case CM_HIST_BROWSER:
++        case 20: /* pretty-print browser */
          case CM_PLOT_STAT:
          case CM_CONFIRMATION:
          case CM_MIM:
-@@ -787,6 +788,7 @@ void drawBattery(uint16_t voltage) {
+@@ -787,6 +789,8 @@ void drawBattery(uint16_t voltage) {
          case CM_FLAG_BROWSER:
          case CM_ASN_BROWSER:
          case CM_FONT_BROWSER:
 +        case CM_HIST_BROWSER:
++        case 20: /* pretty-print browser */
          case CM_PLOT_STAT:
          case CM_CONFIRMATION:
          case CM_MIM:

@@ -1017,7 +1017,7 @@
 #define FLAG_SBadm                            0x806F //48
 #define FLAG_UHIST                            0x8070 //49 f-shifted UP opens the undo history browser
 
-#define NUMBER_OF_SYSTEM_FLAGS                 64+49 // We can have a maximum of 128 system flags
+#define NUMBER_OF_SYSTEM_FLAGS                 64+50 // We can have a maximum of 128 system flags; 50 = one reserved for pretty-print's FLAG_PRETTYP (claims registry) — pretty-print's defines.h carries the IDENTICAL count edit so the 3-way merge unifies
 
                                                      // only used as bit count for setting change detection
 #define SETTING_AMODE                         0x0080 // current angle mode

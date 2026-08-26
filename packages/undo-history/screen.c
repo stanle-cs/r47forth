@@ -648,7 +648,7 @@ void execTimerApp(uint16_t timerType) {
 
   uint16_t yUnderlined = 3;
   void underline_softkey(uint16_t xSoftkeyMask, uint16_t ySoftkey) {
-    if(calcMode == CM_REGISTER_BROWSER || calcMode == CM_FLAG_BROWSER || calcMode == CM_FONT_BROWSER || calcMode == CM_HIST_BROWSER || (!getSystemFlag(FLAG_FGLNFUL) && !getSystemFlag(FLAG_FGLNLIM))  ) {
+    if(calcMode == CM_REGISTER_BROWSER || calcMode == CM_FLAG_BROWSER || calcMode == CM_FONT_BROWSER || (calcMode >= 19 && calcMode <= 23) /* package browsers */ || (!getSystemFlag(FLAG_FGLNFUL) && !getSystemFlag(FLAG_FGLNLIM))  ) {
       return;
     }
     xSoftkeyMask &= (GRAPHMODE ? 0b000011u : 0b111111u);
