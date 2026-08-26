@@ -1480,7 +1480,7 @@ void historyTestBrowser(uint16_t unusedButMandatoryParameter) {
       historyTestFail("B9 the active key layout misses a required primary");
     }
     else {
-      char kbuf[4];
+      char kbuf[8];   // key codes are two digits; sized for the worst int gcc can infer
       GdkEvent ev;                       // the btnClickedP/btnClickedR idiom
       // The chain runs under whatever ~13k earlier suite tests left behind:
       // user key maps, TAM, SHOW, stale temporary info. Pin a defined
@@ -1617,7 +1617,7 @@ void historyTestBrowser(uint16_t unusedButMandatoryParameter) {
   { // B12: unhandled keys are IGNORED while the browser is shown, the
     // upstream browser blanket — a digit or shifted item leaking through
     // executes against the machine under the browser.
-    char kbuf[4];
+    char kbuf[8];   // key codes are two digits; sized for the worst int gcc can infer
     GdkEvent ev;
     calcKey_t savedKbd2[37];
     int16_t kDigit = -1;
@@ -1666,7 +1666,7 @@ void historyTestBrowser(uint16_t unusedButMandatoryParameter) {
     uint16_t seq;
     int16_t li;
     uint8_t fl;
-    char kbuf[4];
+    char kbuf[8];   // key codes are two digits; sized for the worst int gcc can infer
     GdkEvent ev;
     calcKey_t savedKbd3[37];
     int16_t kEnter = -1, kDown = -1;

@@ -290,3 +290,14 @@
   minted, evicted the target") rewritten as the invariant it taught.
   Engine comment density measured 20% before the trim — the tag CLASS
   was the violation, not the volume.
+- **2026-08-26 warning hygiene (Stan's compilation-noise question):**
+  the gate's 56 warnings decomposed as 54 package-introduced + 2
+  upstream. Ours: the battery's three char kbuf[4] key-code buffers
+  (B9-era, 2026-08-25) drew -Wformat-overflow on every %02d sprintf —
+  gcc cannot prove the int stays two digits. Widened to kbuf[8];
+  behavior identical, test-only, no firmware delta. The remaining two
+  are upstream's own (src/testSuite/testSuite.c:5485/5493, char
+  str[404] taking a %s gcc bounds at 1999) — untouched by any package,
+  left per the do-not-modify rule. Standing expectation restated: the
+  package's own files compile warning-free; only those two upstream
+  lines may appear in a green gate log.
