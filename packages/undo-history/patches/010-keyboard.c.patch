@@ -1,5 +1,5 @@
 diff --git a/src/c47/keyboard.c b/src/c47/keyboard.c
-index bc44026016e94a8865b8acc886386341596641c6..2bf9d0fea4ad2ccbfdb1dca674be96ad411c92ba 100644
+index bc44026016e94a8865b8acc886386341596641c6..6bc8e7d26d67a17aec14cec8801410b57e75c70b 100644
 --- a/src/c47/keyboard.c
 +++ b/src/c47/keyboard.c
 @@ -687,7 +687,7 @@ static void executeFunction(const char *data, int16_t item_);
@@ -85,7 +85,23 @@ index bc44026016e94a8865b8acc886386341596641c6..2bf9d0fea4ad2ccbfdb1dca674be96ad
            else if(calcMode == CM_REGISTER_BROWSER || calcMode == CM_FLAG_BROWSER || calcMode == CM_ASN_BROWSER || calcMode == CM_FONT_BROWSER) {
              keyActionProcessed = true;
            }
-@@ -3565,6 +3578,11 @@ void fnKeyEnter(uint16_t unusedButMandatoryParameter) {
+@@ -3098,10 +3111,11 @@ RELEASE_END:
+ 
+               case CM_FLAG_BROWSER:
+               case CM_FONT_BROWSER:
+-              case CM_ERROR_MESSAGE:
+-              case CM_BUG_ON_SCREEN: {
+-                keyActionProcessed = true;
+-                break;
++              case CM_HIST_BROWSER:    // unhandled keys must not act on the
++              case CM_ERROR_MESSAGE:   // machine under the browser (B12);
++              case CM_BUG_ON_SCREEN: { // UP/DOWN/ENTER/EXIT/BACKSPACE have
++                keyActionProcessed = true;   // their own item cases upstream
++                break;                       // of this switch
+               }
+ 
+               case CM_GRAPH:
+@@ -3565,6 +3579,11 @@ void fnKeyEnter(uint16_t unusedButMandatoryParameter) {
          break;
        }
  
@@ -97,7 +113,7 @@ index bc44026016e94a8865b8acc886386341596641c6..2bf9d0fea4ad2ccbfdb1dca674be96ad
        case CM_REGISTER_BROWSER:
        case CM_FLAG_BROWSER:
        case CM_ASN_BROWSER:
-@@ -3654,6 +3672,7 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
+@@ -3654,6 +3673,7 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
          case CM_FLAG_BROWSER:
          case CM_ASN_BROWSER:
          case CM_FONT_BROWSER:
@@ -105,7 +121,7 @@ index bc44026016e94a8865b8acc886386341596641c6..2bf9d0fea4ad2ccbfdb1dca674be96ad
          case CM_CONFIRMATION:
          case CM_ERROR_MESSAGE:
          case CM_BUG_ON_SCREEN: {
-@@ -3728,6 +3747,7 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
+@@ -3728,6 +3748,7 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
        case CM_FLAG_BROWSER:
        case CM_ASN_BROWSER:
        case CM_FONT_BROWSER:
@@ -113,7 +129,7 @@ index bc44026016e94a8865b8acc886386341596641c6..2bf9d0fea4ad2ccbfdb1dca674be96ad
        case CM_CONFIRMATION:
        case CM_ERROR_MESSAGE:
        case CM_BUG_ON_SCREEN: {
-@@ -3927,6 +3947,11 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
+@@ -3927,6 +3948,11 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
          break;
        }
  
@@ -125,7 +141,7 @@ index bc44026016e94a8865b8acc886386341596641c6..2bf9d0fea4ad2ccbfdb1dca674be96ad
        case CM_REGISTER_BROWSER:
        case CM_FLAG_BROWSER:
        case CM_FONT_BROWSER: {
-@@ -4200,6 +4225,7 @@ void fnKeyCC(uint16_t complex_Type) {    //JM Using 'unusedButMandatoryParameter
+@@ -4200,6 +4226,7 @@ void fnKeyCC(uint16_t complex_Type) {    //JM Using 'unusedButMandatoryParameter
        case CM_FLAG_BROWSER:
        case CM_ASN_BROWSER:
        case CM_FONT_BROWSER:
@@ -133,7 +149,7 @@ index bc44026016e94a8865b8acc886386341596641c6..2bf9d0fea4ad2ccbfdb1dca674be96ad
        case CM_PLOT_STAT:
        case CM_TIMER:
        case CM_LISTXY:
-@@ -4336,6 +4362,11 @@ void fnKeyBackspace(uint16_t unusedButMandatoryParameter) {
+@@ -4336,6 +4363,11 @@ void fnKeyBackspace(uint16_t unusedButMandatoryParameter) {
          break;
        }
  
@@ -145,7 +161,7 @@ index bc44026016e94a8865b8acc886386341596641c6..2bf9d0fea4ad2ccbfdb1dca674be96ad
        case CM_REGISTER_BROWSER:
        case CM_FLAG_BROWSER:
        case CM_FONT_BROWSER: {
-@@ -4597,6 +4628,11 @@ void fnKeyUp(uint16_t unusedButMandatoryParameter) {
+@@ -4597,6 +4629,11 @@ void fnKeyUp(uint16_t unusedButMandatoryParameter) {
          break;
        }
  
@@ -157,7 +173,7 @@ index bc44026016e94a8865b8acc886386341596641c6..2bf9d0fea4ad2ccbfdb1dca674be96ad
        case CM_ASN_BROWSER: {
          currentAsnScr++;                          //JM removed the 3-x part
          if(currentAsnScr == 0 ||currentAsnScr >= 7) {
-@@ -4823,6 +4859,11 @@ void fnKeyDown(uint16_t unusedButMandatoryParameter) {
+@@ -4823,6 +4860,11 @@ void fnKeyDown(uint16_t unusedButMandatoryParameter) {
          break;
        }
  
@@ -169,7 +185,7 @@ index bc44026016e94a8865b8acc886386341596641c6..2bf9d0fea4ad2ccbfdb1dca674be96ad
        case CM_FONT_BROWSER: {
          if(currentFntScr < numScreensNumericFont + numScreensNumericFontBold + numScreensStandardFont + numScreensTinyFont) {
            currentFntScr++;
-@@ -4935,6 +4976,7 @@ void fnKeyDotD(uint16_t unusedButMandatoryParameter) {
+@@ -4935,6 +4977,7 @@ void fnKeyDotD(uint16_t unusedButMandatoryParameter) {
        case CM_FLAG_BROWSER:
        case CM_ASN_BROWSER:
        case CM_FONT_BROWSER:

@@ -3111,10 +3111,11 @@ RELEASE_END:
 
               case CM_FLAG_BROWSER:
               case CM_FONT_BROWSER:
-              case CM_ERROR_MESSAGE:
-              case CM_BUG_ON_SCREEN: {
-                keyActionProcessed = true;
-                break;
+              case CM_HIST_BROWSER:    // unhandled keys must not act on the
+              case CM_ERROR_MESSAGE:   // machine under the browser (B12);
+              case CM_BUG_ON_SCREEN: { // UP/DOWN/ENTER/EXIT/BACKSPACE have
+                keyActionProcessed = true;   // their own item cases upstream
+                break;                       // of this switch
               }
 
               case CM_GRAPH:

@@ -283,6 +283,10 @@ void undoHistoryCapture(void) {
   }
   if(historyCursor != HISTORY_CURSOR_NONE) {
     historyTruncateAbove(historyCursor);
+    // The dropped forward levels never happened: rewind the seq counter so
+    // the next capture numbers consecutively after the surviving top (a
+    // jump with no ~ would read as a gap the view never marked).
+    historySeq = historySeqOf(historyEntryCount - 1);
   }
   if(historySerializePush(true, label, historyGapPending ? HISTORY_ENTRY_GAPBEFORE : 0) == 0) {
     historyGapPending = true;
@@ -673,8 +677,11 @@ void historyTestRing(uint16_t unusedButMandatoryParameter) {
     }
     historyTestWriteLonI(REGISTER_X, 99);
     saveForUndo();                       // genuinely new -> push
-    if(historyEntryCount != 3 || historySeqOf(2) == seqTop) {
-      historyTestFail("R4 new capture should replace the dead redo tail");
+    // Ruled 2026-08-25 (Stan's report): the replacing capture TAKES the dead
+    // tail's number — display numbering stays consecutive across an
+    // override, and seqs stay unique within the ring at any instant.
+    if(historyEntryCount != 3 || historySeqOf(2) != seqTop) {
+      historyTestFail("R4 the replacing capture must take the dead tail's number");
     }
   }
 
@@ -1176,6 +1183,83 @@ void historyTestBrowser(uint16_t unusedButMandatoryParameter) {
     if(!historyTestIsLonI(REGISTER_X, 4)) {
       historyTestFail("B10 redo after a live-state restore must reach the pre-restore state");
     }
+  }
+
+  { // B11: overriding after an undo keeps the level numbering consecutive —
+    // truncate dropped the forward levels but the seq counter kept counting,
+    // so the next capture showed a numbering hole with no ~ mark.
+    uint16_t seq;
+    int16_t li;
+    uint8_t fl;
+    historyTestBaseline();
+    historyTestWriteLonI(REGISTER_X, 1);
+    saveForUndo();
+    historyTestWriteLonI(REGISTER_X, 2);
+    saveForUndo();
+    historyTestWriteLonI(REGISTER_X, 3);
+    saveForUndo();
+    historyTestWriteLonI(REGISTER_X, 4);
+    fnUndo(NOPARAM);                               // anchor {4}, back on {3}
+    historyTestWriteLonI(REGISTER_X, 7);
+    reallyRunFunction(ITM_ADD, indexOfItems[ITM_ADD].param);   // the override
+    if(undoHistoryDepth() != 4) {
+      historyTestFail("B11 override after undo should leave 4 levels");
+    }
+    else {
+      undoHistoryLevelInfo(3, &seq, &li, &fl);     // the fresh top
+      uint16_t topSeq = seq;
+      undoHistoryLevelInfo(2, &seq, &li, &fl);     // the survivor below it
+      if(topSeq != (uint16_t)(seq + 1)) {
+        historyTestFail("B11 numbering must stay consecutive across an override");
+      }
+      if(fl & HISTORY_ENTRY_GAPBEFORE) {
+        historyTestFail("B11 an override is not a gap");
+      }
+    }
+  }
+
+  { // B12: unhandled keys are IGNORED while the browser is shown, the
+    // upstream browser blanket — a digit or shifted item leaking through
+    // executes against the machine under the browser.
+    char kbuf[4];
+    GdkEvent ev;
+    calcKey_t savedKbd2[37];
+    int16_t kDigit = -1;
+    xcopy(savedKbd2, kbd_usr, sizeof(savedKbd2));
+    xcopy(kbd_usr, kbd_std, sizeof(savedKbd2));
+    for(int16_t k = 0; k < 37; k++) {
+      if(kbd_std[k].primary == ITM_5) { kDigit = k; }
+    }
+    ev.button.button = 1;
+    historyTestBaseline();
+    clearSystemFlag(FLAG_USER);
+    tam.mode = 0;
+    tam.alpha = false;
+    temporaryInformation = TI_NO_INFO;
+    fnTimerExec(TO_FN_EXEC);
+    if(SHOWMODE || currentMenu() == -MNU_SHOW) {
+      closeShowMenu();
+    }
+    historyTestWriteLonI(REGISTER_X, 42);
+    saveForUndo();
+    calcMode = CM_NORMAL;
+    shiftF = shiftG = false;
+    historyBrowser(NOPARAM);
+    if(kDigit >= 0) {
+      sprintf(kbuf, "%02d", kDigit);
+      ev.type = 0;
+      btnPressed(NULL, &ev, kbuf);
+      btnReleased(NULL, &ev, kbuf);
+      if(calcMode != CM_HIST_BROWSER) {
+        historyTestFail("B12 a digit key must not act while the browser is shown");
+      }
+      if(!historyTestIsLonI(REGISTER_X, 42)) {
+        historyTestFail("B12 a leaked key changed the machine under the browser");
+      }
+    }
+    historyBrowserLeave();
+    calcMode = CM_NORMAL;
+    xcopy(kbd_usr, savedKbd2, sizeof(savedKbd2));
   }
 
   historyTestBaseline();

@@ -146,3 +146,23 @@
   wrong. B10 pins both halves red-first (anchor present + redo reaches
   the pre-restore state). The (now) lifecycle explanation given for the
   second report stands; this closes the one entry path that skipped it.
+- **2026-08-25 (fourth use-report, three items).** Stan: level count
+  wrong after an override-after-undo; a firmware error on exit with the
+  browser shown; (now) still missing on ENTER-choose. Probed as one
+  sequence with full state dumps. (a) REAL: the override dropped the
+  forward levels but historySeq kept counting — rows read 05 03 02 01,
+  an unmarked hole. Ruled: seq is display numbering, unique within the
+  ring at any instant, NOT a forever-identity; truncate rewinds the
+  counter to the surviving top, the replacing capture takes the dead
+  tail's number. B11 red-first; R4's old assert pinned the overturned
+  ruling (never-reuse) and was re-pinned to the new one. (b) REAL
+  CLASS, exact trigger unconfirmed: unhandled items (digits, shifted
+  functions) fell through processKeyAction's mode switch — no
+  CM_HIST_BROWSER case in the browser blanket — and EXECUTED against
+  the machine under the browser; B12's red run showed a digit press
+  flipping calcMode out of the browser. Joined the FLAG/FONT blanket.
+  The direct EXIT and app-exit/restore paths probed clean
+  (previousCalcMode rides the backup; the restore fixup group already
+  carries CM_HIST_BROWSER). (c) Stale build: the live-restore anchor
+  fix (B10) shipped in the zip minutes before the report; reproduces
+  on the prior build only.

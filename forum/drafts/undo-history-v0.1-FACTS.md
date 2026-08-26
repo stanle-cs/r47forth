@@ -62,7 +62,7 @@ wording.
   Undo works across the gap; the skipped state cannot be returned to.
 - Depth: ~25 levels of plain reals at stack size 4; ~16 at SSIZE8; hard
   cap 48.
-- Flash cost: +3960 bytes (1090504 -> 1094464, make dmcp5r47, re-measured after the live-restore anchor fix). The post's "3.9 KB" stays right.
+- Flash cost: +3992 bytes (1090504 -> 1094496, make dmcp5r47, re-measured after the numbering + key-blanket fixes). The post's "3.9 KB" stays right (3,992 B = 3.9 KiB).
 - SRAM4 statics: +124 bytes.
 - Zip: 44 KB.
 
@@ -134,3 +134,16 @@ wording.
   UNDO press): the jump is redoable and (now) appears. Before the fix
   the pre-restore state was silently lost. Pinned by B10. Zip rebuilt
   again — re-attach if uploaded.
+
+## Override numbering + browser key blanket (2026-08-25, your 4th report)
+- Override after an undo: the replacing level now takes the dead redo
+  tail's number — numbering stays consecutive, no unmarked hole (was:
+  rows like 05 03 02 01). B11 + re-pinned R4.
+- Keys without a browser meaning (digits, shifted functions) are now
+  ignored while the view is shown — they no longer execute against the
+  machine underneath (upstream's own browser blanket; the probable
+  path behind the firmware error you hit; B12 drives it through the
+  real key chain).
+- The (now)-on-ENTER fix was already in the newest zip when you
+  tested; grab pkg_dist/undo-history.zip fresh — it now carries all
+  of today's fixes.

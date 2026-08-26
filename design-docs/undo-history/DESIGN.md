@@ -230,6 +230,21 @@ browsers/historyBrowser.c/.h. All patch content is submission-ready
 upstream code; comments explain invariants in upstream's own voice, and no
 package markers are used.
 
+### Numbering is consecutive, and the browser swallows what it does not handle (2026-08-25)
+
+Two rulings from Stan's use-reports. (1) Level numbers are DISPLAY
+numbering, not forever-identities: an override after an undo rewinds
+the seq counter to the surviving top before capturing, so the replacing
+level takes the dead tail's number and the view never shows an unmarked
+hole (the ~ stays the only trace of anything missing). Seqs remain
+unique within the ring at any instant — consecutive ascending — which
+is all the seq-based re-find needs. Pinned by B11 and the re-pinned R4.
+(2) CM_HIST_BROWSER joins upstream's browser blanket in processKeyAction's
+mode switch: any item without an explicit case (digits, shifted
+functions) is ignored while the browser is shown instead of executing
+against the machine underneath. Pinned by B12 through the real key
+chain.
+
 ### Restore from the live state mints the anchor (2026-08-25)
 
 `undoHistoryRestoreLevel` from a live cursor (no undo in progress) runs

@@ -73,6 +73,8 @@ restores:
 | L1 | a synthetic browser label equal to an item catalog name | browser battery B8 (whole-namespace scan; red-first against the shipped `-`, which collided with ITM_SUB) |
 | K1 | a browser key wired in fnKey* but swallowed upstream (processKeyAction ignore lists) | browser battery B9 (real btnPressed/btnReleased chain for DOWN, ENTER, EXIT; red-first against the shipped ENTER swallow) |
 | A1 | a state jump that loses the departure state (restore from live without an anchor) | browser battery B10 (anchor present after live-state ENTER + redo walks back to the pre-restore state; red-first against the shipped no-mint restore) |
+| N1 | display numbering with an unmarked hole (seq counter not rewound on truncate) | ring battery B11 + re-pinned R4 (override after undo: the replacing capture takes the dead tail's number; red-first against the shipped monotonic counter) |
+| K2 | an unhandled key acting on the machine under the browser | browser battery B12 (real key chain: a digit press leaves mode and machine untouched; red-first against the shipped fall-through) |
 
 R10 carries no mutation pin: it pins an **upstream** contract, not package
 code — if it ever goes red, TMP_STR_LENGTH stopped being enough and the U2
