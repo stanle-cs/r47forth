@@ -159,6 +159,45 @@ mutators that are `US_UNCHANGED`): `ITM_UNDO`, undo-history's REDO (item
 428). Capture scope: manual interactive only — not `PGM_RUNNING`, not
 `FLAG_SOLVING`/`FLAG_INTING`, calcMode `CM_NORMAL`/`CM_NIM`.
 
+### Big operators (PP12)
+
+`PPN_BIGOP` captures a Σₙ/∏ₙ (and integer variants) or ∫yx dispatch:
+`item` = the ITM id, `pad[0..1]` = the LABEL id shown in the body
+(display-time best-effort decode through `labelList`; a stale id falls
+back to `LBL nn`), `payload` = the step real34 for sums (the ∫ stores
+the integration-variable id in payload[0..1] instead), `child[0]/[1]` =
+from/to VAL leaves snapshotted PRE-op. Binding semantics:
+
+- Sums capture only the direct label-param form (`FIRST_LABEL..LAST_LABEL`);
+  the register-letter form resolves a label indirectly and invalidates.
+- The ∫ captures only the dispatch that actually integrates: a
+  named-variable param over a preselected label program
+  (`!USES_FORMULA && currentSolverProgram < numberOfLabels`). The
+  label/register param is the interactive SETUP form — it still harvests
+  X,Y into ULIM/LLIM and drops them but leaves NO result, so it
+  invalidates rather than mint a node that would display a lie. Formula
+  targets belong to the EQN surface (PP13), not capture.
+- Limits are consumed by VALUE, never by structure: an op tree in a
+  consumed slot displaces (emits) at STAGE, and the current root is
+  superseded unconditionally — the new root never contains it.
+- After DONE the label program has run with the machine's full keyboard:
+  slot 0 holds the BIGOP (its value is the result in X), every other
+  slot and slot L go UNKNOWN and re-materialize lazily as VAL leaves.
+- A non-unit step must be visible in the under-limit or the display
+  lies (`n=from,Δstep`); step 1 renders as plain `n=from`.
+
+`PP_BIGOP` (layout kind 9) carries children body/under/over; `textOff`
+holds the operator ITM id (`ppSetBoxTag`) and the paint arm picks the
+stroke glyph (Σ chevron+bars, ∏ bar+verticals, ∫ the PP_INT shape) —
+strokes AFTER children per the binding paint-order rule. `PPT_TKBIG`
+serializes postfix as from-VAL, to-VAL, then {item u16, label u16,
+payload 16B}, popping two.
+
+The capture hooks are nesting-safe: `prettyNoteFunction` checks scope
+BEFORE touching the stage, because a BIGOP's label program runs every
+step through `runFunction` (under FLAG_SOLVING/PGM_RUNNING) and an
+unconditional stage clear would destroy the outer op's staging.
+
 ## §4 Segmentation — where a formula ends (RULED 2026-08-26)
 
 **The rule: liveness + new-root supersession.** A formula (an op-rooted tree)

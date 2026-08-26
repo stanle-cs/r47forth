@@ -52,6 +52,9 @@ static struct {
   uint8_t  stagedMode;
   bool_t   lifted;      // ASLIFT latched at STAGE (LASTX/CONST classes)
   bool_t   valid;
+  uint8_t  stagedFrom;  // BIGOP classes: pre-op limit VAL leaves
+  uint8_t  stagedTo;
+  uint8_t  stepBytes[16];   // BIGOP sums: the step real34, raw
 } ppcStage;
 
 static uint8_t  ppcHist[PPC_HIST_BYTES];
@@ -64,6 +67,7 @@ enum {
   PPC_DY, PPC_MO, PPC_ENTER, PPC_SWAP, PPC_RUP, PPC_RDOWN, PPC_CLX,
   PPC_DROP, PPC_CLSTK, PPC_FILL, PPC_LASTX, PPC_CONSTCLS, PPC_STO_NOP,
   PPC_RCLCLS, PPC_RCLARITH, PPC_XSWAPREG, PPC_DROPY,
+  PPC_BIGOPSUM, PPC_BIGOPINT,
   PPC_INVALIDATE, PPC_DISCARD, PPC_IGNORE
 };
 
@@ -147,7 +151,7 @@ static uint8_t ppcDeepCopy(uint8_t n) {
   // PPA_EMITTED lives in aux for OP nodes only — for LIT/VAL nodes aux is
   // a LENGTH and masking it would truncate the payload (caught by T4)
   ppcArena[c].aux = ppcArena[n].aux;
-  if(ppcArena[n].kind == PPN_OP1 || ppcArena[n].kind == PPN_OP2) {
+  if(ppcArena[n].kind == PPN_OP1 || ppcArena[n].kind == PPN_OP2 || ppcArena[n].kind == PPN_BIGOP) {
     ppcArena[c].aux &= (uint8_t)~PPA_EMITTED;
   }
   ppcArena[c].item = ppcArena[n].item;
@@ -317,6 +321,22 @@ static uint16_t ppcSerializeNode(uint8_t n, uint8_t *out, uint16_t off, uint16_t
       out[off++] = (uint8_t)(nd->item >> 8);
       (*nTokens)++;
       return off;
+    case PPN_BIGOP:
+      // postfix: from-VAL, to-VAL, then the operator record
+      off = ppcSerializeNode(nd->child[0], out, off, cap, nTokens);
+      off = ppcSerializeNode(nd->child[1], out, off, cap, nTokens);
+      if(off == 0xffff || off + 21 > cap) {
+        return 0xffff;
+      }
+      out[off++] = PPT_TKBIG;
+      out[off++] = (uint8_t)(nd->item & 0xff);
+      out[off++] = (uint8_t)(nd->item >> 8);
+      out[off++] = nd->pad[0];
+      out[off++] = nd->pad[1];
+      xcopy(out + off, nd->payload, 16);
+      off = (uint16_t)(off + 16);
+      (*nTokens)++;
+      return off;
     default:
       return 0xffff;
   }
@@ -347,7 +367,7 @@ static void ppcEmit(uint8_t root, calcRegister_t resultReg) {
     return;
   }
   ppcNode_t *nd = &ppcArena[root];
-  if(nd->kind != PPN_OP1 && nd->kind != PPN_OP2) {
+  if(nd->kind != PPN_OP1 && nd->kind != PPN_OP2 && nd->kind != PPN_BIGOP) {
     return;   // a bare value is not a formula
   }
   if(nd->aux & PPA_EMITTED) {
@@ -465,6 +485,14 @@ static uint8_t ppcClassify(int16_t func) {
     case ITM_Xex:   return PPC_XSWAPREG;
     case ITM_DROPY: return PPC_DROPY;
 
+    // PP12: the big-operator family — Σₙ/∏ₙ (and the integer variants)
+    // consume Z=from, Y=to, X=step and leave the result in X; ∫YX
+    // consumes Y=lower, X=upper over a label program.
+    case ITM_SIGMAn: case ITM_PIn: case ITM_iSIGMAn: case ITM_iPIn:
+      return PPC_BIGOPSUM;
+    case ITM_INTEGRAL_YX:
+      return PPC_BIGOPINT;
+
     // stack mutators that are US_UNCHANGED and would otherwise be ignored
     case ITM_UNDO:
       return PPC_DISCARD;   // the user revoked the current formula
@@ -556,10 +584,14 @@ void prettyNoteFunction(int16_t func, uint16_t param) {
   if(!ppcInited) {
     prettyReset();
   }
-  ppcStage.valid = false;
   if(!ppcScopeOk()) {
+    // A nested dispatch (a BIGOP's label program runs every step through
+    // runFunction under FLAG_SOLVING/PGM_RUNNING) must not clobber the
+    // outer stage. valid is only ever true strictly inside a dispatch,
+    // so a top-level STAGE out of scope has nothing to clear.
     return;
   }
+  ppcStage.valid = false;
   uint8_t cls = ppcClassify(func);
   if(cls == PPC_IGNORE) {
     return;
@@ -617,6 +649,66 @@ void prettyNoteFunction(int16_t func, uint16_t param) {
       // the tree's value still sits in register X at STAGE
       ppcDisplaced(0, true);
       break;
+    case PPC_BIGOPSUM: {
+      // Z=from, Y=to, X=step consumed by VALUE (fnToReal + copy), never
+      // by structure: an op tree in a consumed slot is displaced (§4
+      // rule 1), and the current root is superseded regardless of where
+      // it sits — the new BIGOP root never contains it.
+      if(!(ppcStage.param >= FIRST_LABEL && ppcStage.param <= LAST_LABEL)) {
+        // the register-letter form resolves a label indirectly — un-modeled
+        ppcStage.cls = PPC_INVALIDATE;
+        break;
+      }
+      if(getRegisterDataType(REGISTER_X) == dtReal34) {
+        xcopy(ppcStage.stepBytes, REGISTER_REAL34_DATA(REGISTER_X), 16);
+      }
+      else if(getRegisterDataType(REGISTER_X) == dtLongInteger) {
+        real34_t s;
+        convertLongIntegerRegisterToReal34(REGISTER_X, &s);
+        xcopy(ppcStage.stepBytes, &s, 16);
+      }
+      else {
+        // a step we cannot show truthfully: fall back to the default rule
+        ppcStage.cls = PPC_INVALIDATE;
+        break;
+      }
+      ppcDisplaced(0, true);
+      ppcDisplaced(1, true);
+      ppcDisplaced(2, true);
+      if(ppcCurrent != PPC_NIL) {
+        ppcSupersedeCurrent();
+      }
+      ppcStage.stagedFrom = ppcValLeafFromRegister(REGISTER_Z);
+      ppcStage.stagedTo   = ppcValLeafFromRegister(REGISTER_Y);
+      break;
+    }
+    case PPC_BIGOPINT: {
+      // The integration only RUNS for a named-variable param over a
+      // preselected label program (_fnIntegrate); a label/register param
+      // is the interactive SETUP form — it still harvests X,Y into
+      // ULIM/LLIM and drops them, but leaves no result to vouch for.
+      // Formula targets belong to the EQN surface (PP13), not capture.
+      if(!(ppcStage.param >= FIRST_NAMED_VARIABLE && ppcStage.param <= LAST_NAMED_VARIABLE)
+          || (currentSolverStatus & SOLVER_STATUS_USES_FORMULA)
+          || currentSolverProgram >= numberOfLabels) {
+        ppcStage.cls = PPC_INVALIDATE;
+        break;
+      }
+      // Y=lower, X=upper; payload[0..1] = the integration variable (for
+      // the d<var> body text), the label comes from the solver target
+      memset(ppcStage.stepBytes, 0, 16);
+      ppcStage.stepBytes[0] = (uint8_t)(ppcStage.param & 0xff);
+      ppcStage.stepBytes[1] = (uint8_t)(ppcStage.param >> 8);
+      ppcStage.param = (uint16_t)(currentSolverProgram + FIRST_LABEL);
+      ppcDisplaced(0, true);
+      ppcDisplaced(1, true);
+      if(ppcCurrent != PPC_NIL) {
+        ppcSupersedeCurrent();
+      }
+      ppcStage.stagedFrom = ppcValLeafFromRegister(REGISTER_Y);
+      ppcStage.stagedTo   = ppcValLeafFromRegister(REGISTER_X);
+      break;
+    }
     case PPC_DROPY:
       ppcDisplaced(1, true);
       break;
@@ -635,6 +727,10 @@ void prettyNoteFunctionDone(void) {
   }
   ppcStage.valid = false;
   if(lastErrorCode != ERROR_NONE) {
+    if(ppcStage.cls == PPC_BIGOPSUM || ppcStage.cls == PPC_BIGOPINT) {
+      ppcFreeTree(ppcStage.stagedFrom);
+      ppcFreeTree(ppcStage.stagedTo);
+    }
     // a failed function may have partially moved the stack
     ppcInvalidate(false);
     return;
@@ -835,6 +931,39 @@ void prettyNoteFunctionDone(void) {
         uint8_t d = ppcDeepCopy(ppcSlot[top]);
         ppcSlot[top] = (d == PPC_NIL) ? PPC_UNKNOWN : d;
       }
+      break;
+    }
+    case PPC_BIGOPSUM:
+    case PPC_BIGOPINT: {
+      uint8_t n = ppcAlloc(PPN_BIGOP);
+      if(n == PPC_NIL || ppcStage.stagedFrom == PPC_NIL || ppcStage.stagedTo == PPC_NIL) {
+        ppcFreeTree(ppcStage.stagedFrom);
+        ppcFreeTree(ppcStage.stagedTo);
+        if(n != PPC_NIL) {
+          ppcFreeTree(n);
+        }
+        ppcInvalidate(false);
+        break;
+      }
+      ppcArena[n].item = (uint16_t)ppcStage.func;
+      ppcArena[n].pad[0] = (uint8_t)(ppcStage.param & 0xff);
+      ppcArena[n].pad[1] = (uint8_t)(ppcStage.param >> 8);
+      xcopy(ppcArena[n].payload, ppcStage.stepBytes, 16);
+      ppcArena[n].child[0] = ppcStage.stagedFrom;
+      ppcArena[n].child[1] = ppcStage.stagedTo;
+      // The dispatch ran the label program between STAGE and DONE, and a
+      // program can touch anything: X holds the result (the BIGOP's
+      // value), every other register is somebody else's writing now.
+      // Consumed formula slots were displaced at STAGE. UNKNOWN slots
+      // re-materialize lazily as truthful VAL leaves.
+      for(int i = 0; i < 8; i++) {
+        ppcFreeTree(ppcSlot[i] == PPC_UNKNOWN ? PPC_NIL : ppcSlot[i]);
+        ppcSlot[i] = PPC_UNKNOWN;
+      }
+      ppcFreeTree(ppcSlotL == PPC_UNKNOWN ? PPC_NIL : ppcSlotL);
+      ppcSlotL = PPC_UNKNOWN;
+      ppcSlot[0] = n;
+      ppcCurrent = n;
       break;
     }
     case PPC_INVALIDATE:

@@ -2,6 +2,61 @@
 
 Non-normative amendment trail. DESIGN.md is authoritative.
 
+## 2026-08-26 — PP12 (captured Σ/Π/∫ big-operator nodes)
+
+- **The capture hooks were not nesting-safe — latent since PP3, load-bearing
+  from PP12 on.** `prettyNoteFunction` cleared `ppcStage.valid` BEFORE its
+  scope check, and a BIGOP dispatch runs its label program's every step
+  through `runFunction` (executeOneStep → runFunction, under
+  FLAG_SOLVING/PGM_RUNNING): the first inner step destroyed the outer
+  stage and the BIGOP DONE never applied. The same clobber was reachable
+  pre-PP12 by any function whose body nests `reallyRunFunction` in scope
+  (`.d` executing →REAL is upstream's own example). Fix: scope-check
+  first — `valid` is only ever true strictly inside a dispatch, so a
+  top-level STAGE out of scope has nothing to clear.
+- **The screenshot caught a display lie the sig pins could not.** The first
+  ∫ trace called `fnIntegrateYX(label)` — which is the interactive SETUP
+  form: it harvests X,Y into ULIM/LLIM, drops them, retargets the solver
+  and integrates NOTHING. The capture minted a BIGOP whose "result" was
+  whatever X held (0), and the composed sheet read `∫₀¹P(x)dx = 0.` —
+  truthful-looking, wrong. Ruling: capture only the dispatch that actually
+  integrates (named-variable param over a preselected label program, the
+  `covIntegratePgm` currency); every other param form invalidates (B6b
+  pins it). The variable id rides in the payload so the body shows the
+  real d-variable (`P(X)dX`).
+- **After a BIGOP dispatch, only X can be vouched for.** The label program
+  ran with the machine's full keyboard between STAGE and DONE — every
+  register but the result is somebody else's writing. Slot 0 = the BIGOP,
+  all other slots and slot L go UNKNOWN (lazy VAL re-materialization).
+  The first draft slid-and-top-dupped the surviving trees; that claimed
+  register values a user program can falsify. Reverted before it ever ran.
+- **The ∫/Σ dispatches leak solver state into later suite files.** The
+  full gate failed 4 upstream tests in deriv_cov: `fnPgmInt` (inside the
+  ∫ path) clears `SOLVER_STATUS_USES_FORMULA` and retargets
+  `currentSolverProgram` at label P, and `covDerivEq` — unlike
+  `covSolveRoot` — does not reset the status it inherits, so it
+  differentiated my x² program instead of its X³ formula (the observed
+  2x/constant-2 values matched exactly). The driver now saves and
+  restores `currentSolverStatus/Program/Variable` + `currentMvarLabel` —
+  the aimBuffer restore rule, extended to solver globals.
+- **MUT-41 stayed green on its first run** — the B8 probe rect reached
+  column 35, and the body run (`P(n)`, starting at colW+3 = 29) shares
+  the probe rows, so body ink masked the deleted strokes. Probe tightened
+  to the operator column (x..x+26). Same lesson as FV7/FV9: pin the
+  pixels only the mutated code can light.
+- The sum step travels as real34 (`fnToReal`'s own currency, longint
+  converted at STAGE via `convertLongIntegerRegisterToReal34`), so a
+  non-unit step renders with the real marker: `n=1,Δ2.` — accepted as
+  truthful rather than re-formatted.
+- Fixture notes: program installed through a copy-adapted
+  `covWriteAndLoadPgm` (label `P`, `x²`, the upstream pgmT shape); the
+  history-order in `ppcHistoryEntry` is newest-first; live key replays
+  repaint the register lines, so the capture sheet builds all entries
+  first and paints after (the first composed shot lost its under-limits
+  to exactly that).
+- No new upstream hunks: PP12 is entirely package-internal (capture,
+  layout, formula, tests). §7 claims unchanged.
+
 ## 2026-08-26 — post-PP11 capture polish
 
 - The PP6-PP11 showcase captures found one cosmetic defect: the ⁿ√

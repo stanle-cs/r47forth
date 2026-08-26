@@ -17,7 +17,10 @@
 #define PRETTYINTERNAL_H
 
 enum { PP_RUN = 0, PP_HBOX = 1, PP_FRAC = 2, PP_RAD = 3, PP_SUP = 4, PP_PAREN = 5,
-       PP_SUB = 6, PP_BARS = 7, PP_INT = 8 };
+       PP_SUB = 6, PP_BARS = 7, PP_INT = 8, PP_BIGOP = 9 };
+// PP_BIGOP (PP12): children = body, under-limit, over-limit (chain of 3);
+// textOff stores the operator ITM id (no other free field on box nodes) —
+// the paint pass picks the stroke glyph (Σ/∏/∫) from it.
 // PP_RAD children: radicand, then an OPTIONAL second child = the index
 // (ⁿ√), tucked above-left of the sign. PP_SUB mirrors PP_SUP downward
 // (log_b). PP_BARS wraps its child in |absolute-value| strokes.
@@ -46,6 +49,7 @@ void            ppReset(void);
 uint8_t         ppNewBox(uint8_t kind, uint8_t fontId);
 uint8_t         ppNewRun(const char *bytes, uint16_t len, uint8_t fontId);  ///< copies + NUL-terminates; PP_NONE on overflow
 void            ppAppendChild(uint8_t parent, uint8_t child);
+void            ppSetBoxTag(uint8_t n, uint16_t tag);   ///< PP_BIGOP: stores the operator ITM id in textOff
 bool_t          ppMeasure(uint8_t n, uint8_t depth);
 const ppNode_t *ppNodeAt(uint8_t n);
 const char     *ppTextAt(uint16_t off);
@@ -69,7 +73,11 @@ int16_t         ppPreferredBase(int16_t baseY);   ///< baseY + numericFont box a
 #define PPA_EMITTED    0x01
 
 enum { PPN_FREE = 0, PPN_OP1, PPN_OP2, PPN_LIT, PPN_LIT2, PPN_VAL,
-       PPN_RCL, PPN_CONST, PPN_OPAQUE };
+       PPN_RCL, PPN_CONST, PPN_OPAQUE, PPN_BIGOP };
+// PPN_BIGOP (PP12): a captured Σₙ/∏ₙ/∫YX dispatch. item = the ITM id,
+// pad[0..1] = the label param (LE), payload = the step real34 (sums;
+// zeros for ∫), child[0] = from-limit VAL, child[1] = to-limit VAL.
+// Its VALUE is the result the dispatch left in X — chains continue.
 
 // postfix stream tokens (history entries: 6-byte header {totalBytes u16,
 // seq u16, nTokens u8, flags u8} then tokens; TKRES trails when present)
@@ -79,7 +87,8 @@ enum { PPT_TKL = 1,    // literal: len u8, text bytes (as typed)
        PPT_TKC,        // constant: item u16
        PPT_TKO1,       // monadic op: item u16
        PPT_TKO2,       // dyadic op: item u16
-       PPT_TKRES };    // result snapshot: same shape as TKV
+       PPT_TKRES,      // result snapshot: same shape as TKV
+       PPT_TKBIG };    // big operator: item u16, label u16, step real34(16B); pops from,to
 
 typedef struct {
   uint8_t  kind;        ///< PPN_*

@@ -111,6 +111,27 @@ does this first, always.
   Expected signatures build from `indexOfItems[].itemCatalogName` at
   runtime so name changes never turn them red.
 
+### PP12 additions
+
+- **`prettyTestCapture` B-traces** — the big-operator family, driven
+  through a real loaded program (`ppcTestWriteAndLoadPgm`, copy-adapted
+  from testSuite.c's `covWriteAndLoadPgm`; label `P`, body `x²`):
+  B1 Σₙ over 1..10 (sig `{#,#}Σₙ`, X pinned = 385 as real34),
+  B3 CLX displacement emits the bare BIGOP root,
+  B4 history decode pins limit ORDER, label-name decode and node shape
+  (`B(P(n)|[n= 1]|10)`), B5 the result chains (`{#,#}Σₙ 2 ×`, one
+  emission), B6 the ∫ currency that actually integrates (PGMINT
+  preselects the program; the INTEGRAL_YX param is the integration
+  VARIABLE) with X pinned ≈ 1/3, B6b the label-param SETUP form must
+  not mint a node (sig `-`: it consumed X,Y with no result to vouch
+  for), B7 a non-unit step is visible (`n=1,Δ2.` — the step travels as
+  real34, upstream's real marker included), B8 pixel pin on the
+  stroke-drawn Σ in the operator column only (a wider probe let the
+  body ink mask a stroke deletion — first run stayed green).
+  The traces restore `currentSolverStatus/Program/Variable` and
+  `currentMvarLabel`: the ∫/Σ dispatches retarget the solver, and
+  later suite files (deriv_cov) assume the status they inherited.
+
 ## Mutation pins (run each separately, battery green between restores)
 
 All six demonstrated red on 2026-08-26 (targeted single-file battery), green
@@ -156,6 +177,9 @@ after restore.
 | MUT-36 | browser selection loses its clamp (PP10) | FV12 (over-navigated ENTER recalls nothing) |
 | MUT-37 | reset drops the natural-display default-ON (PP11) | FV13 |
 | MUT-38 | the toggle item flips nothing (PP11) | FV13 |
+| MUT-39 | BIGOP limits swapped at STAGE (PP12) | B4 (under/over flip in the decoded layout) |
+| MUT-40 | PPN_BIGOP dropped from emit eligibility (PP12) | B3 (hist stays 0), B4/B7 (no entry to decode) |
+| MUT-41 | Σ strokes deleted from the PP_BIGOP paint arm (PP12) | B8 (operator column dark) |
 
 Two lessons from the first mutation run, kept for honesty: (a) the original
 MUT-4 ("drop the dtReal34 type gate") stays GREEN — a non-real register's

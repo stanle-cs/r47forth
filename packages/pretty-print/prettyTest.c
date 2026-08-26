@@ -570,6 +570,11 @@ void prettyTestFallback(uint16_t unusedButMandatoryParameter) {
  * live. Expected signatures are built from indexOfItems catalog names at
  * runtime so font/name changes never turn these red. */
 
+// the layout-sig helpers live with prettyTestFormula below; the PP12
+// capture traces decode history entries through them
+static void ppfTestSigNode(uint8_t n, char *out, size_t cap);
+static void ppfTestExpect(const char *what, uint8_t root, const char *expected);
+
 static void ppcTestSigNode(uint8_t n, char *out, size_t cap) {
   size_t len = strlen(out);
   if(len + 24 >= cap) {
@@ -620,6 +625,14 @@ static void ppcTestSigNode(uint8_t n, char *out, size_t cap) {
       break;
     }
     case PPN_CONST:  strncat(out, indexOfItems[nd->item].itemCatalogName, 15); break;
+    case PPN_BIGOP:
+      strcat(out, "{");
+      ppcTestSigNode(nd->child[0], out, cap);
+      strcat(out, ",");
+      ppcTestSigNode(nd->child[1], out, cap);
+      strcat(out, "}");
+      strncat(out, indexOfItems[nd->item].itemCatalogName, 15);
+      break;
     case PPN_OPAQUE: strcat(out, "!"); break;
     default:         strcat(out, "?"); break;
   }
@@ -684,6 +697,24 @@ static void ppcTestExpectSig(const char *what, const char *expected) {
     ppTestFailures++;
     printf("prettyPrint test FAIL: %s (expected '%s', actual '%s')\n", what, expected, sig);
   }
+}
+
+/* Copy-adapted from testSuite.c covWriteAndLoadPgm: write a program in
+ * the program-file format and import it through the official loader,
+ * which appends it and registers the global label. The Test-suffixed
+ * name is the one the test HAL maps ioPathLoadProgram to. */
+static void ppcTestWriteAndLoadPgm(const uint8_t *pgm, size_t n) {
+  FILE *f = fopen("c47programTest.bin", "wb");
+  if(f == NULL) {
+    ppTestFail("cannot open c47programTest.bin");
+    return;
+  }
+  fprintf(f, "PROGRAM_FILE_FORMAT\n0\nC47_program_file_version\n1\nPROGRAM\n%u\n", (unsigned)n);
+  for(size_t i = 0; i < n; ++i) {
+    fprintf(f, "%u\n", pgm[i]);
+  }
+  fclose(f);
+  fnLoadProgram(NOPARAM);
 }
 
 static void ppcTestExpectHist(const char *what, uint8_t expected) {
@@ -935,6 +966,185 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
   ppcTestExpectSig("T16 abort under lift", expect);
   ppcTestExpectHist("T16 hist", 0);
 
+  /* ==== PP12: big operators ============================================ */
+
+  // the label program: LBL "P" / x^2 / END (the pgmT shape from upstream's
+  // covProgramFlow, with a package-local label name)
+  {
+    static const uint8_t pgmP[] = {
+      ITM_LBL, STRING_LABEL_VARIABLE, 1, 'P',
+      ITM_SQUARE,
+      (uint8_t)((ITM_END >> 8) | 0x80), (uint8_t)(ITM_END & 0xff),
+    };
+    ppcTestWriteAndLoadPgm(pgmP, sizeof(pgmP));
+  }
+  calcRegister_t bigLbl = findNamedLabel("P", GLOBAL_LABELS);
+  if(bigLbl == INVALID_VARIABLE) {
+    ppTestFail("B0 label P not registered");
+  }
+  else {
+    // The integral/sum dispatches retarget the solver at label P and
+    // clear SOLVER_STATUS_USES_FORMULA; later suite files (deriv_cov)
+    // assume the status they inherited. Drivers restore what they
+    // touch — the same rule that covers aimBuffer.
+    uint16_t savedSolverStatus   = currentSolverStatus;
+    uint16_t savedSolverProgram  = currentSolverProgram;
+    uint16_t savedSolverVariable = currentSolverVariable;
+    calcRegister_t savedMvarLabel = currentMvarLabel;
+
+    const char *nSIG = indexOfItems[ITM_SIGMAn].itemCatalogName;
+    const char *nINT = indexOfItems[ITM_INTEGRAL_YX].itemCatalogName;
+
+    // B1: 1 ENTER 10 ENTER 1 Sigma_n -> a BIGOP root whose value is the
+    // result the dispatch left in X (sum of n^2, n=1..10 = 385)
+    ppcTestReset();
+    ppcTestType("1");
+    ppcTestOp(ITM_ENTER);
+    ppcTestType("10");
+    ppcTestOp(ITM_ENTER);
+    ppcTestType("1");
+    ppcTestOpParam(ITM_SIGMAn, (uint16_t)bigLbl);
+    sprintf(expect, "{#,#}%s", nSIG);
+    ppcTestExpectSig("B1 sigma captured", expect);
+    ppcTestExpectHist("B1 no early emission", 0);
+    if(getRegisterDataType(REGISTER_X) != dtReal34) {
+      ppTestFail("B1 X not real34");
+    }
+    else {
+      real34_t want;
+      int32ToReal34(385, &want);
+      if(!real34CompareEqual(REGISTER_REAL34_DATA(REGISTER_X), &want)) {
+        ppTestFail("B1 X != 385");
+      }
+    }
+
+    // B2/B3: CLX displaces the BIGOP root -> it emits like any op root
+    ppcTestOp(ITM_CLX);
+    ppcTestExpectHist("B3 emitted on displacement", 1);
+
+    // B4: decode the history entry through the layout builder; the sig
+    // pins limit ORDER (under=from, over=to), the label-name decode and
+    // the node shape. withResult=false: the real34 result's display
+    // form is pinned by the B1 value check, not by string shape.
+    {
+      uint16_t elen, eseq;
+      const uint8_t *e = ppcHistoryEntry(0, &elen, &eseq);
+      uint8_t root;
+      ppReset();
+      if(e == NULL || !ppfBuildEntry(e, PP_FONT_STANDARD, PP_FONT_TINY, false, &root)) {
+        ppTestFail("B4 history entry decode");
+      }
+      else {
+        // the HBOX sig joiner space-separates children: [n= 1]
+        ppfTestExpect("B4 layout", root, "B(P(n)|[n= 1]|10)");
+        if(!ppMeasure(root, 0)) {
+          ppTestFail("B4 measure");
+        }
+        else {
+          // B8: pixel pin for the stroke-drawn operator. Probe rows
+          // [base-12, base-2] x cols [x, x+26]: the body run starts at
+          // x + colW + 3 = 29 (its ink shares these rows — a wider probe
+          // let it mask a stroke deletion), the limits sit above/below.
+          lcd_fill_rect(0, 60, SCREEN_WIDTH, 84, LCD_SET_VALUE);
+          ppPaintAt(root, 10, 120);
+          if(!ppTestRectAnyLit(108, 118, 10, 26)) {
+            ppTestFail("B8 operator strokes missing");
+          }
+        }
+      }
+    }
+
+    // B5: the BIGOP result chains like any operand; no early emission
+    ppcTestReset();
+    ppcTestType("1");
+    ppcTestOp(ITM_ENTER);
+    ppcTestType("5");
+    ppcTestOp(ITM_ENTER);
+    ppcTestType("1");
+    ppcTestOpParam(ITM_SIGMAn, (uint16_t)bigLbl);
+    ppcTestType("2");
+    ppcTestOp(ITM_MULT);
+    sprintf(expect, "{#,#}%s 2 %s", nSIG, nMULT);
+    ppcTestExpectSig("B5 sigma chains", expect);
+    ppcTestExpectHist("B5 hist", 0);   // the reset above cleared the ring
+    ppcTestOp(ITM_CLX);
+    ppcTestExpectHist("B5 chained formula emitted", 1);
+
+    // B6: the dispatch that actually integrates: PGMINT preselects the
+    // label program, and the INTEGRAL_YX param is the integration
+    // VARIABLE (the covIntegratePgm currency). ACC=0 -> default
+    // tolerance, as the upstream fixture does.
+    ppcTestReset();
+    currentSolverStatus = 0;
+    reallocateRegister(RESERVED_VARIABLE_ACC, dtReal34, 0, amNone);
+    int32ToReal34(0, REGISTER_REAL34_DATA(RESERVED_VARIABLE_ACC));
+    ppcTestOpParam(ITM_PGMINT, (uint16_t)bigLbl);
+    ppcTestType("0");
+    ppcTestOp(ITM_ENTER);
+    ppcTestType("1");
+    ppcTestOpParam(ITM_INTEGRAL_YX, findOrAllocateNamedVariable("X"));
+    sprintf(expect, "{#,#}%s", nINT);
+    ppcTestExpectSig("B6 integral captured", expect);
+    if(getRegisterDataType(REGISTER_X) != dtReal34) {
+      ppTestFail("B6 X not real34");
+    }
+    else {
+      // integral of x^2 over [0,1] = 1/3: pin |3X - 1| < 1e-6
+      real34_t three, one, diff, tol;
+      int32ToReal34(3, &three);
+      int32ToReal34(1, &one);
+      real34Multiply(REGISTER_REAL34_DATA(REGISTER_X), &three, &diff);
+      real34Subtract(&diff, &one, &diff);
+      real34SetPositiveSign(&diff);
+      stringToReal34("1e-6", &tol);
+      if(!real34CompareLessThan(&diff, &tol)) {
+        ppTestFail("B6 X != 1/3");
+      }
+    }
+
+    // B6b: the label-param form is SETUP, not integration — no result
+    // exists, so no node may claim one (it still consumed X,Y as
+    // limits: the shadow invalidates rather than guess)
+    ppcTestReset();
+    ppcTestType("5");
+    ppcTestOp(ITM_ENTER);
+    ppcTestType("7");
+    ppcTestOpParam(ITM_INTEGRAL_YX, (uint16_t)bigLbl);
+    ppcTestExpectSig("B6b setup form does not lie", "-");
+
+    // B7: a non-unit step is visible in the under-limit (or the display
+    // would lie): 1 ENTER 9 ENTER 2 -> n=1,(delta)2 under, 9 over
+    ppcTestReset();
+    ppcTestType("1");
+    ppcTestOp(ITM_ENTER);
+    ppcTestType("9");
+    ppcTestOp(ITM_ENTER);
+    ppcTestType("2");
+    ppcTestOpParam(ITM_SIGMAn, (uint16_t)bigLbl);
+    ppcTestOp(ITM_CLX);
+    {
+      uint16_t elen, eseq;
+      const uint8_t *e = ppcHistoryEntry((uint8_t)(ppcHistoryCount() - 1), &elen, &eseq);
+      uint8_t root;
+      ppReset();
+      if(e == NULL || !ppfBuildEntry(e, PP_FONT_STANDARD, PP_FONT_TINY, false, &root)) {
+        ppTestFail("B7 step entry decode");
+      }
+      else {
+        // the step travels as a real34 (upstream's fnToReal currency), so
+        // it renders with the real marker: (delta)2.
+        sprintf(expect, "B(P(n)|[n= 1 ," "\x83\x94" "2.]|9)");
+        ppfTestExpect("B7 step visible", root, expect);
+      }
+    }
+
+
+    currentSolverStatus   = savedSolverStatus;
+    currentSolverProgram  = savedSolverProgram;
+    currentSolverVariable = savedSolverVariable;
+    currentMvarLabel      = savedMvarLabel;
+  }
+
   ppcTestReset();
   ppTestWriteLonI(REGISTER_X, ppTestFailures);
 }
@@ -1020,6 +1230,19 @@ static void ppfTestSigNode(uint8_t n, char *out, size_t cap) {
       ppfTestSigNode(nd->firstChild, out, cap);
       strcat(out, ")");
       break;
+    case PP_BIGOP: {
+      uint8_t body  = nd->firstChild;
+      uint8_t under = ppNodeAt(body)->nextSibling;
+      uint8_t over  = ppNodeAt(under)->nextSibling;
+      strcat(out, "B(");
+      ppfTestSigNode(body, out, cap);
+      strcat(out, "|");
+      ppfTestSigNode(under, out, cap);
+      strcat(out, "|");
+      ppfTestSigNode(over, out, cap);
+      strcat(out, ")");
+      break;
+    }
     default:
       strcat(out, "?");
       break;

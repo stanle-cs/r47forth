@@ -148,6 +148,12 @@ void ppAppendChild(uint8_t parent, uint8_t child) {
   ppPool[c].nextSibling = child;
 }
 
+void ppSetBoxTag(uint8_t n, uint16_t tag) {
+  if(n < ppNodeCount) {
+    ppPool[n].textOff = tag;
+  }
+}
+
 const ppNode_t *ppNodeAt(uint8_t n) {
   return (n < ppNodeCount) ? &ppPool[n] : NULL;
 }
@@ -324,6 +330,56 @@ bool_t ppMeasure(uint8_t n, uint8_t depth) {
       nd->width   = ppPool[child].width + 18;
       nd->ascent  = ppPool[child].ascent + 3;
       nd->descent = ppPool[child].descent + 3;
+      return true;
+    }
+
+    case PP_BIGOP: {
+      // children: body, under-limit, over-limit. The operator glyph is
+      // stroke-drawn in a box left of the body; limits stack under/over
+      // that box. Paint recomputes the same box from the same inputs.
+      uint8_t body = nd->firstChild;
+      if(body == PP_NONE) {
+        return false;
+      }
+      uint8_t under = ppPool[body].nextSibling;
+      if(under == PP_NONE) {
+        return false;
+      }
+      uint8_t over = ppPool[under].nextSibling;
+      if(over == PP_NONE || ppPool[over].nextSibling != PP_NONE) {
+        return false;
+      }
+      if(!ppMeasure(body, depth + 1) || !ppMeasure(under, depth + 1)
+          || !ppMeasure(over, depth + 1)) {
+        return false;
+      }
+      int16_t ga = (int16_t)(ppPool[body].ascent + 2);   // glyph rows above baseline
+      if(ga < m->boxAscent) {
+        ga = m->boxAscent;
+      }
+      int16_t gd = (int16_t)(ppPool[body].descent + 2);  // glyph rows at/below
+      if(gd < 4) {
+        gd = 4;
+      }
+      int16_t gw = 16;
+      int16_t colW = gw;
+      if(ppPool[under].width > colW) colW = ppPool[under].width;
+      if(ppPool[over].width  > colW) colW = ppPool[over].width;
+      ppPool[over].relX     = (int16_t)((colW - ppPool[over].width) / 2);
+      ppPool[over].relBase  = (int16_t)(-(ga + 2 + ppPool[over].descent));
+      ppPool[under].relX    = (int16_t)((colW - ppPool[under].width) / 2);
+      ppPool[under].relBase = (int16_t)(gd + 2 + ppPool[under].ascent);
+      ppPool[body].relX     = (int16_t)(colW + 3);
+      ppPool[body].relBase  = 0;
+      nd->width   = (int16_t)(colW + 3 + ppPool[body].width);
+      nd->ascent  = (int16_t)(ga + 2 + ppPool[over].descent + ppPool[over].ascent);
+      if(ppPool[body].ascent > nd->ascent) {
+        nd->ascent = ppPool[body].ascent;
+      }
+      nd->descent = (int16_t)(gd + 2 + ppPool[under].ascent + ppPool[under].descent);
+      if(ppPool[body].descent > nd->descent) {
+        nd->descent = ppPool[body].descent;
+      }
       return true;
     }
 
@@ -512,6 +568,57 @@ static void ppPaint(uint8_t n, int16_t x, int16_t baseline) {
       ppDrawLine((int16_t)(x + 8), (int16_t)(top + 3), (int16_t)(x + 12), (int16_t)top);
       ppDrawLine((int16_t)(x + 6), (int16_t)(bot - 3), (int16_t)(x + 2), (int16_t)bot);
       ppDrawLine((int16_t)(x + 7), (int16_t)(bot - 3), (int16_t)(x + 3), (int16_t)bot);
+      return;
+    }
+
+    case PP_BIGOP: {
+      // children first, strokes last — the binding paint-order rule
+      uint8_t body  = nd->firstChild;
+      uint8_t under = ppPool[body].nextSibling;
+      uint8_t over  = ppPool[under].nextSibling;
+      ppPaint(body,  x + ppPool[body].relX,  baseline);
+      ppPaint(under, x + ppPool[under].relX, baseline + ppPool[under].relBase);
+      ppPaint(over,  x + ppPool[over].relX,  baseline + ppPool[over].relBase);
+      int16_t ga = (int16_t)(ppPool[body].ascent + 2);
+      if(ga < m->boxAscent) {
+        ga = m->boxAscent;
+      }
+      int16_t gd = (int16_t)(ppPool[body].descent + 2);
+      if(gd < 4) {
+        gd = 4;
+      }
+      int16_t gw = 16;
+      int16_t colW = gw;
+      if(ppPool[under].width > colW) colW = ppPool[under].width;
+      if(ppPool[over].width  > colW) colW = ppPool[over].width;
+      int16_t gx  = (int16_t)(x + (colW - gw) / 2);
+      int16_t top = (int16_t)(baseline - ga);
+      int16_t bot = (int16_t)(baseline + gd - 1);
+      uint16_t op = nd->textOff;
+      if(op == ITM_INTEGRAL_YX) {
+        // the ∫: same stroke shape as PP_INT, at the glyph box
+        lcd_fill_rect((uint32_t)(gx + 6), (uint32_t)(top + 3), 2, (uint32_t)(bot - top - 5), LCD_EMPTY_VALUE);
+        ppDrawLine((int16_t)(gx + 7), (int16_t)(top + 3), (int16_t)(gx + 11), top);
+        ppDrawLine((int16_t)(gx + 8), (int16_t)(top + 3), (int16_t)(gx + 12), top);
+        ppDrawLine((int16_t)(gx + 6), (int16_t)(bot - 3), (int16_t)(gx + 2), bot);
+        ppDrawLine((int16_t)(gx + 7), (int16_t)(bot - 3), (int16_t)(gx + 3), bot);
+      }
+      else if(op == ITM_PIn || op == ITM_iPIn) {
+        // the ∏: top bar, two verticals
+        lcd_fill_rect((uint32_t)gx, (uint32_t)top, (uint32_t)gw, 2, LCD_EMPTY_VALUE);
+        lcd_fill_rect((uint32_t)(gx + 3), (uint32_t)(top + 2), 2, (uint32_t)(bot - top - 1), LCD_EMPTY_VALUE);
+        lcd_fill_rect((uint32_t)(gx + gw - 5), (uint32_t)(top + 2), 2, (uint32_t)(bot - top - 1), LCD_EMPTY_VALUE);
+      }
+      else {
+        // the Σ: top and bottom bars, chevron strokes between
+        int16_t mid = (int16_t)((top + bot) / 2);
+        lcd_fill_rect((uint32_t)gx, (uint32_t)top, (uint32_t)gw, 2, LCD_EMPTY_VALUE);
+        lcd_fill_rect((uint32_t)gx, (uint32_t)(bot - 1), (uint32_t)gw, 2, LCD_EMPTY_VALUE);
+        ppDrawLine((int16_t)(gx + 1), (int16_t)(top + 2), (int16_t)(gx + gw - 6), mid);
+        ppDrawLine((int16_t)(gx + 2), (int16_t)(top + 2), (int16_t)(gx + gw - 5), mid);
+        ppDrawLine((int16_t)(gx + gw - 6), mid, (int16_t)(gx + 1), (int16_t)(bot - 2));
+        ppDrawLine((int16_t)(gx + gw - 5), mid, (int16_t)(gx + 2), (int16_t)(bot - 2));
+      }
       return;
     }
 

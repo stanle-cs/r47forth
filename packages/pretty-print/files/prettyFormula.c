@@ -260,6 +260,101 @@ static uint8_t ppfCombine1(uint16_t item, uint8_t a, int aPrec,
 }
 
 
+/* ==== big operators (PP12) ==============================================
+ * A captured Sigma_n/Pi_n/integral-YX dispatch. The label param decodes
+ * through labelList (findNamedLabel returns index + FIRST_LABEL); the
+ * lookup is display-time best-effort — a program edit between capture
+ * and display falls back to the numeric form. */
+
+static void ppfLabelName(uint16_t param, char *out) {
+  if(param >= FIRST_LABEL && (uint32_t)(param - FIRST_LABEL) < numberOfLabels) {
+    const uint8_t *p = labelList[param - FIRST_LABEL].labelPointer;
+    if(p != NULL && (*(p - 1) == STRING_LABEL_VARIABLE || *(p - 1) == LOCAL_LABEL_VARIABLE)) {
+      uint8_t len = *p;
+      if(len > 0 && len <= 15) {
+        xcopy(out, p + 1, len);
+        out[len] = 0;
+        return;
+      }
+    }
+  }
+  sprintf(out, "LBL %u", (unsigned)param);
+}
+
+static uint8_t ppfBigop(uint16_t item, uint16_t label, const uint8_t *stepBytes,
+                        uint8_t fromN, uint8_t toN,
+                        uint8_t ctxFont, uint8_t childFont, int *outPrec) {
+  *outPrec = PPF_PREC_ATOM;
+  bool_t isInt = (item == ITM_INTEGRAL_YX);
+  uint8_t big = ppNewBox(PP_BIGOP, ctxFont);
+  if(big == PP_NONE || fromN == PP_NONE || toN == PP_NONE) {
+    return PP_NONE;
+  }
+  ppSetBoxTag(big, item);
+  ppSetFontDeep(fromN, childFont);
+  ppSetFontDeep(toN, childFont);
+
+  char lbl[24], text[64];
+  ppfLabelName(label, lbl);
+  if(isInt) {
+    // the d-variable rides in the step payload; decode its name,
+    // display-time best-effort like the label
+    uint16_t dvar = (uint16_t)(stepBytes[0] | ((uint16_t)stepBytes[1] << 8));
+    char dv[20];
+    strcpy(dv, "x");
+    if(dvar >= FIRST_NAMED_VARIABLE
+        && (uint32_t)(dvar - FIRST_NAMED_VARIABLE) < numberOfNamedVariables) {
+      const uint8_t *vn = allNamedVariables[dvar - FIRST_NAMED_VARIABLE].variableName;
+      if(vn[0] > 0 && vn[0] <= 15) {
+        xcopy(dv, vn + 1, vn[0]);
+        dv[vn[0]] = 0;
+      }
+    }
+    sprintf(text, "%s(%s)d%s", lbl, dv, dv);
+  }
+  else {
+    // sums iterate the label program over the counter n
+    sprintf(text, "%s(n)", lbl);
+  }
+  uint8_t body = ppfRun(text, ctxFont);
+  if(body == PP_NONE) {
+    return PP_NONE;
+  }
+
+  uint8_t under;
+  if(isInt) {
+    under = fromN;
+  }
+  else {
+    uint8_t hb  = ppNewBox(PP_HBOX, childFont);
+    uint8_t pre = ppfRun("n=", childFont);
+    if(hb == PP_NONE || pre == PP_NONE) {
+      return PP_NONE;
+    }
+    ppAppendChild(hb, pre);
+    ppAppendChild(hb, fromN);
+    // a non-unit step must be visible or the display lies
+    real34_t step;
+    xcopy(&step, stepBytes, 16);
+    if(!real34CompareEqual(&step, const34_1)) {
+      char sb[48], stext[52];
+      real34ToDisplayString(&step, amNone, sb, &standardFont, 60, 6, LIMITEXP, !FRONTSPACE, NOIRFRAC);
+      sprintf(stext, "," STD_DELTA "%s", sb);
+      uint8_t st = ppfRun(stext, childFont);
+      if(st == PP_NONE) {
+        return PP_NONE;
+      }
+      ppAppendChild(hb, st);
+    }
+    under = hb;
+  }
+  ppAppendChild(big, body);
+  ppAppendChild(big, under);
+  ppAppendChild(big, toN);
+  return big;
+}
+
+
 /* ==== capture tree -> layout ============================================ */
 
 static uint8_t ppfFromCaptureNode(uint8_t cap, uint8_t ctxFont, uint8_t childFont, int *outPrec) {
@@ -311,6 +406,16 @@ static uint8_t ppfFromCaptureNode(uint8_t cap, uint8_t ctxFont, uint8_t childFon
         return PP_NONE;
       }
       return ppfCombine2(nd->item, a, pa, b, pb, ctxFont, childFont, outPrec);
+    }
+    case PPN_BIGOP: {
+      int pf, pt;
+      uint8_t f = ppfFromCaptureNode(nd->child[0], childFont, childFont, &pf);
+      uint8_t t = ppfFromCaptureNode(nd->child[1], childFont, childFont, &pt);
+      if(f == PP_NONE || t == PP_NONE) {
+        return PP_NONE;
+      }
+      uint16_t label = (uint16_t)(nd->pad[0] | ((uint16_t)nd->pad[1] << 8));
+      return ppfBigop(nd->item, label, nd->payload, f, t, ctxFont, childFont, outPrec);
     }
     default:
       return PP_NONE;
@@ -434,6 +539,28 @@ bool_t ppfBuildEntry(const uint8_t *entry, uint8_t ctxFont, uint8_t childFont,
         int p;
         uint8_t n = ppfCombine2(item, stackNode[sp - 2], stackPrec[sp - 2],
                                 stackNode[sp - 1], stackPrec[sp - 1], ctxFont, childFont, &p);
+        if(n == PP_NONE) {
+          return false;
+        }
+        sp--;
+        stackNode[sp - 1] = n;
+        stackPrec[sp - 1] = p;
+        break;
+      }
+      case PPT_TKBIG: {
+        uint16_t item, label;
+        xcopy(&item, entry + off, 2);
+        off += 2;
+        xcopy(&label, entry + off, 2);
+        off += 2;
+        const uint8_t *step = entry + off;
+        off = (uint16_t)(off + 16);
+        if(sp < 2) {
+          return false;
+        }
+        int p;
+        uint8_t n = ppfBigop(item, label, step, stackNode[sp - 2], stackNode[sp - 1],
+                             ctxFont, childFont, &p);
         if(n == PP_NONE) {
           return false;
         }
