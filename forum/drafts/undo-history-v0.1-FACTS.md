@@ -62,7 +62,7 @@ wording.
   Undo works across the gap; the skipped state cannot be returned to.
 - Depth: ~25 levels of plain reals at stack size 4; ~16 at SSIZE8; hard
   cap 48.
-- Flash cost: +4208 bytes (1090504 -> 1094712, make dmcp5r47, re-measured after the audit round 1 fixes). NOTE: 4,208 B = 4.1 KiB — the post's "grows by 3.9 KB" line needs its number changed to 4.1 KB before posting.
+- Flash cost: +4264 bytes (1090512 -> 1094776, make dmcp5r47 CUSTOM_PKG=packages/undo-history, matched-pair re-measured 2026-08-26 after audit round 5; vanilla itself drifts a few bytes with the tip's version string, so only same-day pairs count). NOTE: 4,264 B = 4.2 KiB — the post's "grows by 3.9 KB" line needs its number changed to 4.2 KB before posting (it was 4.1 through round 4; round 5 added 24 B).
 - SRAM4 statics: +124 bytes.
 - Zip: 44 KB.
 
@@ -163,3 +163,19 @@ wording.
   level with the ~ on the anchor (never forward; redo returns).
 - f-UP no longer opens the view while a command prompt (TAM) is
   pending. Zip rebuilt again — attach the latest.
+
+## Audit rounds 2-5 (2026-08-26): the engine's corner semantics, settled
+- Rounds 2-4 fixed how the ~ (skipped-capture gap) composes with
+  merges, restores and the undo walk: the gap mark points the right
+  way after a skip, equal states on either side of a gap stay separate
+  levels, choosing a level then failing no longer confuses the cursor,
+  and no stale ~ appears on captures after you navigate away.
+- Round 5 (failure side): if memory is FULL and choosing a level
+  fails mid-restore, the single-level undo buffer could be left half
+  overwritten — pressing UNDO after that installed a state that never
+  existed. Now a failed restore either leaves everything untouched or
+  retires the single-level buffer (UNDO then walks the history ring
+  instead); a retry after freeing memory works. Two new tests drive
+  the calculator to genuine RAM-full to pin this.
+- Zip rebuilt: pkg_dist/undo-history.zip is now 51,758 B — attach the
+  LATEST zip; every earlier one lacks these fixes.

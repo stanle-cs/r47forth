@@ -219,6 +219,15 @@ the standing rule applies: reproducer red-then-green, named class, class
 test where enumerable — and the class name goes into
 `references/bug-classes.md` and DESIGN-HISTORY.md.
 
+**Rotate the question axis, not just the readers.** undo-history
+rounds 1–4 all asked "is the semantics right?" and every finding
+tracked the current fix wave; round 5 asked "what happens when it
+FAILS?" and surfaced a wave-0 defect (torn staging consumed later)
+plus the coverage hole hiding it — failure returns no fixture could
+reach. An axis the audit has never asked about is where wave-0 bugs
+survive four clean-looking rounds; success semantics, failure
+semantics, and pin vacuity are three different axes.
+
 ## What not to flag
 
 The full section is in `CODE_AUDIT.md` and the brief; the short form: the

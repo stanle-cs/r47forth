@@ -24,6 +24,13 @@ recorded in DESIGN-HISTORY.md; the round tag says where the evidence lives.
 - **Close path bypassing the funnel** (r3 R2; D-C2): a teardown arm that
   hand-clears some fields but skips the single full-cleanup funnel. Class
   test shape: poison every close site.
+- **Torn staging left consumable** (undo-history r5, U1-era, found by a
+  failure-axis round): a multi-slot write into a shared buffer aborts
+  mid-way; the failure path repairs bookkeeping but leaves the
+  half-written buffer indistinguishable from a valid one to its
+  consumer (an armed thereIsSomethingToUndo + a later plain undo()).
+  Hunt: every early return inside a loop that mutates shared state —
+  ask who reads that state believing a flag that predates the loop.
 - **Push-then-decline window** (C18, reproduced by its own fix in r5):
   caller commits a state flip, then calls a function entitled to do
   nothing; the committed state and the surface disagree.
@@ -165,6 +172,13 @@ recorded in DESIGN-HISTORY.md; the round tag says where the evidence lives.
 - **Fixture sized from the constant under test** (G2, twice): both sides
   of the comparison move together; and a tighter unrelated limit can bite
   first, silently doing the test's work.
+- **Success-only coverage of a two-sided contract** (undo-history r5
+  R16): a contract with distinct success and failure obligations whose
+  failure side no fixture can even reach (here: nothing in the battery
+  ever filled the pool, so every RAM_FULL return was unexecuted). The
+  first fixture to execute the failure path immediately caught a
+  second, functional bug sitting on it. Hunt: grep the subject's error
+  returns, then ask which test produces each error.
 - **Wrapper-only coverage** (D3-5): the battery drove the bracketed
   wrapper; the user-reachable unbracketed entry left the guard and spill
   dead code. Every reachable entry point gets its own pin.

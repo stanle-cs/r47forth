@@ -90,5 +90,14 @@ Run results are recorded in the stage commit message, not here.
 Round-2 additions: R13 (merge-path gap step-over, red-first x4), R14
 (abandoned-branch gap does not mark the restored branch, red-first),
 B15 self-pin + refusal assert (mutation-proven: pre-flight disabled ->
-red). R2-3's cursor repair is trace-verified only — RAM_FULL
-mid-restore is not batteries-enumerable (R10 precedent).
+red). R2-3's cursor repair was trace-verified only until round 5:
+the pool-hoard helpers (historyTestHoardPool/FreeHoard) made RAM_FULL
+mid-restore enumerable after all, and R16's failure + retry legs now
+execute it.
+
+Round-5 additions (both drive the funnel's failure returns, which no
+earlier test could reach; the hoard probes print upstream's
+OUT OF MEMORY diagnostics into the log by design):
+
+| A4 | clearing the pending gap on a FAILED restore (funnel clear moved above the failure returns) | ring battery R16 (slot-0 staging failure: gap survives, cursor stays live, machine and armed buffer untouched; freed-memory retry succeeds and abandons the gap) |
+| A5 | a mid-staging failure leaving the torn SAVED bank consumable | ring battery R17 (X stages, Y's grow hits RAM_FULL, browser-path failure discarded, then fnUndo: the torn bank must not be installed; red-first — pre-fix the machine landed on level-0 X beside pre-op Y) |

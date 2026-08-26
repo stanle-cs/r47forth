@@ -371,7 +371,17 @@ static bool_t historyRestoreToIndex(uint8_t index) {
     dest = SAVED_REGISTER_X + rec.slot;
     reallocateRegister(dest, rec.dataType, rec.allocParam, amNone);
     if(lastErrorCode == ERROR_RAM_FULL) {
-      return false;   // ring untouched; nothing consumed the partial staging
+      if(i > 0) {
+        // Slots below i already hold this entry's payloads: the bank no
+        // longer describes any state that ever existed, and the browser
+        // path leaves thereIsSomethingToUndo armed for a later plain
+        // undo() to consume it (audit r5, cross-refuted). A torn bank is
+        // retired; a slot-0 failure mutates nothing and keeps the
+        // user's single-level undo (R16/R17).
+        thereIsSomethingToUndo = false;
+      }
+      return false;   // ring untouched; failure-side bookkeeping lives in
+                      // the funnel so every caller is covered
     }
     xcopy(getRegisterDataPointer(dest), historyRing + offset, rec.payloadBytes);
     setRegisterTag(dest, rec.tag);
@@ -389,6 +399,10 @@ static bool_t historyRestoreToIndex(uint8_t index) {
     }
     if(savedStatisticalSumsPointer == NULL) {
       lastErrorCode = ERROR_RAM_FULL;
+      thereIsSomethingToUndo = false;   // every register and flag is staged
+                                        // already: the bank holds level
+                                        // state, not the armed pre-op
+                                        // state (audit r5)
       return false;
     }
     xcopy(savedStatisticalSumsPointer, historyRing + offset, HISTORY_SUMS_BYTES);
@@ -617,6 +631,46 @@ static bool_t historyTestIsLonI(calcRegister_t regist, uint32_t expected) {
   equal = longIntegerCompareUInt(li, expected) == 0;
   longIntegerFree(li);
   return equal;
+}
+
+static void historyTestWriteString(calcRegister_t regist, uint16_t bytes, char fill) {
+  reallocateRegister(regist, dtString, TO_BLOCKS(bytes + 1), amNone);
+  memset(REGISTER_STRING_DATA(regist), fill, bytes);
+  REGISTER_STRING_DATA(regist)[bytes] = 0;
+}
+
+// Drain the free pool so the next growing reallocateRegister fails with
+// ERROR_RAM_FULL — R16/R17 drive the restore funnel's FAILURE returns,
+// which nothing else in the battery reaches (it never fills the pool).
+// Halving rides out fragmentation; the pins do not assume a full drain —
+// their own !ok / RAM_FULL asserts are the reached-state proof.
+#define HISTORY_TEST_HOARD_MAX 32
+static void  *historyTestHoard[HISTORY_TEST_HOARD_MAX];
+static size_t historyTestHoardBlocks[HISTORY_TEST_HOARD_MAX];
+static int    historyTestHoardCount = 0;
+
+static void historyTestHoardPool(void) {
+  uint32_t bytes = getFreeRamMemory();
+  while(bytes >= TO_BYTES(1) && historyTestHoardCount < HISTORY_TEST_HOARD_MAX) {
+    size_t blocks = TO_BLOCKS(bytes);
+    void *p = allocC47Blocks(blocks);
+    if(p != NULL) {
+      historyTestHoard[historyTestHoardCount] = p;
+      historyTestHoardBlocks[historyTestHoardCount] = blocks;
+      historyTestHoardCount++;
+      bytes = getFreeRamMemory();
+    }
+    else {
+      bytes >>= 1;
+    }
+  }
+}
+
+static void historyTestFreeHoard(void) {
+  while(historyTestHoardCount > 0) {
+    historyTestHoardCount--;
+    freeC47Blocks(historyTestHoard[historyTestHoardCount], historyTestHoardBlocks[historyTestHoardCount]);
+  }
 }
 
 // One known machine baseline for the battery: no pending single-level undo,
@@ -1137,6 +1191,97 @@ void historyTestRing(uint16_t unusedButMandatoryParameter) {
     if(h.flags & HISTORY_ENTRY_GAPBEFORE) {
       historyTestFail("R15 a ring restore must abandon the stale pending gap");
     }
+  }
+
+  { // R16 (audit r5): the funnel's FAILURE-side contract. A restore that
+    // fails at the FIRST staging slot mutates nothing: the pending gap
+    // survives (the live branch was not abandoned), the cursor stays
+    // live, the machine and the armed single-level buffer are untouched
+    // — and a retry after memory is freed succeeds and abandons the gap.
+    // The mutation "clear the gap on failure too" rides the whole
+    // battery green without this pin.
+    historyTestBaseline();
+    historyTestWriteLonI(REGISTER_Y, 1);
+    historyTestWriteLonI(REGISTER_Z, 1);
+    historyTestWriteLonI(REGISTER_T, 1);
+    historyTestWriteString(REGISTER_X, 500, 'B');
+    saveForUndo();                       // entry 0: X = 500-byte string
+    historyTestWriteLonI(REGISTER_X, 2);
+    saveForUndo();                       // entry 1: {2}
+    historyTestWriteString(REGISTER_X, 400, 'G');
+    historyTestWriteString(REGISTER_Y, 400, 'H');
+    historyTestWriteString(REGISTER_Z, 400, 'I');
+    saveForUndo();                       // over the entry cap -> skipped, gap pending
+    if(undoHistoryDepth() != 2 || !historyGapPending) {
+      historyTestFail("R16 fixture: two stored levels and a pending gap");
+    }
+    historyTestHoardPool();              // X's 400->500 grow must fail at slot 0
+    calcMode = CM_NORMAL;
+    if(undoHistoryRestoreLevel(0)) {
+      historyTestFail("R16 fixture: the restore must FAIL under a hoarded pool");
+    }
+    else if(lastErrorCode != ERROR_RAM_FULL) {
+      historyTestFail("R16 fixture: the failure must be the staging RAM_FULL");
+    }
+    lastErrorCode = ERROR_NONE;
+    if(!historyGapPending) {
+      historyTestFail("R16 a FAILED restore must keep the pending gap");
+    }
+    if(historyCursor != HISTORY_CURSOR_NONE) {
+      historyTestFail("R16 a failed slot-0 staging leaves the cursor live");
+    }
+    if(!thereIsSomethingToUndo) {
+      historyTestFail("R16 a failed slot-0 staging keeps the buffer armed");
+    }
+    if(getRegisterDataType(REGISTER_X) != dtString || REGISTER_STRING_DATA(REGISTER_X)[0] != 'G') {
+      historyTestFail("R16 a failed restore leaves the live state untouched");
+    }
+    historyTestFreeHoard();
+    if(!undoHistoryRestoreLevel(0)) {
+      historyTestFail("R16 the retry after freeing memory must succeed");
+    }
+    if(historyGapPending) {
+      historyTestFail("R16 a successful retry abandons the pending gap");
+    }
+    if(getRegisterDataType(REGISTER_X) != dtString || REGISTER_STRING_DATA(REGISTER_X)[0] != 'B') {
+      historyTestFail("R16 the retry must land on the selected level");
+    }
+    lastErrorCode = ERROR_NONE;
+  }
+
+  { // R17 (audit r5, cross-refuted): a restore that fails MID-STAGING —
+    // some SAVED_* slots already hold this entry's payloads — must not
+    // leave the single-level buffer armed: the browser discards the
+    // failure and a later plain undo() would install a state that never
+    // existed (level-0 X beside pre-op Y). Class: torn staging consumed
+    // by a later reader. A slot-0 failure (R16) keeps the buffer.
+    historyTestBaseline();
+    historyTestWriteLonI(REGISTER_Z, 1);
+    historyTestWriteLonI(REGISTER_T, 1);
+    historyTestWriteLonI(REGISTER_X, 7);
+    historyTestWriteString(REGISTER_Y, 500, 'C');
+    saveForUndo();                       // entry 0: {X=7, Y=500-byte string}
+    historyTestWriteLonI(REGISTER_X, 9);
+    historyTestWriteString(REGISTER_Y, 400, 'F');
+    saveForUndo();                       // entry 1 and the armed buffer: {X=9, Y=400B}
+    if(undoHistoryDepth() != 2) {
+      historyTestFail("R17 fixture: both setup captures must fit the ring");
+    }
+    historyTestHoardPool();              // X stages (7 over 9); Y's 400->500 grow fails
+    calcMode = CM_NORMAL;
+    if(undoHistoryRestoreLevel(0)) {
+      historyTestFail("R17 fixture: the restore must FAIL under a hoarded pool");
+    }
+    else if(lastErrorCode != ERROR_RAM_FULL) {
+      historyTestFail("R17 fixture: the failure must be the staging RAM_FULL");
+    }
+    lastErrorCode = ERROR_NONE;          // the UI shows and clears the error
+    fnUndo(NOPARAM);                     // must NOT consume the torn bank
+    if(historyTestIsLonI(REGISTER_X, 7)) {
+      historyTestFail("R17 a torn SAVED bank must never be consumed by undo()");
+    }
+    historyTestFreeHoard();
+    lastErrorCode = ERROR_NONE;
   }
 
   historyTestBaseline();                 // leave no half-navigated state behind

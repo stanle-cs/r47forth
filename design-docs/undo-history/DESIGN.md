@@ -25,7 +25,15 @@ ends:
   the chosen entry back into SAVED_* (`reallocateRegister` + payload copy +
   flags/lr/sums staging), sets `thereIsSomethingToUndo`, and calls the
   existing `undo()` — SIGMA fixups, solver-flag reconciliation and
-  entry-status bits stay upstream's single source of truth.
+  entry-status bits stay upstream's single source of truth. The failure
+  side is funnel-owned too (audit r5): a staging failure at the first
+  slot mutates nothing and leaves the armed single-level buffer alone,
+  while a failure after any slot has staged — or at the sums step —
+  retires the buffer (`thereIsSomethingToUndo = false`), because a torn
+  or level-staged bank must never be consumed by a later plain `undo()`.
+  Restores are not transactional; nothing upstream is (upstream's own
+  `undo()` tears the live state on the same failure), so honesty about
+  the buffer beats pretending to a guarantee the firmware cannot make.
 
 Entries are **complete states** (stack X..top per the entry's own SSIZE
 flag, L, systemFlags, lrSelection/lrChosen, optional statistical sums, a

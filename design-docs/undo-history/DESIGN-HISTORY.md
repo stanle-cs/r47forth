@@ -224,3 +224,24 @@
   fnRedo restores leaked the pending gap. Moved into the
   historyRestoreToIndex funnel (bug class: structural rule spelled
   per-site); caller clears removed; R15 red-first. Rounds 5+6 owed.
+- **2026-08-26 audit round 5** (on round 4's delta; both readers
+  confirmed the delta itself CLEAN — the funnel clear is right at all
+  four call sites, and gap-pending with a non-live cursor is
+  structurally unreachable). The round rotated its question to the
+  FAILURE side and the fix-trap streak ended at four: R5-2 is
+  U1-original. R5-1 (coverage): the failure returns of
+  historyRestoreToIndex were unreachable by any test — pool-hoard
+  helpers added, R16 pins the slot-0 failure contract (gap, cursor,
+  live state, armed buffer all survive; the freed-memory retry
+  succeeds and abandons the gap), which also gives R2-3's trace-only
+  cursor repair executable coverage and retires TESTING.md's
+  "RAM_FULL mid-restore is not batteries-enumerable" ruling. R5-2
+  (functional, cross-refuted by Sol after Gemini raised it): a
+  mid-staging failure tears SAVED_* while the browser leaves
+  thereIsSomethingToUndo armed — the next plain undo() installs a
+  state that never existed. Fixed in the funnel: any failure after
+  the first mutated slot (or at the sums step) retires the buffer;
+  slot-0 failures keep it. Transactional staging rejected (no
+  upstream convention — upstream undo() tears the live state the
+  same way; and rebuild-the-bank is the relocating-state fix shape).
+  R17 red-first. Rounds 6+7 owed.
