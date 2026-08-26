@@ -1669,6 +1669,7 @@ bool_t isFunctionOldParam16(uint16_t func) {
   void fnTripleIfromVZ            (uint16_t unusedButMandatoryParameter) {}
   void fnTripleFlipPolar          (uint16_t unusedButMandatoryParameter) {}
   void fnPrettyToggle             (uint16_t unusedButMandatoryParameter) {}
+  void fnPrettyShow               (uint16_t unusedButMandatoryParameter) {}
   void fnAlphaLower               (uint16_t unusedButMandatoryParameter) {}
   void fnAlphaUpper               (uint16_t unusedButMandatoryParameter) {}
   void fnAlphaLeft                (uint16_t unusedButMandatoryParameter) {}
@@ -2288,7 +2289,7 @@ TO_QSPI const item_t indexOfItems[] = {
 /*  456 */  { fnStatSum,                       SUM_1onY2,                   STD_SIGMA "y" STD_SUP_MINUS STD_SUP_2,         STD_SIGMA "y" STD_SUP_MINUS STD_SUP_2,         (0 << TAM_MAX_BITS) |     0, CAT_FNCT | SLS_ENABLED   | US_ENABLED   | EIM_DISABLED | PTP_NONE         | HG_ENABLED         | RESULT_IN_X },
 /*  457 */  { fnStatSum,                       SUM_X3,                      STD_SIGMA "x" STD_SUP_3,                       STD_SIGMA "x" STD_SUP_3,                       (0 << TAM_MAX_BITS) |     0, CAT_FNCT | SLS_ENABLED   | US_ENABLED   | EIM_DISABLED | PTP_NONE         | HG_ENABLED         | RESULT_IN_X },
 /*  458 */  { fnStatSum,                       SUM_X4,                      STD_SIGMA "x" STD_SUP_4,                       STD_SIGMA "x" STD_SUP_4,                       (0 << TAM_MAX_BITS) |     0, CAT_FNCT | SLS_ENABLED   | US_ENABLED   | EIM_DISABLED | PTP_NONE         | HG_ENABLED         | RESULT_IN_X },
-/*  459 */  { itemToBeCoded,                   NOPARAM,                     "0459",                                        "0459",                                        (0 << TAM_MAX_BITS) |     0, CAT_FREE | SLS_ENABLED   | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
+/*  459 */  { fnPrettyShow,                    NOPARAM,                     "PSHOW",                                       "PSHOW",                                       (0 << TAM_MAX_BITS) |     0, CAT_FNCT | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
 /*  460 */  { fnPrettyToggle,                  NOPARAM,                     "PPON",                                        "PPON",                                        (0 << TAM_MAX_BITS) |     0, CAT_FNCT | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
 /*  461 */  { itemToBeCoded,                   NOPARAM,                     "0461",                                        "0461",                                        (0 << TAM_MAX_BITS) |     0, CAT_FREE | SLS_ENABLED   | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
 /*  462 */  { itemToBeCoded,                   NOPARAM,                     "0462",                                        "0462",                                        (0 << TAM_MAX_BITS) |     0, CAT_FREE | SLS_ENABLED   | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },

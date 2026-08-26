@@ -16,7 +16,7 @@
 #if !defined(PRETTYINTERNAL_H)
 #define PRETTYINTERNAL_H
 
-enum { PP_RUN = 0, PP_HBOX = 1, PP_FRAC = 2 };
+enum { PP_RUN = 0, PP_HBOX = 1, PP_FRAC = 2, PP_RAD = 3, PP_SUP = 4 };
 enum { PP_FONT_NUMERIC = 0, PP_FONT_STANDARD = 1, PP_FONT_TINY = 2 };
 
 #define PP_NONE        0xFF
@@ -48,10 +48,15 @@ const char     *ppTextAt(uint16_t off);
 bool_t          ppRenderRightAligned(uint8_t root, int16_t xRight,
                                      int16_t bandTop, int16_t bandBottom,
                                      int16_t preferredBase);
+void            ppPaintAt(uint8_t root, int16_t x, int16_t baseline);
 int16_t         ppPreferredBase(int16_t baseY);   ///< baseY + numericFont box ascent
 
 // prettyValue.c — converters and the toggle's test hook
 bool_t ppParseFraction(const char *src, uint8_t ctxFont, uint8_t childFont, uint8_t *rootOut);
+bool_t ppParseExponent(const char *src, uint8_t ctxFont, uint8_t childFont, uint8_t *rootOut);
+bool_t ppParseIrfrac  (const char *src, uint8_t ctxFont, uint8_t childFont, uint8_t *rootOut);
+bool_t ppParseRealAny (const char *src, uint8_t ctxFont, uint8_t childFont, uint8_t *rootOut);
+bool_t ppParseComplex (const char *src, uint8_t ctxFont, uint8_t childFont, uint8_t *rootOut);
 void   prettySetEnabled(bool_t on);
 
 #endif // !PRETTYINTERNAL_H

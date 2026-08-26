@@ -29,10 +29,15 @@ bool_t prettyEnabled (void);
 // contract every upstream branch honours via `lineWidth = w`).
 bool_t prettyTryRegisterLine(calcRegister_t regist, int16_t baseY, int16_t *lineWidth);
 
+// PSHOW (ITM_PSHOW, item row 459): full-screen pretty view of X on the
+// fnPixel manual-paint protocol; falls back to fnC47Show.
+void fnPrettyShow(uint16_t unusedButMandatoryParameter);
+
 // testSuite coverage drivers (prettyTest.c, PC_BUILD only; registered in
 // funcTestNoParam with coverageDriver = 1).
 void prettyTestMeasure (uint16_t unusedButMandatoryParameter);
 void prettyTestPixels  (uint16_t unusedButMandatoryParameter);
 void prettyTestFallback(uint16_t unusedButMandatoryParameter);
+void prettyTestShow    (uint16_t unusedButMandatoryParameter);
 
 #endif // !PRETTYPRINT_H

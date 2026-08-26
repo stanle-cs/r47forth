@@ -29,6 +29,12 @@ typedef struct {
   int16_t barThick;
   int16_t fracGap;     ///< clear rows between bar and numerator/denominator ink
   int16_t overhang;    ///< bar horizontal overhang past the wider child, each side
+  int16_t vincThick;   ///< radical vinculum thickness
+  int16_t radGap;      ///< clear rows between radicand ink and the vinculum
+  int16_t supDrop;     ///< superscript baseline raise above the base baseline
+  int16_t radAbove;    ///< radical-sign glyph: ink rows above its baseline
+  int16_t radInk;      ///< radical-sign glyph: total ink rows
+  int16_t radAdvance;  ///< radical-sign glyph: advance width (leading cols dropped)
 } ppMetrics_t;
 
 static ppMetrics_t ppMet[3];
@@ -60,6 +66,21 @@ static void ppMetricsInit(void) {
     ppMet[i].barThick  = (i == PP_FONT_NUMERIC) ? 2 : 1;
     ppMet[i].fracGap   = (i == PP_FONT_NUMERIC) ? 2 : 1;
     ppMet[i].overhang  = (i == PP_FONT_NUMERIC) ? 2 : 1;
+    ppMet[i].vincThick = (i == PP_FONT_NUMERIC) ? 2 : 1;
+    ppMet[i].radGap    = (i == PP_FONT_TINY) ? 0 : 1;
+    ppMet[i].supDrop   = (i == PP_FONT_NUMERIC) ? 10 : (i == PP_FONT_STANDARD ? 6 : 4);
+    {
+      // 0xa21a = STD_SQUARE_ROOT
+      const glyph_t *rad = ppGlyphOf(f[i], 0xa21a);
+      if(rad == NULL) {
+        ppMetOk = false;
+      }
+      else {
+        ppMet[i].radAbove   = rad->rowsAboveGlyph;
+        ppMet[i].radInk     = rad->rowsGlyph;
+        ppMet[i].radAdvance = rad->colsGlyph + rad->colsAfterGlyph;
+      }
+    }
   }
   ppMetReady = true;
 }
@@ -202,6 +223,58 @@ bool_t ppMeasure(uint8_t n, uint8_t depth) {
       return true;
     }
 
+    case PP_RAD: {
+      uint8_t child = nd->firstChild;
+      if(child == PP_NONE || ppPool[child].nextSibling != PP_NONE) {
+        return false;
+      }
+      if(!ppMeasure(child, depth + 1)) {
+        return false;
+      }
+      // The raised sign glyph must cover the radicand's height; taller
+      // radicands would need a synthesized sign (deferred past PP2).
+      if(ppPool[child].ascent + ppPool[child].descent > m->radInk + 3) {
+        return false;
+      }
+      ppPool[child].relX    = m->radAdvance;
+      ppPool[child].relBase = 0;
+      nd->width   = m->radAdvance + ppPool[child].width + m->overhang;
+      nd->ascent  = ppPool[child].ascent + m->radGap + m->vincThick;
+      nd->descent = ppPool[child].descent;
+      if(m->radInk - nd->ascent > nd->descent) {
+        nd->descent = m->radInk - nd->ascent;   // the raised sign's tail
+      }
+      return true;
+    }
+
+    case PP_SUP: {
+      uint8_t base = nd->firstChild;
+      if(base == PP_NONE) {
+        return false;
+      }
+      uint8_t exp = ppPool[base].nextSibling;
+      if(exp == PP_NONE || ppPool[exp].nextSibling != PP_NONE) {
+        return false;
+      }
+      if(!ppMeasure(base, depth + 1) || !ppMeasure(exp, depth + 1)) {
+        return false;
+      }
+      ppPool[base].relX    = 0;
+      ppPool[base].relBase = 0;
+      ppPool[exp].relX     = ppPool[base].width + 1;
+      ppPool[exp].relBase  = -m->supDrop;
+      nd->width   = ppPool[base].width + 1 + ppPool[exp].width;
+      nd->ascent  = ppPool[base].ascent;
+      if(m->supDrop + ppPool[exp].ascent > nd->ascent) {
+        nd->ascent = m->supDrop + ppPool[exp].ascent;
+      }
+      nd->descent = ppPool[base].descent;
+      if(ppPool[exp].descent - m->supDrop > nd->descent) {
+        nd->descent = ppPool[exp].descent - m->supDrop;
+      }
+      return true;
+    }
+
     case PP_FRAC: {
       uint8_t num = nd->firstChild;
       if(num == PP_NONE) {
@@ -245,6 +318,19 @@ static void ppPaint(uint8_t n, int16_t x, int16_t baseline) {
       showString(ppText + nd->textOff, m->font, x, baseline - m->boxAscent, vmNormal, false, true);
       return;
 
+    case PP_RAD: {
+      // Sign first (own columns), then the radicand, then the vinculum
+      // LAST — the binding paint-order rule: glyph-box pre-clears wipe
+      // any rule painted before their glyphs.
+      int16_t vincTop = baseline - ppPool[nd->firstChild].ascent - m->radGap - m->vincThick;
+      showString("\xa2\x1a", m->font, x, vincTop - m->radAbove, vmNormal, false, true);
+      ppPaint(nd->firstChild, x + m->radAdvance, baseline);
+      lcd_fill_rect(x + m->radAdvance - 1, vincTop,
+                    nd->width - m->radAdvance + 1, m->vincThick, LCD_EMPTY_VALUE);
+      return;
+    }
+
+    case PP_SUP:
     case PP_FRAC:
     case PP_HBOX:
       for(uint8_t c = nd->firstChild; c != PP_NONE; c = ppPool[c].nextSibling) {
@@ -265,6 +351,12 @@ static void ppPaint(uint8_t n, int16_t x, int16_t baseline) {
   }
 }
 
+
+void ppPaintAt(uint8_t root, int16_t x, int16_t baseline) {
+  if(root < ppNodeCount && ppMetricsOk()) {
+    ppPaint(root, x, baseline);
+  }
+}
 
 bool_t ppRenderRightAligned(uint8_t root, int16_t xRight,
                             int16_t bandTop, int16_t bandBottom,

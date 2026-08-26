@@ -481,7 +481,7 @@
 #define ITM_SIGMA1ony2               456
 #define ITM_SIGMAx3                  457
 #define ITM_SIGMAx4                  458
-#define ITM_0459                     459
+#define ITM_PSHOW                    459  // pretty-print package: full-screen pretty SHOW
 #define ITM_PPON                     460  // pretty-print package: natural-display toggle
 #define ITM_0461                     461
 #define ITM_0462                     462

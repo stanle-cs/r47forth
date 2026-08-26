@@ -120,6 +120,96 @@ void prettyTestMeasure(uint16_t unusedButMandatoryParameter) {
     }
   }
 
+  // M5: radical over a numeric digit — the standalone-√2 shape.
+  ppReset();
+  {
+    uint8_t rad = ppNewBox(PP_RAD, PP_FONT_NUMERIC);
+    uint8_t arg = ppNewRun("2", 1, PP_FONT_NUMERIC);
+    ppAppendChild(rad, arg);
+    if(rad == PP_NONE || arg == PP_NONE || !ppMeasure(rad, 0)) {
+      ppTestFail("M5 build/measure");
+    }
+    else {
+      const ppNode_t *r = ppNodeAt(rad);
+      if(r->ascent  != 29) ppTestFailInt("M5 ascent",  29, r->ascent);   // 26 + radGap 1 + vinc 2
+      if(r->descent !=  0) ppTestFailInt("M5 descent",  0, r->descent);
+    }
+  }
+
+  // M6: exponent form — mantissa ·₁₀⁴⁰ becomes SUP(base "…·10", exp "40").
+  ppReset();
+  {
+    static const char expForm[] = "1.5" "\x80\xb7" "\xa4\x7d" "\xa1\x64" "\xa1\x60";
+    static const char expBase[] = "1.5" "\x80\xb7" "10";
+    if(!ppParseExponent(expForm, PP_FONT_NUMERIC, PP_FONT_STANDARD, &root)) {
+      ppTestFail("M6 parse");
+    }
+    else {
+      const ppNode_t *s = ppNodeAt(root);
+      uint8_t base = (s != NULL && s->kind == PP_SUP) ? s->firstChild : PP_NONE;
+      uint8_t exp  = (base != PP_NONE) ? ppNodeAt(base)->nextSibling : PP_NONE;
+      if(base == PP_NONE || strcmp(ppTextAt(ppNodeAt(base)->textOff), expBase) != 0) {
+        ppTestFail("M6 base text");
+      }
+      if(exp == PP_NONE || strcmp(ppTextAt(ppNodeAt(exp)->textOff), "40") != 0) {
+        ppTestFail("M6 exponent text");
+      }
+    }
+  }
+
+  // M7: IRFRAC √3/2 — RAD inside the numerator of a FRAC.
+  ppReset();
+  {
+    static const char rt3over2[] = "\xa2\x1a" "\xa0\x83" "/" "\xa0\x82";
+    if(!ppParseIrfrac(rt3over2, PP_FONT_NUMERIC, PP_FONT_STANDARD, &root)) {
+      ppTestFail("M7 parse");
+    }
+    else {
+      const ppNode_t *r = ppNodeAt(root);
+      uint8_t fr = (r != NULL && r->kind == PP_HBOX) ? r->firstChild : PP_NONE;
+      if(fr == PP_NONE || ppNodeAt(fr)->kind != PP_FRAC) {
+        ppTestFail("M7 frac node");
+      }
+      else {
+        uint8_t numBox = ppNodeAt(fr)->firstChild;
+        uint8_t den    = (numBox != PP_NONE) ? ppNodeAt(numBox)->nextSibling : PP_NONE;
+        uint8_t rad    = (numBox != PP_NONE) ? ppNodeAt(numBox)->firstChild : PP_NONE;
+        if(rad == PP_NONE || ppNodeAt(rad)->kind != PP_RAD) {
+          ppTestFail("M7 radical in numerator");
+        }
+        else if(strcmp(ppTextAt(ppNodeAt(ppNodeAt(rad)->firstChild)->textOff), "3") != 0) {
+          ppTestFail("M7 radicand != 3");
+        }
+        if(den == PP_NONE || strcmp(ppTextAt(ppNodeAt(den)->textOff), "2") != 0) {
+          ppTestFail("M7 denominator != 2");
+        }
+      }
+    }
+  }
+
+  // M8: IRFRAC 3×π/4 accepted; paren-power and bare-name forms decline.
+  ppReset();
+  {
+    static const char threePiOver4[] = "3" "\x80\xd7" "\x83\xc0" "/" "\xa0\x84";
+    if(!ppParseIrfrac(threePiOver4, PP_FONT_NUMERIC, PP_FONT_STANDARD, &root)) {
+      ppTestFail("M8 3xpi/4 parse");
+    }
+  }
+  ppReset();
+  {
+    static const char piSquared[] = "(" "\x83\xc0" "\xa1\x62" "\xa0\x0a" "\xa0\x0a" ")";
+    if(ppParseIrfrac(piSquared, PP_FONT_NUMERIC, PP_FONT_STANDARD, &root)) {
+      ppTestFail("M8 paren form accepted");
+    }
+  }
+  ppReset();
+  {
+    static const char barePi[] = "\x83\xc0";
+    if(ppParseIrfrac(barePi, PP_FONT_NUMERIC, PP_FONT_STANDARD, &root)) {
+      ppTestFail("M8 bare name accepted");
+    }
+  }
+
   // M4: parser rejections.
   ppReset();
   if(ppParseFraction("3/4", PP_FONT_NUMERIC, PP_FONT_STANDARD, &root)) {
@@ -237,6 +327,124 @@ void prettyTestPixels(uint16_t unusedButMandatoryParameter) {
   if(ppTestRowAllLit(149, x0, x1)) ppTestFail("P5 upstream form identical to bar");
   prettySetEnabled(true);
 
+  // P4 (PP2): √2 via IRFRAC — vinculum at rows 131-132 (baseline 160,
+  // numeric radicand ink top 134, radGap 1, vincThick 2), gap row 133.
+  {
+    bool_t hadIrfrac = getSystemFlag(FLAG_IRFRAC);
+    uint8_t hadIrStatus = IrFractionsCurrentStatus;
+    clearSystemFlag(FLAG_FRACT);
+    setSystemFlag(FLAG_IRFRAC);
+    IrFractionsCurrentStatus = CF_NORMAL;
+    ppTestSetRealX("1.414213562373095048801688724209698");
+    ppTestClearBand();
+    refreshRegisterLine(REGISTER_X);
+
+    // find the vinculum: a lit run of >= 10 px at row 131 in the right half
+    uint32_t runLen = 0, bestLen = 0, bestEnd = 0;
+    for(uint32_t x = 200; x < SCREEN_WIDTH; x++) {
+      if(lcd_buffer_pixel_on(x, 131)) {
+        runLen++;
+        if(runLen > bestLen) { bestLen = runLen; bestEnd = x; }
+      }
+      else {
+        runLen = 0;
+      }
+    }
+    if(bestLen < 10) {
+      ppTestFail("P4 vinculum row 131 missing");
+    }
+    else {
+      uint32_t vx0 = bestEnd - bestLen + 1, vx1 = bestEnd;
+      if(!ppTestRowAllLit(132, vx0, vx1)) ppTestFail("P4 vinculum row 132 missing");
+      // gap/ink probes stay in the radicand's columns (right end of the
+      // run) — the sign's own diagonal legitimately crosses row 133 on
+      // the left
+      if(ppTestRowAnyLit(133, vx1 - 8, vx1)) ppTestFail("P4 gap row 133 not clear");
+      if(!ppTestRectAnyLit(134, 159, vx1 - 10, vx1)) ppTestFail("P4 radicand ink missing");
+    }
+    if(!hadIrfrac) {
+      clearSystemFlag(FLAG_IRFRAC);
+    }
+    IrFractionsCurrentStatus = hadIrStatus;
+  }
+
+  if(hadFract) {
+    setSystemFlag(FLAG_FRACT);
+  }
+  else {
+    clearSystemFlag(FLAG_FRACT);
+  }
+  ppTestWriteLonI(REGISTER_X, ppTestFailures);
+}
+
+
+/* ==== prettyTestShow ==================================================== */
+
+void prettyTestShow(uint16_t unusedButMandatoryParameter) {
+  (void)unusedButMandatoryParameter;
+  ppTestFailures = 0;
+
+  bool_t hadFract = getSystemFlag(FLAG_FRACT);
+  int16_t hadScrUpd = screenUpdatingMode;
+  bool_t hadHolds = screenHoldsDrawnPixels;
+  calcMode = CM_NORMAL;
+  temporaryInformation = TI_NO_INFO;
+  lastErrorCode = 0;
+  setSystemFlag(FLAG_FRACT);
+  prettySetEnabled(true);
+  ppTestSetRealX("0.75");
+
+  screenUpdatingMode = SCRUPD_AUTO;
+  screenHoldsDrawnPixels = false;
+  fnPrettyShow(NOPARAM);
+
+  // frame lines at 20 and 168, full width
+  if(!ppTestRowAllLit(20, 0, SCREEN_WIDTH - 1))  ppTestFail("S1 frame line 20 missing");
+  if(!ppTestRowAllLit(168, 0, SCREEN_WIDTH - 1)) ppTestFail("S1 frame line 168 missing");
+
+  // centered 3/4 at the numeric/numeric rung: ascent 39, descent 19,
+  // baseline (21+167-58)/2 + 39 = 104, bar rows 93-94
+  {
+    uint32_t runLen = 0, bestLen = 0, bestEnd = 0;
+    for(uint32_t x = 0; x < SCREEN_WIDTH; x++) {
+      if(lcd_buffer_pixel_on(x, 93)) {
+        runLen++;
+        if(runLen > bestLen) { bestLen = runLen; bestEnd = x; }
+      }
+      else {
+        runLen = 0;
+      }
+    }
+    if(bestLen < 10) {
+      ppTestFail("S2 bar row 93 missing");
+    }
+    else {
+      uint32_t bx0 = bestEnd - bestLen + 1, bx1 = bestEnd;
+      if(!ppTestRowAllLit(94, bx0, bx1)) ppTestFail("S2 bar row 94 missing");
+      // roughly centered: the bar's midpoint within 40 px of screen center
+      int32_t mid = (int32_t)(bx0 + bx1) / 2;
+      if(mid < SCREEN_WIDTH / 2 - 40 || mid > SCREEN_WIDTH / 2 + 40) {
+        ppTestFail("S2 bar not centered");
+      }
+    }
+  }
+
+  // manual-paint protocol armed
+  if(!(screenUpdatingMode & SCRUPD_MANUAL_STACK)) ppTestFail("S3 manual stack bit not set");
+  if(!screenHoldsDrawnPixels)                     ppTestFail("S3 screenHoldsDrawnPixels not set");
+
+  // fallback: unsupported type must reach fnC47Show (TI changes)
+  screenUpdatingMode = SCRUPD_AUTO;
+  screenHoldsDrawnPixels = false;
+  reallocateRegister(REGISTER_X, dtString, TO_BLOCKS(4), amNone);
+  strcpy(REGISTER_STRING_DATA(REGISTER_X), "abc");
+  temporaryInformation = TI_NO_INFO;
+  fnPrettyShow(NOPARAM);
+  if(temporaryInformation == TI_NO_INFO) ppTestFail("S4 fallback did not reach SHOW");
+
+  temporaryInformation = TI_NO_INFO;
+  screenUpdatingMode = hadScrUpd;
+  screenHoldsDrawnPixels = hadHolds;
   if(!hadFract) {
     clearSystemFlag(FLAG_FRACT);
   }
@@ -292,17 +500,25 @@ void prettyTestFallback(uint16_t unusedButMandatoryParameter) {
   prettySetEnabled(true);
   if(!ppTestSnapsEqual()) ppTestFail("F1 string band differs");
 
-  // F2: real X with FLAG_FRACT clear — the gate declines, identity holds.
-  clearSystemFlag(FLAG_FRACT);
-  ppTestSetRealX("0.75");
-  prettySetEnabled(true);
-  ppTestRenderX();
-  ppTestCapture(0);
-  prettySetEnabled(false);
-  ppTestRenderX();
-  ppTestCapture(1);
-  prettySetEnabled(true);
-  if(!ppTestSnapsEqual()) ppTestFail("F2 real band differs");
+  // F2: plain real (FRACT and IRFRAC off, no exponent form) — every
+  // parser declines, identity holds.
+  {
+    bool_t hadIrfrac = getSystemFlag(FLAG_IRFRAC);
+    clearSystemFlag(FLAG_FRACT);
+    clearSystemFlag(FLAG_IRFRAC);
+    ppTestSetRealX("1.234567");
+    prettySetEnabled(true);
+    ppTestRenderX();
+    ppTestCapture(0);
+    prettySetEnabled(false);
+    ppTestRenderX();
+    ppTestCapture(1);
+    prettySetEnabled(true);
+    if(!ppTestSnapsEqual()) ppTestFail("F2 real band differs");
+    if(hadIrfrac) {
+      setSystemFlag(FLAG_IRFRAC);
+    }
+  }
 
   // F3: displayValueX parity — the pretty path runs the same builder, so
   // the ASCII mirror must match upstream's byte for byte.

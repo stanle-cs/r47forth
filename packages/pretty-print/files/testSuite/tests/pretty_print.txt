@@ -26,7 +26,15 @@ Out: EC=0 RX=LonI:"0"
 Func: prettyTestFallback
 
 ; F1: unsupported type (string) — enabled/disabled bands bit-identical.
-; F2: FLAG_FRACT clear — identity. F3: displayValueX byte parity (the
-; builder-first rule as an executable property).
+; F2: plain real (FRACT+IRFRAC off) — identity. F3: displayValueX byte
+; parity (the builder-first rule as an executable property).
+In:  FL_ASLIFT=1 RX=LonI:"99"
+Out: EC=0 RX=LonI:"0"
+
+Func: prettyTestShow
+
+; PSHOW: frame lines at rows 20/168, centered stacked 3/4 with the bar at
+; rows 93-94 (numeric/numeric rung), fnPixel manual-paint protocol armed;
+; unsupported type falls back to the ordinary SHOW.
 In:  FL_ASLIFT=1 RX=LonI:"99"
 Out: EC=0 RX=LonI:"0"

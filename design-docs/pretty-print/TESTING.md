@@ -42,9 +42,27 @@ does this first, always.
 - **`prettyTestFallback`** — identity pins for "pretty declines":
   - F1: X = string (unsupported type): band bitmap with package enabled ==
     band bitmap disabled, bit for bit.
-  - F2: real X with `FLAG_FRACT` clear: same identity.
+  - F2: plain real (`FLAG_FRACT` and `FLAG_IRFRAC` both clear, no exponent
+    form): same identity.
   - F3: `displayValueX` parity: fraction rendered pretty vs upstream —
     `displayValueX` strings byte-identical (pins the builder-first rule).
+
+### PP2 additions
+
+- `prettyTestMeasure`: M5 radical ascent 29/descent 0 (numeric radicand);
+  M6 exponent split (base text `1.5·10`, exponent `40`, SUP node); M7
+  IRFRAC `√3/2` → RAD inside a FRAC numerator, denominator `2`; M8
+  `3×π/4` accepted, paren-power `(π²)` and bare `π` decline.
+- `prettyTestPixels` P4: X = √2 (34-digit) with IRFRAC on — vinculum rows
+  131-132 (baseline 160, numeric radicand top 134, radGap 1, vincThick 2),
+  gap row 133 clear and radicand ink present, both probed in the
+  radicand's columns only (the sign's own diagonal legitimately crosses
+  the gap row on the left).
+- **`prettyTestShow`** — PSHOW: frame lines rows 20/168 full width;
+  centered stacked 3/4 at the numeric/numeric rung (bar rows 93-94,
+  midpoint within 40 px of center); `SCRUPD_MANUAL_STACK` +
+  `screenHoldsDrawnPixels` armed; string X falls back to the ordinary
+  SHOW (temporaryInformation leaves TI_NO_INFO).
 
 ## Mutation pins (run each separately, battery green between restores)
 
@@ -59,6 +77,10 @@ after restore.
 | MUT-4 | ignore the package toggle in `prettyTryRegisterLine` | P5 |
 | MUT-5 | swap the sup/sub digit classification in the parser | M3 |
 | MUT-6 | stray paint after the toggle gate, before the type gate declines | F1, F2 — the paint-then-decline failure mode the identity pins exist for |
+| MUT-7 | delete the vinculum fill in `ppPaint`'s RAD arm (PP2) | P4 |
+| MUT-8 | exponent base loses the plain `10` append (PP2) | M6 |
+| MUT-9 | IRFRAC accepts bare constant names (PP2) | M8 |
+| MUT-10 | PSHOW does not arm the manual-paint protocol (PP2) | S3 |
 
 Two lessons from the first mutation run, kept for honesty: (a) the original
 MUT-4 ("drop the dtReal34 type gate") stays GREEN — a non-real register's

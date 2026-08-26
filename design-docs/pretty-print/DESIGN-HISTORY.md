@@ -2,6 +2,34 @@
 
 Non-normative amendment trail. DESIGN.md is authoritative.
 
+## 2026-08-26 — PP2 (radicals, exponents, IRFRAC, complex, PSHOW)
+
+- **Radical sign strategy narrowed for PP2:** the raised-glyph approach
+  only (sign painted so its ink top meets the vinculum; sign font = the
+  node's font), with radicands taller than `radInk + 3` declining. The
+  synthesized-DDA sign for tall radicands is deferred to PP4, where
+  expression trees can put fractions under radicals.
+- **IRFRAC parser scoped to the common template**
+  `[sign] [multiple: n×|n|supN] name [/den]` with name ∈ {√d, √π, π, e, φ}.
+  The exotic checkForAndChange outputs — mixed-number constant forms
+  (`e+…`), the paren-power family `(π²)`, `(e⁻¹)` — decline to upstream's
+  linear rendering by the fallback rule. Bare names with no structural
+  win (lone `π`) also decline: no visual change, so no reason to own the
+  paint.
+- **The real path gained a third alternative:** IRFRAC's pure-fraction
+  output (constant = 1) uses the same sup-num/`/`/sub-den alphabet as the
+  FRACT builder, so `ppParseRealAny` = exponent → irfrac-template →
+  fraction. A value like 0.75 with IRFRAC on but FRACT off now stacks.
+- **Angular-tagged reals decline** (`getRegisterAngularMode != amNone`):
+  the upstream angle path draws its mode suffix glyph in a separate pass
+  the package arm would skip.
+- **Exponent textbook form:** `mantissa·₁₀ⁿ` becomes base run
+  `mantissa·10` (plain-size 10, original product glyph kept verbatim)
+  with the exponent as a true raised run — PP_SUP with supDrop 10/6/4 px.
+- **P4's probe lesson:** the √ glyph's own diagonal legitimately crosses
+  the "gap row" in the sign's columns — gap/ink pixel pins must probe the
+  radicand's columns only.
+
 ## 2026-08-26 — PP1 initial design and first findings
 
 - Package created per the approved plan: natural display of calculations,
