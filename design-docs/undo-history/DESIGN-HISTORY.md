@@ -262,3 +262,21 @@
   the template: constants that gate reachability (sizing arithmetic)
   belong in the packet — neither reader could have caught this
   without HISTORY_SUMS_BYTES vs the cap in front of them.
+- **2026-08-26 audit round 6** (on the r5 deltas + sums addendum):
+  FUNCTIONALLY CLEAN — the first round with zero functional findings
+  on its subject. One documentation finding (Sol): the retirement
+  comment's absolute claim dies to a coherent-by-luck construction (a
+  staged slot writing bytes equal to the pre-op bank; the retired
+  buffer was the only path back to an oversized never-ringed state).
+  Ruled conservative-by-design instead of reworked: exact-change
+  tracking is failure-path code whose own defect silently KEEPS a
+  torn bank — over-retire loses one undo level in a RAM-full corner,
+  under-retire re-opens R5-2; the asymmetry is the ruling (comment +
+  DESIGN.md + TESTING.md future-pin demand). Gemini's forward-landing
+  claim refuted on version attribution: every constructible variant
+  has the buffer already spent, making the retirement a no-op and the
+  walk identical pre-r5; the armed+NONE+old-live conjunction is
+  unconstructible. Both readers independently re-confirmed the
+  ordinary-use invariance, retry idempotence, pin-per-site coverage,
+  helper soundness, and the sums-session walk. Rounds 7 (prose-only
+  delta) and 8 close the audit if clean.

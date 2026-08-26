@@ -34,6 +34,14 @@ ends:
   Restores are not transactional; nothing upstream is (upstream's own
   `undo()` tears the live state on the same failure), so honesty about
   the buffer beats pretending to a guarantee the firmware cannot make.
+  Retirement is deliberately conservative (ruled, audit r6): a staged
+  slot that happens to write bytes equal to the pre-op bank still
+  retires — the buffer is then coherent by luck and an undo level is
+  lost that exact-change tracking would have kept, but the tracking
+  would be new failure-path code whose own defect points the dangerous
+  way (silently keeping a genuinely torn bank). Over-retiring loses at
+  most one undo level in a RAM-full corner; under-retiring re-opens
+  the r5 defect. The asymmetry is the ruling.
 
 Entries are **complete states** (stack X..top per the entry's own SSIZE
 flag, L, systemFlags, lrSelection/lrChosen, optional statistical sums, a

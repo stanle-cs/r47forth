@@ -108,7 +108,11 @@ an entry under the shipped constants (HISTORY_SUMS_BYTES = 28 x 60 =
 block through saveForUndo and asserts the skip, the pending gap, and
 the ~ on the first sums-free capture. Its tripwire assert reddens if
 the constants ever let sums fit, which is the signal to write the
-sums-restore and sums-site-retirement pins that are dormant today. The
+sums-restore and sums-site-retirement pins that are dormant today —
+both directions when that day comes (audit r6, Sol): a genuine-change
+retirement pin AND a coherent-by-luck preservation-or-retire ruling
+pin, because "every slot is staged" does not by itself prove any slot
+CHANGED. The
 funnel's sums-site retirement (thereIsSomethingToUndo = false at the
 sums allocation failure) is therefore correct-by-construction defense,
 trace-verified only — unreachable while the tripwire holds (the R10

@@ -372,12 +372,16 @@ static bool_t historyRestoreToIndex(uint8_t index) {
     reallocateRegister(dest, rec.dataType, rec.allocParam, amNone);
     if(lastErrorCode == ERROR_RAM_FULL) {
       if(i > 0) {
-        // Slots below i already hold this entry's payloads: the bank no
-        // longer describes any state that ever existed, and the browser
-        // path leaves thereIsSomethingToUndo armed for a later plain
-        // undo() to consume it (audit r5, cross-refuted). A torn bank is
-        // retired; a slot-0 failure mutates nothing and keeps the
-        // user's single-level undo (R16/R17).
+        // Slots below i already took this entry's payloads: in the
+        // general case the bank is torn, and the browser path leaves
+        // thereIsSomethingToUndo armed for a later plain undo() to
+        // consume it (audit r5, cross-refuted). Retire it. This is
+        // DELIBERATELY conservative (ruled, audit r6): a staged slot
+        // that happened to write bytes equal to the pre-op bank
+        // retires too — proving coherence would be new failure-path
+        // code whose own defect points the dangerous way, silently
+        // KEEPING a torn bank. A slot-0 failure mutates nothing and
+        // keeps the user's single-level undo (R16/R17).
         thereIsSomethingToUndo = false;
       }
       return false;   // ring untouched; failure-side bookkeeping lives in
