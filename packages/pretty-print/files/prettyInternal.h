@@ -74,6 +74,9 @@ int16_t         ppPreferredBase(int16_t baseY);   ///< baseY + numericFont box a
 #define PPC_HIST_BYTES 640
 #define PPC_HIST_MAX   12
 #define PPA_EMITTED    0x01
+// A literal leaf stores its text as a head payload plus one LIT2
+// continuation, 15 bytes each. Anything longer degrades to a value leaf.
+#define PPC_LIT_CAPACITY 30
 
 enum { PPN_FREE = 0, PPN_OP1, PPN_OP2, PPN_LIT, PPN_LIT2, PPN_VAL,
        PPN_RCL, PPN_CONST, PPN_OPAQUE, PPN_BIGOP };

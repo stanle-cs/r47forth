@@ -1089,7 +1089,13 @@ void prettyNoteNimText(const char *aim) {
     s++;
   }
   size_t n = strlen(s);
-  if(n >= sizeof(ppcNimText)) {
+  // AUDIT R1-14. The gate was sizeof(ppcNimText) = 32, but the LEAF that
+  // ultimately stores this text holds two 15-byte payloads = 30. Length
+  // 31 was therefore the one value admitted and then silently truncated
+  // — `aux` recorded 15, so nothing downstream could tell, and the
+  // history copy was wrong too. Gate on what the leaf can hold, not on
+  // the size of the staging buffer.
+  if(n > PPC_LIT_CAPACITY) {
     ppcNimTextValid = false;   // too long: the leaf will fall back to a value
     ppcNimText[0] = 0;
     return;

@@ -1142,6 +1142,39 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
     }
   }
 
+  // T26 (AUDIT R1-14): the literal-length boundary. The leaf holds two
+  // 15-byte payloads = 30 characters. 30 must round-trip exactly; 31
+  // was the one length admitted and silently truncated (aux recorded
+  // 15, so nothing downstream could tell) and must now withhold the
+  // formula instead of lying about it.
+  {
+    static const char d30[] = "123456789012345678901234567890";
+    static const char d31[] = "1234567890123456789012345678901";
+    char expect26[64];
+    const char *nADD26 = indexOfItems[ITM_ADD].itemCatalogName;
+
+    ppcTestReset();
+    ppcTestType(d30);
+    ppcTestOp(ITM_ENTER);
+    ppcTestType("2");
+    ppcTestOp(ITM_ADD);
+    sprintf(expect26, "%s 2 %s", d30, nADD26);
+    ppcTestExpectSig("T26 a 30-character literal must round-trip", expect26);
+
+    ppcTestReset();
+    ppcTestType(d31);
+    ppcTestOp(ITM_ENTER);
+    ppcTestType("2");
+    ppcTestOp(ITM_ADD);
+    {
+      char sig[128];
+      ppcTestSig(sig, sizeof(sig));
+      if(strstr(sig, d30) != NULL) {
+        ppTestFail("T26 a 31-character literal was truncated to 30 and shown as fact");
+      }
+    }
+  }
+
   // T16: abort while ASLIFT is set (straight after an operator result) —
   // the deferred-lift design absorbs the upstream undo() for free; a
   // shadow that lifts at NIM open strands the tree one slot up

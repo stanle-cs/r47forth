@@ -833,7 +833,16 @@ bool_t prettyTryRegisterLine(calcRegister_t regist, int16_t baseY, int16_t *line
  * the ordinary SHOW so the user always gets a result. */
 void fnPrettyShow(uint16_t unusedButMandatoryParameter) {
   (void)unusedButMandatoryParameter;
-  if(lastErrorCode != ERROR_NONE) {
+  // AUDIT R1-13. The inline surface declines under checkHP because HP
+  // layout DOUBLES glyph rows and our metrics assume it off; this
+  // surface used numericFont through the same engine and had no such
+  // guard. stringWidth compensates horizontally, so ppMeasure succeeded
+  // and the fnC47Show fallback never fired — the owner got a garbled
+  // screen at roughly twice the budgeted height, ink outside the band.
+  if(lastErrorCode != ERROR_NONE || checkHP) {
+    if(checkHP) {
+      fnC47Show(NOPARAM);   // the ordinary SHOW, which HP layout handles
+    }
     return;
   }
 
