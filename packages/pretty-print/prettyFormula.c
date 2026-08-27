@@ -626,7 +626,7 @@ void fnPrettyHistClear(uint16_t unusedButMandatoryParameter) {
 // Standard rung first, then the whole tree re-fonted tiny — fraction
 // children are built in the context font, so childFont alone cannot
 // shrink a nested stack (found by the continued-fraction stress test).
-bool_t ppfBuildRow(uint8_t row, uint8_t haveCurrent, uint8_t *rootOut, int16_t *ascOut, int16_t *hOut) {
+bool_t ppfBuildRow(uint8_t row, uint8_t haveCurrent, bool_t canPan, uint8_t *rootOut, int16_t *ascOut, int16_t *hOut) {
   for(int rung = 0; rung < 2; rung++) {
     uint8_t cf = (rung == 0) ? PP_FONT_STANDARD : PP_FONT_TINY;
     uint8_t root;
@@ -661,8 +661,14 @@ bool_t ppfBuildRow(uint8_t row, uint8_t haveCurrent, uint8_t *rootOut, int16_t *
     if(h > PPF_BAND_BOTTOM - PPF_BAND_TOP + 1) {
       continue;   // too tall even here: try tiny, then give up
     }
-    if(n->width > SCREEN_WIDTH - 8 && rung == 0) {
-      continue;   // too wide for this rung; the tiny one may fit
+    // AUDIT R2-2. Width sends the row down a rung; at the LAST rung it
+    // depends on the caller. The browser can pan sideways, so it takes
+    // the row however wide it is. The full-screen pager cannot pan, and
+    // an over-wide row there would be painted CLIPPED — showing
+    // `12345678 + 98` for `12345678 + 98765432`, which is a lie by
+    // truncation, and worse than the honest omission it replaced.
+    if(n->width > SCREEN_WIDTH - 8 && (rung == 0 || !canPan)) {
+      continue;
     }
     *rootOut = root;
     *ascOut = n->ascent;
@@ -708,7 +714,7 @@ void fnPrettyHist(uint16_t unusedButMandatoryParameter) {
     uint8_t page = 0;
     int16_t y = PPF_BAND_TOP;
     for(uint8_t row = 0; row < totalRows; row++) {
-      if(!ppfBuildRow(row, haveCurrent, &root, &asc, &h)) {
+      if(!ppfBuildRow(row, haveCurrent, false, &root, &asc, &h)) {
         continue;
       }
       if(y + h - 1 > PPF_BAND_BOTTOM) {
@@ -730,7 +736,7 @@ void fnPrettyHist(uint16_t unusedButMandatoryParameter) {
     uint8_t page = 0;
     int16_t y = PPF_BAND_TOP;
     for(uint8_t row = 0; row < totalRows && page <= ppfPage; row++) {
-      if(!ppfBuildRow(row, haveCurrent, &root, &asc, &h)) {
+      if(!ppfBuildRow(row, haveCurrent, false, &root, &asc, &h)) {
         continue;
       }
       if(y + h - 1 > PPF_BAND_BOTTOM) {

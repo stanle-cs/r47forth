@@ -129,7 +129,10 @@ void             ppcShadowInvalidate(void);   ///< dispatch-bypassing mutations 
 void             ppcTestDeinit(void);         ///< test only: re-arm the cold-start path so FV16 can prove lazy init leaves the FLAGS alone
 
 // prettyFormula.c — the browser reuses the pager's packed row builder
-bool_t ppfBuildRow(uint8_t row, uint8_t haveCurrent, uint8_t *rootOut, int16_t *ascOut, int16_t *hOut);
+// canPan: the BROWSER can scroll a row sideways, so it accepts any
+// width; the full-screen pager cannot, and for it an over-wide row must
+// be refused rather than silently clipped (AUDIT R2-2).
+bool_t ppfBuildRow(uint8_t row, uint8_t haveCurrent, bool_t canPan, uint8_t *rootOut, int16_t *ascOut, int16_t *hOut);
 
 // prettyValue.c — converters and the toggle's test hook
 bool_t ppParseFraction(const char *src, uint8_t ctxFont, uint8_t childFont, uint8_t *rootOut);

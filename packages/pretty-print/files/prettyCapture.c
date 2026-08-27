@@ -54,7 +54,7 @@ static bool_t   ppcInited = false;
  * end, so a failure later in the program left the shadow claiming a
  * finished formula the register did not hold. This counter pairs each
  * DONE with its own STAGE. */
-static uint8_t ppcDispatchDepth = 0;
+static uint16_t ppcDispatchDepth = 0;
 
 static struct {
   int16_t  func;
@@ -63,7 +63,7 @@ static struct {
   uint8_t  stagedMode;
   bool_t   lifted;      // ASLIFT latched at STAGE (LASTX/CONST classes)
   bool_t   valid;
-  uint8_t  depth;       // the dispatch nesting level this was staged at
+  uint16_t depth;       // the dispatch nesting level this was staged at
   uint8_t  stagedFrom;  // BIGOP classes: pre-op limit VAL leaves
   uint8_t  stagedTo;
   uint8_t  stepBytes[16];   // BIGOP sums: the step real34, raw
@@ -468,9 +468,17 @@ static void ppcInvalidate(bool_t emitCurrent) {
     // dispatch may error — so by now the register holds the NEW item's
     // output. Reading it filed lies permanently: `2 ENTER 3 . 7 +` then
     // IP recorded `2 + 3.7 = 5.` in the history, and the browser
-    // recalled that 5. Emit with -1, the designed no-result form, which
-    // ppcEmit's own header specifies for exactly this case: "pass -1
-    // when the value has already left the stack".
+    // recalled that 5.
+    //
+    // AUDIT R2-1 refined it further. Emitting with -1 is truthful but
+    // records NO result, and the browser's ENTER can then never recall
+    // the entry — truthful and useless. The classifier's INVALIDATE arm
+    // now emits at STAGE instead, where the register genuinely still
+    // holds this formula's value, which is where every other
+    // emit-with-register in this file already happens. By the time we
+    // get here the node is normally already marked EMITTED and ppcEmit
+    // refuses it; -1 remains as the truthful last resort for any caller
+    // that reaches invalidation without having staged.
     ppcEmit(ppcCurrent, (calcRegister_t)-1);
   }
   for(int i = 0; i < 8; i++) {
@@ -642,8 +650,20 @@ static void ppcSupersedeCurrent(void) {
 }
 
 void prettyNoteFunction(int16_t func, uint16_t param) {
-  if(ppcDispatchDepth < 255) {
+  // AUDIT R2-4. The counter used to saturate at 255 on the way up while
+  // decrementing unconditionally on the way down, so a 256-deep nesting
+  // would desynchronise it PERMANENTLY and every later DONE would pair
+  // with the wrong STAGE. 256 levels of program-within-program is not
+  // reachable on this machine, but the asymmetry is free to remove: a
+  // wider counter, and a depth we cannot represent invalidates rather
+  // than guesses.
+  if(ppcDispatchDepth < 0xFFFF) {
     ppcDispatchDepth++;
+  }
+  else {
+    ppcInvalidate(false);
+    ppcStage.valid = false;
+    return;
   }
   if(!ppcInited) {
     ppcInit();
@@ -777,9 +797,23 @@ void prettyNoteFunction(int16_t func, uint16_t param) {
     case PPC_DROPY:
       ppcDisplaced(1, true);
       break;
-    case PPC_INVALIDATE:
     case PPC_DISCARD:
       // applied at DONE (the dispatch may still error out)
+      break;
+    case PPC_INVALIDATE:
+      // AUDIT R2-1. R1-5 stopped this from reading a POST-dispatch
+      // register as the formula's result — correct, but emitting with
+      // -1 records no result at all, and the browser's ENTER can then
+      // never recall the entry: truthful and useless. The register is
+      // still truthful HERE, before the dispatch, which is where every
+      // other emit-with-register in this file already happens. Emit
+      // now; DONE then tears the shadow down without emitting again
+      // (ppcEmit refuses an already-EMITTED node, so a dispatch that
+      // errors costs at most one early filing of a formula that was
+      // true when it was filed).
+      if(ppcCurrent != PPC_NIL) {
+        ppcSupersedeCurrent();
+      }
       break;
     default:
       break;
@@ -787,7 +821,7 @@ void prettyNoteFunction(int16_t func, uint16_t param) {
 }
 
 void prettyNoteFunctionDone(void) {
-  uint8_t myDepth = ppcDispatchDepth;
+  uint16_t myDepth = ppcDispatchDepth;
   if(ppcDispatchDepth > 0) {
     ppcDispatchDepth--;
   }

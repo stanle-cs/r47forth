@@ -49,7 +49,7 @@ static void pbPaint(void) {
   uint8_t page = 0, selPage = 0;
   int16_t y = 25;
   for(uint8_t row = 0; row < totalRows; row++) {
-    if(!ppfBuildRow(row, haveCurrent, &root, &asc, &h)) {
+    if(!ppfBuildRow(row, haveCurrent, true, &root, &asc, &h)) {
       continue;
     }
     if(y + h - 1 > 163) {
@@ -66,7 +66,7 @@ static void pbPaint(void) {
   page = 0;
   y = 25;
   for(uint8_t row = 0; row < totalRows && page <= selPage; row++) {
-    if(!ppfBuildRow(row, haveCurrent, &root, &asc, &h)) {
+    if(!ppfBuildRow(row, haveCurrent, true, &root, &asc, &h)) {
       continue;
     }
     if(y + h - 1 > 163) {

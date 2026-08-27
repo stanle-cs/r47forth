@@ -1130,7 +1130,7 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
     {
       uint8_t root;
       int16_t asc, h;
-      if(!ppfBuildRow(0, 0, &root, &asc, &h)) {
+      if(!ppfBuildRow(0, 0, true, &root, &asc, &h)) {
         ppTestFail("T25 a wide row is still dropped instead of panned");
       }
       else {
@@ -1172,6 +1172,71 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
       if(strstr(sig, d30) != NULL) {
         ppTestFail("T26 a 31-character literal was truncated to 30 and shown as fact");
       }
+    }
+  }
+
+  // T27 (AUDIT R2-1): a superseded formula must be RECALLABLE, not just
+  // truthful. R1-5 stopped the post-dispatch register being read as the
+  // result; emitting with -1 fixed the lie but recorded no result at
+  // all, so the browser's ENTER could never recall the entry. The emit
+  // now happens at STAGE, where the register still holds the value.
+  {
+    ppcTestReset();
+    ppcTestType("2");
+    ppcTestOp(ITM_ENTER);
+    ppcTestType("3.7");
+    ppcTestOp(ITM_ADD);                 // X = 5.7
+    ppcTestOp(ITM_IP);                  // unmodelled -> invalidate + supersede
+    uint16_t elen, eseq;
+    const uint8_t *e = ppcHistoryEntry(0, &elen, &eseq);
+    if(e == NULL) {
+      ppTestFail("T27 the superseded formula was not filed");
+    }
+    else {
+      uint8_t root;
+      ppReset();
+      if(!ppfBuildEntry(e, PP_FONT_STANDARD, PP_FONT_STANDARD, true, &root)) {
+        ppTestFail("T27 the filed entry does not decode");
+      }
+      else {
+        char sig[192];
+        sig[0] = 0;
+        ppfTestSigNode(root, sig, sizeof(sig));
+        // it must carry a result, and that result must be the TRUE one
+        if(strstr(sig, "=") == NULL) {
+          ppTestFail("T27 the filed formula has no result and can never be recalled");
+        }
+        else if(strstr(sig, "5.7") == NULL) {
+          ppTestFail("T27 the filed result is not the value the formula had");
+        }
+      }
+    }
+    lastErrorCode = 0;
+  }
+
+  // T28 (AUDIT R2-2): ppfBuildRow has two callers and only one can pan.
+  // Widening acceptance for the browser turned the pager's honest
+  // omission into a silent CLIP, which shows a formula that is not the
+  // one the owner computed. The same wide row must be accepted for the
+  // panning caller and refused for the one that cannot.
+  {
+    ppcTestReset();
+    ppcTestType("1234567890123456");
+    ppcTestOp(ITM_ENTER);
+    ppcTestType("2345678901234567");
+    ppcTestOp(ITM_ADD);
+    ppcTestType("3456789012345678");
+    ppcTestOp(ITM_ADD);
+    ppcTestOp(ITM_CLX);
+    uint8_t root;
+    int16_t asc, h;
+    bool_t panning = ppfBuildRow(0, 0, true,  &root, &asc, &h);
+    bool_t fixed   = ppfBuildRow(0, 0, false, &root, &asc, &h);
+    if(!panning) {
+      ppTestFail("T28 the panning caller lost the wide row again");
+    }
+    if(fixed) {
+      ppTestFail("T28 the non-panning caller would paint a clipped formula");
     }
   }
 
