@@ -221,6 +221,7 @@ after restore.
 | MUT-53 | multiplication dot reverts to the x glyph | FV1 (red only in the COUNTS — glyph bytes suppress the FAIL line) |
 | MUT-54 | vinculum weight regressed to 1 px (standard) | P6 (row-2 probe at the vinculum's RIGHT end — near the sign, the glyph's own hook masked it) |
 | MUT-55 | stack allowance zeroed (parity) | EQ18/EQ26/EQ27 (all nested evaluation refuses) |
+| MUT-56 | MVAR scan hides only the construct NAME again (Bug 1) | EQ29 (the commit rejects the typed equation, error 45) |
 
 Two lessons from the first mutation run, kept for honesty: (a) the original
 MUT-4 ("drop the dtReal34 type gate") stays GREEN — a non-real register's
@@ -273,6 +274,20 @@ fixed — the forth-core 2026-07-21 rule applies unchanged.
   TINY (the operator convention; tinyF only governs the strip's
   fraction shrink, and the '/' deep-refont is skipped when the
   caller's fonts are equal so it cannot flatten them).
+
+### Keyboard-journey addition (Stan's challenge: can it even be typed?)
+
+- **EQ29** — the whole user journey through the REAL key path: types
+  `SUM(X;X;1;3)` one softkey at a time into the equation editor (with
+  the alpha punctuation catalog open and `fnKeyInCatalog` set, exactly
+  as a softkey press leaves it), runs the commit ENTER runs
+  (`setEquation` + the MVAR parse), then evaluates to 6. Closes the gap
+  that every other EQ test builds its equations from C and so never
+  proved a user could enter one. Harness note: `reallyRunFunction`
+  passes the CALLER's param, so driving a character item through it
+  calls `addItemToBuffer(NOPARAM)` — a bug-screen path that silently
+  inserts nothing. keyboard.c calls `addItemToBuffer(item)` directly;
+  drive it the same way. Three probe rounds were lost to that.
 
 ### Render/eval parity additions (Stan's ruling: eval must match render)
 

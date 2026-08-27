@@ -2103,6 +2103,59 @@ void prettyTestEquation(uint16_t unusedButMandatoryParameter) {
       }
     }
 
+    // EQ29: the whole user journey for a construct, through the REAL
+    // key path. Types SUM(X;X;1;3) one softkey at a time into the
+    // equation editor (the ';' lives in the ALPHA punctuation menu),
+    // runs the commit ENTER runs — setEquation plus the MVAR
+    // variable-hunting parse, which is the gate Bug 1 broke and which
+    // would have bounced the user back into the editor — then
+    // evaluates. 1+2+3 = 6.
+    {
+      uint16_t hadMode = calcMode;
+      bool_t hadKIC = fnKeyInCatalog;
+      fnEqNew(NOPARAM);                      // -> CM_EIM on a fresh slot
+      aimBuffer[0] = 0;
+      xCursor = 0;
+      showSoftmenu(-MNU_ALPHAMISC);          // where ';' lives
+      fnKeyInCatalog = true;                 // as a softkey press sets it
+      static const int16_t keys[] = {
+        ITM_S, ITM_U, ITM_M, ITM_LEFT_PARENTHESIS,
+        ITM_X, ITM_SEMICOLON, ITM_X, ITM_SEMICOLON,
+        ITM_1, ITM_SEMICOLON, ITM_3, ITM_RIGHT_PARENTHESIS
+      };
+      for(uint8_t k = 0; k < sizeof(keys) / sizeof(keys[0]); k++) {
+        addItemToBuffer(keys[k]);
+      }
+      if(strcmp(aimBuffer, "SUM(X;X;1;3)") != 0) {
+        ppTestFailures++;
+        printf("prettyPrint test FAIL: EQ29 typed text (got '%s')\n", aimBuffer);
+      }
+      // the commit ENTER performs (keyboard.c CM_EIM case)
+      lastErrorCode = 0;
+      setEquation(currentFormula, aimBuffer);
+      parseEquation(currentFormula, EQUATION_PARSER_MVAR, aimBuffer, tmpString);
+      if(lastErrorCode != ERROR_NONE) {
+        ppTestFailInt("EQ29 commit rejected the typed equation", 0, (int32_t)lastErrorCode);
+        lastErrorCode = 0;
+      }
+      fnKeyInCatalog = hadKIC;
+      calcMode = CM_NORMAL;
+      aimBuffer[0] = 0;
+      nimNumberPart = NP_EMPTY;
+      lastErrorCode = 0;
+      fnEqCalc(NOPARAM);
+      {
+        real34_t want;
+        int32ToReal34(6, &want);
+        if(lastErrorCode != ERROR_NONE || getRegisterDataType(REGISTER_X) != dtReal34
+            || !real34CompareEqual(REGISTER_REAL34_DATA(REGISTER_X), &want)) {
+          ppTestFail("EQ29 typed equation != 6");
+        }
+      }
+      calcMode = hadMode;
+      lastErrorCode = 0;
+    }
+
     // EQ26: the render/eval parity ruling — an integral of a numeric
     // second derivative whose body holds a construct, over limits away
     // from zero (a limit AT zero collapses the relative-step stencil at

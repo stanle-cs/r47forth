@@ -2,6 +2,51 @@
 
 Non-normative amendment trail. DESIGN.md is authoritative.
 
+## 2026-08-26 — the separator, challenged and verified (round 8)
+
+Stan challenged the `;` separator: had I checked it was right, why not
+`,`, and was the shape even in upstream's convention? Two of three
+answers held up; the third exposed a risk I had not considered and an
+untested gap.
+
+- **`,` is genuinely unavailable.** The parser rewrites every comma
+  inside a number to `.` (equation.c:1191) — comma IS the radix mark.
+  A comma-separated list would be silently ambiguous, not merely ugly.
+  This was the one thing I had reasoned correctly at design time.
+- **There is no upstream convention, because the feature does not
+  exist.** `MAX`, `MIN` and `atan2` sit in the equation alias table,
+  but all eight plausible call shapes fail, most with
+  ERROR_ITEM_TO_BE_CODED. So I did not deviate from house style; there
+  was no house style. What I had NOT done at design time was check —
+  I verified `;` was free and stopped there, which is half the
+  upstream-convention rule.
+- **The risk that follows:** "to be coded" is intent. Upstream will
+  choose a separator eventually, and if it is not `;` this package
+  speaks a dialect on their own machine. That question now belongs in
+  the upstream conversation alongside the derivative report.
+- **Typeability, which I had never tested at all.** Every EQ test
+  builds its equation from C. Nobody had shown a user could enter one.
+  Three probe rounds failed before the cause surfaced:
+  `reallyRunFunction` passes the CALLER's param, so driving a character
+  item through it calls `addItemToBuffer(NOPARAM)` — a bug-screen path
+  that inserts nothing. keyboard.c calls `addItemToBuffer(item)`
+  directly. Driven that way it works: `;` lives in the ALPHA
+  punctuation menu and inserts fine, and EQ29 now types
+  `SUM(X;X;1;3)` key by key, commits it the way ENTER does, and
+  evaluates it to 6.
+- **Bug 1 was worse than round 5 recorded.** The commit path ENTER runs
+  is `setEquation` followed by the MVAR variable-hunting parse, and a
+  failure there bounces the user back into the editor with the old text
+  restored. So before the fix, a typed construct could not be SAVED at
+  all — not merely mis-evaluated under a derivative. MUT-56 reproduces
+  it and turns EQ29 red with syntax error 45.
+
+Lesson, and it is the same one as rounds 4-7 wearing another hat: the
+half of a rule that gets skipped is the half that needs a tool run
+against it. "Is `;` free?" was answerable by reading and I read it.
+"Does upstream have a convention?" and "can a user type this?" were
+answerable only by running something, and I did neither until asked.
+
 ## 2026-08-26 — the appnotes, and the remedy that was there all along (round 7)
 
 Stan asked whether the project's application notes covered the

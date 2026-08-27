@@ -354,6 +354,31 @@ increments the engine counter, so upstream refuses nothing; the stack
 guard is the bound, and a refused engine (old path, defensive) turns
 into a clean error rather than a stale-X read.
 
+**Separator choice — evidence, not assertion (verified 2026-08-26 on
+Stan's challenge).** `,` is UNAVAILABLE: the parser rewrites every comma
+inside a number to `.` (equation.c:1191), so `1,5` IS the number 1.5 and
+a comma-separated argument list would be silently ambiguous. `;` is
+free: the grammar rejects it with a dedicated error ("cannot be appeared
+in equations"). There is no upstream convention to conform to, because
+upstream has NO working multi-argument call syntax — `MAX`, `MIN` and
+`atan2` are in the alias table but every shape tried
+(`MAX(3,5)`, `MAX(3;5)`, `3 MAX 5`, `MAX(3)(5)`, `MAX(3 5)`,
+`3 MAX(5)`, `MAX 3 5`, `MAX(3)+0`) fails, most with
+ERROR_ITEM_TO_BE_CODED. **Forward-compatibility risk, OPEN:** that error
+is a statement of intent, so upstream will one day pick a separator; if
+they pick anything but `;` this package's syntax becomes foreign on
+their own machine. Ask them before this reaches users — the question
+belongs with the derivative report.
+
+Typeability is CONFIRMED, not assumed: `;` lives in the ALPHA
+punctuation softmenu (`menu_alphaMisc`, beside `.` `,` `:`) and the
+catalog branch of the equation-mode gate admits it. EQ29 types
+`SUM(X;X;1;3)` one softkey at a time, runs the commit ENTER runs
+(setEquation plus the MVAR parse) and evaluates it to 6 — MUT-56 (the
+Bug 1 shape) turns it red with syntax error 45, which is also proof
+that Bug 1 would have made these constructs impossible to SAVE from the
+keyboard, not merely wrong under a derivative.
+
 Syntax (parse-level, package-side): `SUM(body;var;from;to[;step])`,
 `PROD(body;var;from;to[;step])`, `DERIV(body;var;at[;order])`,
 `INTEG(body;var;from;to)`. The separator is `;` — today a hard parse
