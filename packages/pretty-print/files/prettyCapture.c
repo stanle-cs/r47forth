@@ -508,6 +508,18 @@ static uint8_t ppcClassify(int16_t func) {
     // consumes Y=lower, X=upper over a label program.
     case ITM_SIGMAn: case ITM_PIn: case ITM_iSIGMAn: case ITM_iPIn:
       return PPC_BIGOPSUM;
+    #if defined(OPTION_INFSUMS)
+    // The early-stop sum consumes the SAME three stack levels — `inf`
+    // only changes when the loop gives up, not what it reads — so it
+    // captures identically. Its limits are the real ones the user
+    // supplied (it stops early if the terms converge; "infinity" is the
+    // key's name, not its arithmetic), so nothing new to render.
+    // GUARDED: without the option, item 2755 is an unimplemented stub
+    // that moves no stack, and classifying it would mint a node for an
+    // operation that never happened.
+    case ITM_SIGMAnINF:
+      return PPC_BIGOPSUM;
+    #endif // OPTION_INFSUMS
     case ITM_INTEGRAL_YX:
       return PPC_BIGOPINT;
 

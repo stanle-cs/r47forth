@@ -1795,7 +1795,7 @@ static void ppEqTempDelete(uint16_t slot) {
 /* evaluate the hidden slot with private transient buffers; the result is
  * read from the slice's own numeric stack (END_OF_FORMULA leaves the
  * value in place). Real path only in v1: a complex result errors. */
-static bool_t ppEqEvalSlot(uint16_t slot, real34_t *re) {
+static bool_t ppEqEvalSlot(uint16_t slot, real34_t *re, real34_t *im) {
   char *mvarBuffer;   // the PARSER_* macros bind to this name
   char *blk = allocC47Blocks(TO_BLOCKS(PPEQ_WORD_BYTES + PPEQ_STATE_BYTES));
   if(blk == NULL) {
@@ -1807,13 +1807,27 @@ static bool_t ppEqEvalSlot(uint16_t slot, real34_t *re) {
   bool_t ok = false;
   // END_OF_FORMULA pops the numeric stack after writing REGISTER_X, so X
   // is where the slice's value survives (the differentiator reads it the
-  // same way); a complex result is the v1 decline
+  // same way). `im` is optional: callers that cannot use a complex value
+  // pass NULL and a complex result is refused for them.
   if(lastErrorCode == ERROR_NONE && getRegisterDataType(REGISTER_X) == dtReal34) {
     real34Copy(REGISTER_REAL34_DATA(REGISTER_X), re);
+    if(im != NULL) {
+      real34SetZero(im);
+    }
     ok = true;
   }
+  else if(lastErrorCode == ERROR_NONE && getRegisterDataType(REGISTER_X) == dtComplex34) {
+    if(im == NULL) {
+      ppEqSyntaxError("complex value where a real one is required");
+    }
+    else {
+      real34Copy(REGISTER_REAL34_DATA(REGISTER_X), re);
+      real34Copy(REGISTER_IMAG34_DATA(REGISTER_X), im);
+      ok = true;
+    }
+  }
   else if(lastErrorCode == ERROR_NONE) {
-    ppEqSyntaxError("complex value in a big-operator argument");
+    ppEqSyntaxError("a big-operator argument is not a number");
   }
   freeC47Blocks(blk, TO_BLOCKS(PPEQ_WORD_BYTES + PPEQ_STATE_BYTES));
   return ok;
@@ -1821,6 +1835,7 @@ static bool_t ppEqEvalSlot(uint16_t slot, real34_t *re) {
 
 /* evaluate a text slice (not NUL-terminated) via a temp slot */
 static bool_t ppEqEvalSlice(const char *src, uint16_t len, real34_t *re) {
+  // limits, steps and orders are always real: a complex one is refused
   char text[PPEQ_WORD_BYTES];
   if(len == 0 || len >= sizeof(text)) {
     ppEqSyntaxError("bad big-operator argument length");
@@ -1832,7 +1847,7 @@ static bool_t ppEqEvalSlice(const char *src, uint16_t len, real34_t *re) {
   if(slot == 0xffff) {
     return false;
   }
-  bool_t ok = ppEqEvalSlot(slot, re);
+  bool_t ok = ppEqEvalSlot(slot, re, NULL);
   ppEqTempDelete(slot);
   return ok;
 }
@@ -2041,7 +2056,8 @@ static int16_t ppEqBigopIntercept(const char *strPtr, uint16_t parseMode, char *
     ok = ppEqEvalSlice(argStart[4], argLen[4], &argS);
   }
 
-  real34_t result;
+  real34_t result, resultI;
+  real34SetZero(&resultI);
   if(ok) {
     // the bound variable's own value is kept and put back (the
     // differentiate.c probe idiom); binding is a DIRECT register write —
@@ -2070,9 +2086,17 @@ static int16_t ppEqBigopIntercept(const char *strPtr, uint16_t parseMode, char *
           ok = false;
         }
         else {
-          real_t acc, term;
+          // Complex accumulation, on upstream's own terms: its
+          // _programmableSumProd latches over to complex the moment a
+          // term has an imaginary part, but only if FL_CPXRES allows —
+          // otherwise a complex term is a domain error. Same rule here,
+          // so a package-side SUM behaves like the built-in one.
+          real_t acc, accI, term, termI;
           real34_t counter, cmp, sgn, next;
+          const bool_t cpxAllowed = getSystemFlag(FLAG_CPXRES);
+          bool_t isComplex = false;
           realCopy(kind == 1 ? const_1 : const_0, &acc);
+          realSetZero(&accI);
           real34Copy(&argA, &counter);
           if(real34IsZero(&argS) && !real34CompareEqual(&argA, &argB)) {
             displayCalcErrorMessage(ERROR_BAD_INPUT, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
@@ -2093,17 +2117,41 @@ static int16_t ppEqBigopIntercept(const char *strPtr, uint16_t parseMode, char *
             }
             reallocateRegister(var, dtReal34, 0, amNone);
             real34Copy(&counter, REGISTER_REAL34_DATA(var));
-            real34_t x;
-            ok = ppEqEvalSlot(bodySlot, &x);
+            real34_t x, xI;
+            ok = ppEqEvalSlot(bodySlot, &x, &xI);
             if(!ok) {
               break;
             }
             real34ToReal(&x, &term);
+            real34ToReal(&xI, &termI);
+            if(!realIsZero(&termI)) {
+              if(!cpxAllowed) {
+                displayCalcErrorMessage(ERROR_ARG_EXCEEDS_FUNCTION_DOMAIN, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+                ok = false;
+                break;
+              }
+              isComplex = true;
+            }
             if(kind == 1) {
-              realMultiply(&acc, &term, &acc, &ctxtReal75);
+              if(isComplex) {
+                // (a+bi)(c+di) = (ac-bd) + (ad+bc)i
+                real_t t1, t2, t3, t4, nr, ni;
+                realMultiply(&acc,  &term,  &t1, &ctxtReal75);
+                realMultiply(&accI, &termI, &t2, &ctxtReal75);
+                realSubtract(&t1, &t2, &nr, &ctxtReal75);
+                realMultiply(&acc,  &termI, &t3, &ctxtReal75);
+                realMultiply(&accI, &term,  &t4, &ctxtReal75);
+                realAdd(&t3, &t4, &ni, &ctxtReal75);
+                realCopy(&nr, &acc);
+                realCopy(&ni, &accI);
+              }
+              else {
+                realMultiply(&acc, &term, &acc, &ctxtReal75);
+              }
             }
             else {
               realAdd(&acc, &term, &acc, &ctxtReal75);
+              realAdd(&accI, &termI, &accI, &ctxtReal75);
             }
             real34Add(&counter, &argS, &next);
             if(real34CompareEqual(&next, &counter)) {
@@ -2115,6 +2163,9 @@ static int16_t ppEqBigopIntercept(const char *strPtr, uint16_t parseMode, char *
           }
           if(ok) {
             realToReal34(&acc, &result);
+            if(isComplex) {
+              realToReal34(&accI, &resultI);
+            }
           }
           ppEqTempDelete(bodySlot);
         }
@@ -2152,6 +2203,6 @@ static int16_t ppEqBigopIntercept(const char *strPtr, uint16_t parseMode, char *
     }
     return -1;
   }
-  _pushNumericStack(mvarBuffer, &result, const34_0);
+  _pushNumericStack(mvarBuffer, &result, &resultI);
   return (int16_t)(p + 1 - strPtr);
 }

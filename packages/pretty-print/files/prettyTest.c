@@ -1141,6 +1141,25 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
     ppcTestOp(ITM_CLX);
     ppcTestExpectHist("B5 chained formula emitted", 1);
 
+    #if defined(OPTION_INFSUMS)
+    // B9: the early-stop sum captures like any other sum — it reads the
+    // same three stack levels, so its node carries the real limits the
+    // user gave it. Before this it fell to the default rule and simply
+    // invalidated the shadow (truthful, but nothing shown).
+    ppcTestReset();
+    ppcTestType("1");
+    ppcTestOp(ITM_ENTER);
+    ppcTestType("5");
+    ppcTestOp(ITM_ENTER);
+    ppcTestType("1");
+    ppcTestOpParam(ITM_SIGMAnINF, (uint16_t)bigLbl);
+    if(lastErrorCode == ERROR_NONE) {
+      sprintf(expect, "{#,#}%s", indexOfItems[ITM_SIGMAnINF].itemCatalogName);
+      ppcTestExpectSig("B9 infinite sum captured", expect);
+    }
+    lastErrorCode = 0;
+    #endif // OPTION_INFSUMS
+
     // B6: the dispatch that actually integrates: PGMINT preselects the
     // label program, and the INTEGRAL_YX param is the integration
     // VARIABLE (the covIntegratePgm currency). ACC=0 -> default
@@ -1700,6 +1719,58 @@ void prettyTestFormula(uint16_t unusedButMandatoryParameter) {
     }
   }
 
+  // FV17 (PP16): the two toggles in our own menu SHOW their state. The
+  // generic checkbox path only fires for fnGetSystemFlag items inside
+  // one particular menu, so ours is a package-local branch — and this
+  // pins it by rendering the softkey row twice with the flag opposite
+  // and comparing ink. A filled box carries more ink than an outline;
+  // per the harness rule the assert is on ORDERING, never a literal
+  // count, so a font change cannot turn it red.
+  {
+    int16_t hadScrUpd = screenUpdatingMode;
+    bool_t hadP = getSystemFlag(FLAG_PRETTYP);
+    uint16_t hadMode = calcMode;
+    screenUpdatingMode = SCRUPD_AUTO;
+    temporaryInformation = TI_NO_INFO;
+    calcMode = CM_NORMAL;
+    showSoftmenu(-MNU_PP);
+    softmenuStack[0].firstItem = 0;
+
+    // the PPON softkey is cell 4 of 6: KEY_X[4]..KEY_X[5]
+    uint32_t x0 = 268, x1 = 332, y0 = 218, y1 = 239;
+    uint32_t inkOn = 0, inkOff = 0;
+    setSystemFlag(FLAG_PRETTYP);
+    lcd_fill_rect(0, 190, SCREEN_WIDTH, 50, LCD_SET_VALUE);
+    showSoftmenuCurrentPart();
+    for(uint32_t yy = y0; yy <= y1; yy++) {
+      for(uint32_t xx = x0; xx <= x1; xx++) {
+        if(lcd_buffer_pixel_on(xx, yy)) inkOn++;
+      }
+    }
+    clearSystemFlag(FLAG_PRETTYP);
+    lcd_fill_rect(0, 190, SCREEN_WIDTH, 50, LCD_SET_VALUE);
+    showSoftmenuCurrentPart();
+    for(uint32_t yy = y0; yy <= y1; yy++) {
+      for(uint32_t xx = x0; xx <= x1; xx++) {
+        if(lcd_buffer_pixel_on(xx, yy)) inkOff++;
+      }
+    }
+    if(inkOn == 0 || inkOff == 0) {
+      ppTestFail("FV17 the PPON softkey did not render at all");
+    }
+    else if(inkOn < inkOff + 8) {
+      // measured margin is 33 px (291 filled vs 258 outline); 8 is a
+      // floor that still catches "the indicator stopped moving" without
+      // pinning a literal count the font owns
+      ppTestFailInt("FV17 the state indicator does not track the flag",
+                    (int32_t)inkOff + 8, (int32_t)inkOn);
+    }
+    lcd_fill_rect(0, 190, SCREEN_WIDTH, 50, LCD_SET_VALUE);
+    if(hadP) setSystemFlag(FLAG_PRETTYP); else clearSystemFlag(FLAG_PRETTYP);
+    screenUpdatingMode = hadScrUpd;
+    calcMode = hadMode;
+  }
+
   // FV16 (PP15): the cold-start path initialises our data WITHOUT
   // touching the user's flags. Before the ppcInit/prettyReset split the
   // first dispatch after a cold start force-set the master flag, which
@@ -2248,6 +2319,47 @@ void prettyTestEquation(uint16_t unusedButMandatoryParameter) {
       }
       calcMode = hadMode;
       lastErrorCode = 0;
+    }
+
+    // EQ30: a construct whose body is COMPLEX accumulates complex, on
+    // upstream's own terms — its _programmableSumProd latches over the
+    // moment a term has an imaginary part, but only if FL_CPXRES allows.
+    // SUM(X*i;X;1;3) = (1+2+3)i = 6i.
+    {
+      bool_t hadCpx = getSystemFlag(FLAG_CPXRES);
+      setSystemFlag(FLAG_CPXRES);
+      setEquation(currentFormula, "SUM(X" STD_CROSS "i;X;1;3)");
+      lastErrorCode = 0;
+      fnEqCalc(NOPARAM);
+      if(lastErrorCode != ERROR_NONE || getRegisterDataType(REGISTER_X) != dtComplex34) {
+        ppTestFailInt("EQ30 complex SUM did not stay complex", dtComplex34,
+                      (int32_t)getRegisterDataType(REGISTER_X));
+      }
+      else {
+        real34_t want;
+        int32ToReal34(6, &want);
+        if(!real34IsZero(REGISTER_REAL34_DATA(REGISTER_X))
+            || !real34CompareEqual(REGISTER_IMAG34_DATA(REGISTER_X), &want)) {
+          ppTestFail("EQ30 complex SUM != 6i");
+        }
+      }
+      lastErrorCode = 0;
+      // and with complex results refused, the same body is a domain
+      // error rather than a silently-real answer
+      clearSystemFlag(FLAG_CPXRES);
+      setEquation(currentFormula, "SUM(X" STD_CROSS "i;X;1;3)");
+      lastErrorCode = 0;
+      fnEqCalc(NOPARAM);
+      if(lastErrorCode == ERROR_NONE) {
+        ppTestFail("EQ30 complex term accepted while CPXRES is clear");
+      }
+      lastErrorCode = 0;
+      if(hadCpx) {
+        setSystemFlag(FLAG_CPXRES);
+      }
+      else {
+        clearSystemFlag(FLAG_CPXRES);
+      }
     }
 
     // EQ26: the render/eval parity ruling — an integral of a numeric

@@ -225,6 +225,9 @@ after restore.
 | MUT-57 | prettyReset stops restoring the T-line default (PP15) | FV14 |
 | MUT-58 | cold start restores factory defaults again (the PP11 persistence bug) | FV16 (both flags clobbered) |
 | MUT-59 | the `-MNU_PP` slot in menu_DISP reverted to ITM_NULL (PP15) | FV15 |
+| MUT-60 | the softkey state indicator frozen to unchecked (PP16) | FV17 (ink margin collapses) |
+| MUT-61 | complex terms silently dropped in SUM/PROD (PP16) | EQ30 (both halves: result goes real, and the CPXRES refusal stops) |
+| MUT-62 | infinite sums fall back to invalidate (PP16) | B9 (FAIL line is glyph-suppressed — trust the counts) |
 
 Two lessons from the first mutation run, kept for honesty: (a) the original
 MUT-4 ("drop the dtReal34 type gate") stays GREEN — a non-real register's
@@ -277,6 +280,27 @@ fixed — the forth-core 2026-07-21 rule applies unchanged.
   TINY (the operator convention; tinyF only governs the strip's
   fraction shrink, and the '/' deep-refont is skipped when the
   caller's fonts are equal so it cannot flatten them).
+
+### PP16 additions (the deferred three, closed)
+
+- **EQ30** — a construct body that evaluates COMPLEX now accumulates
+  complex, on upstream's own terms: `SUM(X×i;X;1;3)` = 6i with CPXRES
+  set, and the SAME formula is a domain error with CPXRES clear, which
+  is exactly what upstream's `_programmableSumProd` does. DERIV and
+  INTEG still refuse complex — not a gap, because upstream's own
+  differentiator and integrator contain no complex handling at all
+  (verified: zero `dtComplex34` references in either file).
+- **B9** — the early-stop sum (`ITM_SIGMAnINF`) captures like any other
+  sum: `inf` changes only when the loop gives up, not what it reads, so
+  the stack effect is identical and its node carries the real limits the
+  user supplied. GUARDED by `#if defined(OPTION_INFSUMS)` — without the
+  option that item is an unimplemented stub that moves no stack, and
+  classifying it would mint a node for an operation that never ran.
+- **FV17** — the two toggles in our own menu show their state. Rendered
+  twice with the flag opposite, comparing ink in the PPON softkey cell:
+  measured 291 lit (filled) vs 258 (outline), and the assert requires a
+  margin of 8 rather than a literal count, per the harness rule that a
+  font change must never turn a test red.
 
 ### PP15 additions (both toggles are flags; the menus are wired)
 

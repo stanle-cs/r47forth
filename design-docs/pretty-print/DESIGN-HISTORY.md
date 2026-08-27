@@ -2,6 +2,46 @@
 
 Non-normative amendment trail. DESIGN.md is authoritative.
 
+## 2026-08-26 — PP16: the three deferred items, closed
+
+Stan asked why anything was still deferred and told me to finish them.
+All three were real, and one of them was a genuine capability gap
+rather than a cosmetic one.
+
+- **Complex results in the constructs.** `SUM`/`PROD` accumulated in a
+  single real, so a complex term was refused. Upstream's own
+  `_programmableSumProd` latches over to complex the moment a term has
+  an imaginary part — gated on FL_CPXRES, and a domain error when that
+  is clear. The package now does the same, with complex multiply
+  written out for PROD. DERIV/INTEG still refuse complex, and that is
+  CORRECT rather than deferred: upstream's differentiator and
+  integrator have no complex handling whatsoever (zero `dtComplex34`
+  references in either file), so refusing matches the built-in
+  behaviour exactly.
+- **The early-stop sum.** `fnProgrammableSumInf` IS in the shipped ARM
+  binary (checked the map file), so Σ∞ exists on the target and was
+  simply falling to the default rule and invalidating the shadow —
+  truthful, but nothing shown. It reads the same three stack levels,
+  so it joins the existing class in one line. Guarded on
+  OPTION_INFSUMS: without the option, item 2755 is an unimplemented
+  stub that moves no stack, and capturing it would mint a node for an
+  operation that never happened.
+- **The softkey state indicators.** The generic checkbox path reads the
+  flag out of the item's `param` but only fires for `fnGetSystemFlag`
+  items inside `-MNU_TAMFLAG`. Rather than repurpose our toggle items'
+  param to suit it — which would have put a value above NOPARAM into a
+  field the dispatcher reads — the package carries its own branch that
+  reads the two flags explicitly. Contained, and nothing in dispatch
+  is perturbed.
+
+Two process notes worth keeping. MUT-60 came back GREEN on its first
+run: the fix had been verified by screenshot only, which is precisely
+the "a pin green under its mutation is decoration" rule catching an
+unpinned change — FV17 exists because of it. And I then misread my own
+failure message and briefly believed FV17's margin was 1 pixel; it is
+33 (291 filled vs 258 outline). Measure before concluding, including
+when the thing being measured is your own test.
+
 ## 2026-08-26 — PP15: both toggles are flags, and the menus exist
 
 Stan ruled that PPON and PTLIN should both be flags, asked for a home

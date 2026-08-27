@@ -1,5 +1,5 @@
 diff --git a/src/c47/softmenus.c b/src/c47/softmenus.c
-index 6d036d9a0c49cf030d1e1b82d0deb5b32cc02183..f4f381c489238975efddf663dbed3c1392fbe92e 100644
+index 6d036d9a0c49cf030d1e1b82d0deb5b32cc02183..16a0f81593e34621eb1e9472b60be540109c9d03 100644
 --- a/src/c47/softmenus.c
 +++ b/src/c47/softmenus.c
 @@ -60,7 +60,7 @@ TO_QSPI const int16_t menu_DISP[]        = { ITM_FIX,                       ITM_
@@ -34,3 +34,20 @@ index 6d036d9a0c49cf030d1e1b82d0deb5b32cc02183..f4f381c489238975efddf663dbed3c13
  /* 186 */  {.menuItem =  0,                 .numItems = 0,                                           .softkeyItem = NULL                }
  
  
+@@ -3473,6 +3479,16 @@ void showSoftmenuCurrentPart(void) {
+             }
+           }                                                                      //JM^^
+ 
++          /* pretty-print package: the two toggles in our own menu show
++           * their state the way their DISP neighbours do. The generic
++           * checkbox path next door only fires for fnGetSystemFlag items
++           * inside -MNU_TAMFLAG, and reads the flag out of the item's
++           * param — we read it explicitly instead, so the toggle items'
++           * param stays NOPARAM and nothing in dispatch is perturbed. */
++          else if(softmenu[m].menuItem == -MNU_PP && (item%10000 == ITM_PPON || item%10000 == ITM_PTLIN)) {
++            showSoftkey(indexOfItems[item%10000].itemSoftmenuName,  x, y-currentFirstItem/6, vmNormal, (item/10000)==0 || (item/10000)==2, (item/10000)==0 || (item/10000)==1, getSystemFlag(item%10000 == ITM_PPON ? FLAG_PRETTYP : FLAG_PTLINE) ?  CB_TRUE : CB_FALSE, NOVAL, NOTEXT);
++          }
++
+           else if(softmenu[m].menuItem == -MNU_TAMFLAG && indexOfItems[item%10000].itemCatalogName[0] != 0 && indexOfItems[item%10000].func == fnGetSystemFlag) {                                         //JMvv add radiobuttons to standard flags
+             showSoftkey(indexOfItems[item%10000].itemCatalogName,  x, y-currentFirstItem/6, vmNormal, (item/10000)==0 || (item/10000)==2, (item/10000)==0 || (item/10000)==1, getSystemFlag(indexOfItems[item%10000].param) ?  CB_TRUE : CB_FALSE, NOVAL, NOTEXT);
+           }                                                                      //JM^^
