@@ -1880,6 +1880,18 @@ static bool_t ppEqDelegate(uint8_t kind, uint16_t order, uint16_t bodySlot,
 
   bool_t ok = false;
   bool_t wasRefused = false;
+  // AUDIT R1-2 (bug class: stale global read as this call's verdict).
+  // Only the INTEG branch used to clear engineNestingWasRefused, and
+  // NOTHING on the derivative path clears it — solve.c's
+  // engineNestingRefused() is the only writer of `false` in the tree.
+  // So one earlier refused nesting left the flag standing and every
+  // later DERIV construct discarded a correct answer as "refused",
+  // until some integral or solve happened to clear it. programRunStop
+  // had the same shape: a pre-existing PGM_WAITING was read as this
+  // call's refusal AND then overwritten. Both are now established
+  // before the call and the caller's run state is put back after.
+  uint16_t savedRunStop = programRunStop;
+  engineNestingWasRefused = false;
   if(ppEqStackExceeded()) {
     ppEqSyntaxError("not enough free stack for this nesting");
   }
@@ -1900,14 +1912,14 @@ static bool_t ppEqDelegate(uint8_t kind, uint16_t order, uint16_t bodySlot,
   else {            // INTEG over [a, b] — XY=false: limits from the reserved vars
     real34Copy(a, REGISTER_REAL34_DATA(RESERVED_VARIABLE_LLIM));
     real34Copy(b, REGISTER_REAL34_DATA(RESERVED_VARIABLE_ULIM));
-    engineNestingWasRefused = false;
     _fnIntegrate((uint16_t)var, false);
   }
   // a REFUSED engine (upstream's nesting guard) leaves no result: X is
-  // stale and must not be read as one, and PGM_WAITING must not stand
-  if(engineNestingWasRefused || programRunStop == PGM_WAITING) {
+  // stale and must not be read as one. PGM_WAITING counts as a refusal
+  // only if THIS call introduced it.
+  if(engineNestingWasRefused
+      || (programRunStop == PGM_WAITING && savedRunStop != PGM_WAITING)) {
     wasRefused = true;
-    programRunStop = PGM_STOPPED;
     ppEqSyntaxError("engine nesting refused (an integral cannot nest inside an integral)");
   }
   if(!wasRefused && lastErrorCode == ERROR_NONE && getRegisterDataType(REGISTER_X) == dtReal34) {
@@ -1915,6 +1927,7 @@ static bool_t ppEqDelegate(uint8_t kind, uint16_t order, uint16_t bodySlot,
     ok = true;
   }
 
+  programRunStop = savedRunStop;   // the caller's run state is the caller's
   real34Copy(&savedUlim, REGISTER_REAL34_DATA(RESERVED_VARIABLE_ULIM));
   real34Copy(&savedLlim, REGISTER_REAL34_DATA(RESERVED_VARIABLE_LLIM));
   currentFormula = savedFormula;
@@ -2062,11 +2075,28 @@ static int16_t ppEqBigopIntercept(const char *strPtr, uint16_t parseMode, char *
     // the bound variable's own value is kept and put back (the
     // differentiate.c probe idiom); binding is a DIRECT register write —
     // no dispatch runs inside the evaluation
-    real_t probe;
+    // AUDIT R1-1 (bug class: save-test narrower than the save). The test
+    // here used to be getRegisterAsRealQuiet(), copied from
+    // differentiate.c — but that function REFUSES a complex with a
+    // non-zero imaginary part, while saveRegisterSnapshot handles one
+    // perfectly well. So a bound variable holding 7+4i took no snapshot
+    // and was then overwritten by the counter and never put back: the
+    // owner's value silently destroyed by a sum that had no business
+    // touching it. Ask what the SNAPSHOT covers, not what converts to a
+    // real; and when it covers nothing, refuse rather than clobber.
     snap_t savedVarSnap;
-    bool_t restoreVar = getRegisterAsRealQuiet(var, &probe) || getRegisterDataType(var) == dtLongInteger;
+    uint32_t varType = getRegisterDataType(var);
+    bool_t restoreVar = (varType == dtReal34 || varType == dtComplex34
+                      || varType == dtTime  || varType == dtLongInteger
+                      || varType == dtShortInteger);
     if(restoreVar) {
       saveRegisterSnapshot(var, &savedVarSnap);
+    }
+    else {
+      // a string/matrix/date variable cannot be snapshotted, so binding
+      // the loop counter to it would destroy it with no way back
+      ppEqSyntaxError("the loop variable holds a value that cannot be saved and restored");
+      ok = false;
     }
 
     if(kind <= 1) {

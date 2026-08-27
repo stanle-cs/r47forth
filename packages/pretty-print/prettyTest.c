@@ -2361,6 +2361,86 @@ void prettyTestEquation(uint16_t unusedButMandatoryParameter) {
       }
     }
 
+    // EQ31 (AUDIT R1-1): a construct must never destroy the value the
+    // loop variable already held. The old test for "can I put this
+    // back?" asked whether the value converts to a real, which refuses
+    // a complex — so a variable holding 7+4i took no snapshot and was
+    // overwritten by the counter. Class test: every type
+    // saveRegisterSnapshot covers must survive a construct.
+    {
+      calcRegister_t vA = findOrAllocateNamedVariable("A");
+      // complex — the reported case
+      reallocateRegister(vA, dtComplex34, 0, amNone);
+      int32ToReal34(7, REGISTER_REAL34_DATA(vA));
+      int32ToReal34(4, REGISTER_IMAG34_DATA(vA));
+      setEquation(currentFormula, "SUM(A;A;1;2)");
+      lastErrorCode = 0;
+      fnEqCalc(NOPARAM);
+      lastErrorCode = 0;
+      if(getRegisterDataType(vA) != dtComplex34) {
+        ppTestFailInt("EQ31 complex loop variable destroyed", dtComplex34,
+                      (int32_t)getRegisterDataType(vA));
+      }
+      else {
+        real34_t w7, w4;
+        int32ToReal34(7, &w7);
+        int32ToReal34(4, &w4);
+        if(!real34CompareEqual(REGISTER_REAL34_DATA(vA), &w7)
+            || !real34CompareEqual(REGISTER_IMAG34_DATA(vA), &w4)) {
+          ppTestFail("EQ31 complex loop variable not restored to 7+4i");
+        }
+      }
+      // long integer — the other branch of the old test, must still work
+      reallocateRegister(vA, dtLongInteger, 0, amNone);
+      ppTestWriteLonI(vA, 12345);
+      setEquation(currentFormula, "SUM(A;A;1;2)");
+      lastErrorCode = 0;
+      fnEqCalc(NOPARAM);
+      lastErrorCode = 0;
+      if(!ppTestIsLonI(vA, 12345)) {
+        ppTestFail("EQ31 long-integer loop variable not restored");
+      }
+      reallocateRegister(vA, dtReal34, 0, amNone);
+      int32ToReal34(0, REGISTER_REAL34_DATA(vA));
+    }
+
+    // EQ32 (AUDIT R1-2): the refusal verdict must be about THIS call.
+    // Nothing on the derivative path clears engineNestingWasRefused
+    // (solve.c holds the tree's only `= false`), so one earlier refused
+    // nesting used to make every later DERIV construct discard a
+    // correct answer. Same shape for a pre-existing PGM_WAITING, which
+    // was also silently overwritten.
+    {
+      engineNestingWasRefused = true;          // as an earlier refusal leaves it
+      setEquation(currentFormula, "DERIV(X^3;X;2)");
+      lastErrorCode = 0;
+      fnEqCalc(NOPARAM);
+      real34_t want12;
+      int32ToReal34(12, &want12);
+      if(lastErrorCode != ERROR_NONE || getRegisterDataType(REGISTER_X) != dtReal34
+          || !real34CompareEqual(REGISTER_REAL34_DATA(REGISTER_X), &want12)) {
+        ppTestFail("EQ32 a stale refusal flag discarded a correct derivative");
+      }
+      engineNestingWasRefused = false;
+      lastErrorCode = 0;
+
+      // The caller's run state is the caller's. A pre-existing
+      // PGM_WAITING means an abort is genuinely in flight (the engine
+      // itself raises SOLVER_ABORT there, differentiate.c:402), so the
+      // construct failing is CORRECT — what was not correct was
+      // silently rewriting the state to PGM_STOPPED on the way out.
+      programRunStop = PGM_WAITING;            // pre-existing, not ours
+      setEquation(currentFormula, "DERIV(X^3;X;2)");
+      lastErrorCode = 0;
+      fnEqCalc(NOPARAM);
+      if(programRunStop != PGM_WAITING) {
+        ppTestFailInt("EQ32 the caller's run state was overwritten",
+                      PGM_WAITING, (int32_t)programRunStop);
+      }
+      programRunStop = PGM_STOPPED;
+      lastErrorCode = 0;
+    }
+
     // EQ26: the render/eval parity ruling — an integral of a numeric
     // second derivative whose body holds a construct, over limits away
     // from zero (a limit AT zero collapses the relative-step stencil at

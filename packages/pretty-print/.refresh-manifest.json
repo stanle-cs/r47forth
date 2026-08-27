@@ -9,7 +9,7 @@
     "prettyInternal.h": "0f410048b8f8a6821f6fed0650a528413eefcc63b64489e6c503a470100adc80",
     "prettyLayout.c": "47c793be5224b55e0829cb31e67fb90a8044d4717a083b054e344f8dc944c594",
     "prettyPrint.h": "a0fcf21c428a9047562f3bc6469845a1293378db4b7b549fd05306afb9d4e655",
-    "prettyTest.c": "94cce70a63ff6b07364e4d53a460a64e13d27ca2d63283f6702187a322a11db6",
+    "prettyTest.c": "fbb64ee348f2a7b0444fff6c7405e6783af97e6fb51afcc1185ac62f96cd2670",
     "prettyValue.c": "4ad25899466460192fd8f3bed5ca27cefa2f021178ef5076f335df5a067c12b7",
     "testSuite/tests/pretty_print.txt": "778b71cee0339ec87dc971217dc9efcaf0e83609660ebc9b7b9de295bf3c9b4e"
   },
@@ -24,7 +24,7 @@
     "010-keyboard.c.patch": "715c746fa387e23dbde8413e8a0dae6466c565091afacd8b09eabc94242f0a28",
     "010-screen.c.patch": "1fc56a5066fdaddde713de1c3b8283ed6e8e27656cad4058fa1d7de8a5ac57d9",
     "010-softmenus.c.patch": "528b588450396251b05d4858bfd2c52c415119b4c622c6ccb686202f678e761a",
-    "010-solver__equation.c.patch": "bf2e808fbc5dfca2aa790f7579689d14baab88ae99dea106a082077048d08a8c",
+    "010-solver__equation.c.patch": "68b21da4ba61cc3105f1d2773ecefdfc9396ef495e8c2f3d6c0fc6920d8c99f7",
     "010-testSuite__testSuite.c.patch": "5be374ae3f7fbe10998dcb0cf81abc1526f62b94551da35335e0e53e57b37049",
     "010-testSuite__tests__testSuiteList.txt.patch": "7602270613b0807bd2f56e6a3bba266176226695f6f2ba3de0fbe99cf53bf666"
   }

@@ -288,3 +288,40 @@ recorded in DESIGN-HISTORY.md; the round tag says where the evidence lives.
   refresh did not. Ask of every new guard: what is the complete list of
   doors into this surface — and keep that list somewhere better than a
   comment per site.
+
+## save-test narrower than the save (pretty-print audit r1, 2026-08-27)
+
+A guard decides whether to snapshot state by asking a question that is
+STRICTER than what the snapshot can actually hold, so the state that falls
+in the gap is modified with no way back.
+
+Found: `ppEqDelegate`'s caller tested `getRegisterAsRealQuiet(var)` before
+`saveRegisterSnapshot(var)`. The snapshot handles `dtComplex34`; the test
+refuses a complex with a non-zero imaginary part. A loop variable holding
+7+4i therefore took no snapshot, was overwritten by the loop counter, and
+was never restored — the owner's value destroyed by a sum that had no
+business touching it. The idiom was copied from `differentiate.c`, where
+the same narrowness is harmless because that engine needs a real point
+anyway; copying an idiom carries its preconditions with it.
+
+Hunt it at: every `if(canConvert(x)) { save(x); } ... modify(x)` pair. Ask
+what the SAVE covers, not what the test converts. Where the save covers
+nothing, refuse rather than clobber.
+
+## stale global read as this call's verdict (pretty-print audit r1, 2026-08-27)
+
+A status global set by someone else, at some earlier time, is read after a
+call as though it described that call.
+
+Found: `ppEqDelegate` read `engineNestingWasRefused` to decide whether the
+engine it had just invoked had refused. Only the integrate branch cleared
+it first, and NOTHING on the derivative path clears it —
+`solve.c:46` holds the tree's only assignment of `false`. So one earlier
+refused nesting left the flag standing and every later `DERIV` construct
+discarded a correct answer as "refused", until an unrelated integral or
+solve happened to clear it. `programRunStop` had the same shape and was
+additionally overwritten on the way out.
+
+Hunt it at: every read of a firmware status global after a call. Establish
+it before the call or do not read it after. And a global you did not set
+is not yours to leave changed — snapshot and restore.
