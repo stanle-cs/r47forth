@@ -1,0 +1,57 @@
+This is a package that draws maths on R47 the way it looks on paper, and remembers the calculation that produced a number. Stock R47 puts a fraction on one line with small raised and lowered digits, a root sign has no bar over it, and once you press + the calculator shows you the answer and forgets what you asked for. With this package a fraction gets a real bar with the numerator sitting on top, roots get their bar, and the calculation stays around so you can look at it again.
+
+Natural display is on when you install it. The formula line above the stack is off, turn it on with PTLIN.
+
+[list]
+[*]PSHOW draws the X value on the whole screen, biggest font that fits.
+[*]PHIST opens the formula browser. UP and DOWN move the selection, ENTER puts the selected formula's result back in X, EXIT leave. A row wider than the screen pans with the .d key.
+[*]PCLR empties the formula history.
+[*]EQSHW draws the current equation in 2D on the whole screen (it also sits on the EQN menu).
+[*]PPON toggles natural display, PTLIN toggles the formula line on T.
+[*]All six are on the PP menu under DISP, and in the catalog, and they can be assigned to keys.
+[*]Both toggles are system flags, PPRTY and PTLINE, so SF and CF in SYSFL work on them too.
+[/list]
+[attachment=1]pp-attach-1-tline.png[/attachment]
+
+This is the ordinary stack screen after 2 ENTER 3 + 4 x, with PTLIN set. The T line carries the formula and X carries its answer. The formula follows what you press, so pressing another operator extends it instead of starting again.
+
+[attachment=2]pp-attach-2-browser.png[/attachment]
+
+This is the browser after a few calculations. Each row is one finished formula with its result, newest on top, and the bar on the left marks the selection. The cube root keeps its index, the absolute value gets real bars, and log base 2 puts the base where a book would put it.
+
+[b]When it refuses[/b]
+
+The package draws nothing at all if anything about a value is unusual, and the normal line renders instead. Strings, matrices, dates and long integers never get the 2D treatment. A formula too tall for the space it has is dropped rather than squashed. Why refuse instead of showing an approximation? A picture of a fraction that isn't the number in X is worse than the plain line, and there's no way to tell from looking. The same rule covers the formula memory. If the package can't describe honestly how a number was made, it keeps the number and drops the description.
+
+Numbers are always formatted by the calculator first and rearranged after, so display mode, rounding and digit grouping come out the same as they always did.
+
+[b]Equations[/b]
+
+The equation parser gains SUM, PROD, INTEG and DERIV, with semicolons between the arguments.
+
+[code]SUM(body;var;from;to)
+PROD(body;var;from;to)
+INTEG(body;var;from;to)
+DERIV(body;var;at)[/code]
+SUM and PROD take an optional step, DERIV takes an optional order for the second derivative. They nest.
+[attachment=3]pp-attach-3-nesting.png[/attachment]
+
+That's an integral of a second derivative wrapping a sum over a product, drawn by EQSHW. It's the biggest thing the renderer will take, and it's in the test suite as the capacity case.
+
+[b]Limits[/b]
+[list]
+[*]The formula memory is session-only, and it only follows what you press. Programs, the solver and the integrator don't add to it.
+[*]About a dozen formulas are kept. A long enough chain runs out of room and comes back as a plain value.
+[*]A typed number over 30 characters makes the package drop the formula instead of showing part of it.
+[*]The full-screen PHIST view can't pan, so a formula too wide for it is left out. The browser pans.
+[*]Upstream's second derivative sizes its step from x, and for x at 0.005 or below the answer is wrong (x=0 and x from 0.01 up are fine). Setting the d_d variable fixes it, the delta softkey in the derivative menu. That one isn't the package.
+[/list]
+
+[b]Install[/b]
+
+Unzip the attachment into packages/pretty-print and build with the package manager [url]https://forum.swissmicros.com/viewtopic.php?f=46&t=4876[/url]:
+[code]make sim CUSTOM_PKG=packages/pretty-print[/code]
+It doesn't need the other packages, and it composes with both if you run them:
+[code]make sim CUSTOM_PKG=packages/forth-core,packages/undo-history,packages/pretty-print[/code]
+For the calculator it's make dmcp5r47 with the same CUSTOM_PKG. The firmware grows by 25 KB, and the working memory is all static, nothing comes out of the pool.
+Package base is r47forth commit 70f8b7db7. Upstream's full test suite runs green with the package active, alone and combined with the other two, and my own tests add about a hundred cases on top. Everything above is from the simulator, I haven't flashed a real DM42n with this yet. So make a calculator backup and flash at your own risk. The zip has COPYING inside, the licence is GPL-3.0-only, inherited from c43.
