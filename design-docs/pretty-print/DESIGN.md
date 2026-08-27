@@ -300,11 +300,35 @@ stack-consumption guard: the outermost construct records the stack
 pointer, and every deeper construct or delegate refuses cleanly once
 consumption exceeds PPEQ_STACK_ALLOWANCE (8 KB; the reference tower
 high-waters 5.3 KB on the 64-bit sim, ARM frames are smaller). The
-depth cap (8) remains only as a runaway backstop. Known numeric
-caveat, documented not fixed: an INTEG limit exactly at 0 with a DERIV
-integrand collapses the relative-step stencil at the integrator's
-endpoint-clustered nodes (upstream's interactive d²/dx² at 1E-24
-produces the same garbage) — use nonzero limits or shift the variable.
+depth cap (8) remains only as a runaway backstop. **Known UPSTREAM defect (measured 2026-08-26, corrects an earlier
+mis-statement here).** `fn2ndDerivEq` sizes its sampling step as a
+FRACTION of the evaluation point — upstream's own comment at
+differentiate.c:478 says "the step is relative to x, and at x = 0 it
+collapses", and an absolute fallback covers exactly zero. At small
+NONZERO points the step underflows against the function's own scale,
+the second difference cancels to noise, and dividing by h² amplifies
+it. Measured on the plain formula `6/(X+2)` through the built-in
+second derivative, NO package code involved (true value ≈ 1.4978):
+
+| x | d/dx (true ≈ −1.5) | d²/dx² (true ≈ 1.5) |
+|---|---|---|
+| 1 | −0.666… ✓ (true −0.667) | 0.444… ✓ (true 0.444) |
+| 0.001 | −1.4985 ✓ | **−1511.79 ✗** |
+| 1e−8 | −1.49999998 ✓ | **−9.28e7 ✗** |
+| 1e−12 | −1.4999999999985 ✓ | 1.5000000 ✓ (lucky) |
+| 1e−16 | −1.49999999999999985 ✓ | **1.51e29 ✗** |
+| 1e−24 | −1.50000000 ✓ | **0E+17 ✗** |
+| 1e−40 | **0E+41 ✗** | **0E+82 ✗** |
+| 0 | −1.4999999999999999999 ✓ | 1.5000000000000000002 ✓ |
+
+So exactly zero WORKS and small nonzero values FAIL — the reverse of
+what was written here before. The first derivative is robust to
+~1e−24; only the second derivative is fragile, which is what the h²
+division predicts. Consequence for `INTEG(DERIV(...))`: tanh-sinh
+clusters its nodes near the endpoints, so an integration range that
+touches or approaches 0 samples the integrand squarely in the failing
+band. Use ranges away from zero. Reachable from the built-in d²/dx²
+key with no package involvement — UPSTREAM-REPORTABLE, not ours.
 Nested INTEG-in-INTEG works: the new double-exponential path never
 increments the engine counter, so upstream refuses nothing; the stack
 guard is the bound, and a refused engine (old path, defensive) turns

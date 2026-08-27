@@ -2,6 +2,45 @@
 
 Non-normative amendment trail. DESIGN.md is authoritative.
 
+## 2026-08-26 — the zero-limit caveat was wrong (Stan asked; round 6)
+
+Stan asked whether the numeric quirk recorded in round 5 was a genuine
+bug. Answering it honestly meant testing the claim instead of asserting
+it — the round-5 text said "an INTEG limit exactly at 0 collapses the
+stencil, use nonzero limits", which was an INFERENCE from where the
+garbage appeared, never a measurement.
+
+Measured directly, driving upstream's own `fn2ndDerivEq` on the plain
+formula `6/(X+2)` with no construct or package code in the path, the
+inference was backwards:
+
+- x = 0 exactly: **correct** (1.50000000000000000000000000025).
+- x = 1: correct. x = 0.001: **−1511.79** where the truth is 1.4978.
+- x = 1e−8: −9.28e7. x = 1e−16: 1.51e29. x = 1e−24: 0E+17.
+- The FIRST derivative is correct at every one of those points, only
+  failing at 1e−40 — exactly what an h² division predicts.
+
+Mechanism, from upstream's own comment (differentiate.c:478): the step
+is sized as a fraction of x, with an absolute fallback ONLY at exactly
+zero. Small nonzero x therefore gets a step that has underflowed
+against the function's scale; the second difference cancels to noise
+and h² amplifies it. Erratic rather than monotone (1e−12 comes out
+right) because it is noise, not bias.
+
+So: a genuine, silent, user-reachable upstream defect — press the
+built-in d²/dx² on any formula at X = 0.001 and it answers confidently
+with nonsense. It is not the package's, and per the upstream-convention
+rule it is not the package's to patch either. DESIGN.md now carries the
+measured table and the corrected guidance (avoid ranges NEAR zero, not
+"zero exactly"), TESTING.md records that EQ26's [1,2] limits dodge it
+deliberately, and it is a candidate for an UPSTREAM_REPORT.
+
+Standing lesson, third time in this package: a claim inferred from
+where a symptom appeared is not a finding. Round 4's MUT-41 was green
+under a stale binary; round 5 blamed "corruption" for what was
+numerics; round 6 wrote a caveat pointing at the one input that
+actually works.
+
 ## 2026-08-26 — render/eval parity (Stan's ruling, round 5)
 
 Stan asked whether the stack risk could be reduced so the full tower

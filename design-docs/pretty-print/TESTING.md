@@ -278,6 +278,8 @@ fixed — the forth-core 2026-07-21 rule applies unchanged.
 
 - **EQ26** — `INTEG(DERIV(SUM(X;X;1;3)/(X+2);X;X;2);X;1;2)` evaluates
   through the real fnEqCalc path to 7/24 within 1e-10 (~2.5 s sim).
+  The limits [1,2] are chosen to avoid an UPSTREAM second-derivative
+  defect near zero (DESIGN.md table), not to flatter the feature.
   The full reference tower (Σ√-fraction / multiplication × ∏, inside
   d²/dx², inside ∫ over [1,2]) was measured once: 0.18234918164357208…
   against the analytic value — 16+ digits in 27.8 s sim; recorded here
