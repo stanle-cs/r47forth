@@ -274,6 +274,12 @@ void ppfVariableName(uint16_t varId, char *out) {
     if(vn[0] > 0 && vn[0] <= 15) {
       xcopy(out, vn + 1, vn[0]);
       out[vn[0]] = 0;
+      // the canonical variable X typesets as the classic lowercase x
+      // (the closest form the fonts have to the italic convention);
+      // every other name keeps its own letters
+      if(out[0] == 'X' && out[1] == 0) {
+        out[0] = 'x';
+      }
     }
   }
 }

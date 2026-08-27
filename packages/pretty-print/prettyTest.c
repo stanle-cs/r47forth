@@ -78,7 +78,7 @@ void prettyTestMeasure(uint16_t unusedButMandatoryParameter) {
     const ppNode_t *f = ppNodeAt(frac);
     if(f->width   != 12) ppTestFail("M1 width != 12");
     if(f->ascent  != 25) ppTestFail("M1 ascent != 25");
-    if(f->descent !=  5) ppTestFail("M1 descent != 5");
+    if(f->descent !=  6) ppTestFail("M1 descent != 6");   // fracGap+1 below the bar (symmetric clearance)
   }
 
   // M2: HBOX[RUN("1", numeric), FRAC(3,4)] — mixed-number shape.
@@ -101,7 +101,7 @@ void prettyTestMeasure(uint16_t unusedButMandatoryParameter) {
     // glyph's leading empty columns (numericFont '1' measures 14).
     if(b->width   != 26) ppTestFailInt("M2 width",   26, b->width);
     if(b->ascent  != 26) ppTestFailInt("M2 ascent",  26, b->ascent);
-    if(b->descent !=  5) ppTestFailInt("M2 descent",  5, b->descent);
+    if(b->descent !=  6) ppTestFailInt("M2 descent",  6, b->descent);   // fracGap+1 below the bar
   }
 
   // M3: parser round-trip on the improper negative form the builder emits:
@@ -146,7 +146,7 @@ void prettyTestMeasure(uint16_t unusedButMandatoryParameter) {
     }
     else {
       const ppNode_t *r = ppNodeAt(rad);
-      if(r->ascent  != 29) ppTestFailInt("M5 ascent",  29, r->ascent);   // 26 + radGap 1 + vinc 2
+      if(r->ascent  != 30) ppTestFailInt("M5 ascent",  30, r->ascent);   // 26 + radGap 1 + clearance 1 + vinc 2
       if(r->descent !=  0) ppTestFailInt("M5 descent",  0, r->descent);
     }
   }
@@ -357,7 +357,7 @@ void prettyTestPixels(uint16_t unusedButMandatoryParameter) {
     // find the vinculum: a lit run of >= 10 px at row 131 in the right half
     uint32_t runLen = 0, bestLen = 0, bestEnd = 0;
     for(uint32_t x = 200; x < SCREEN_WIDTH; x++) {
-      if(lcd_buffer_pixel_on(x, 131)) {
+      if(lcd_buffer_pixel_on(x, 130)) {
         runLen++;
         if(runLen > bestLen) { bestLen = runLen; bestEnd = x; }
       }
@@ -366,14 +366,15 @@ void prettyTestPixels(uint16_t unusedButMandatoryParameter) {
       }
     }
     if(bestLen < 10) {
-      ppTestFail("P4 vinculum row 131 missing");
+      ppTestFail("P4 vinculum row 130 missing");
     }
     else {
       uint32_t vx0 = bestEnd - bestLen + 1, vx1 = bestEnd;
-      if(!ppTestRowAllLit(132, vx0, vx1)) ppTestFail("P4 vinculum row 132 missing");
+      if(!ppTestRowAllLit(131, vx0, vx1)) ppTestFail("P4 vinculum row 131 missing");
       // gap/ink probes stay in the radicand's columns (right end of the
-      // run) — the sign's own diagonal legitimately crosses row 133 on
-      // the left
+      // run) — the sign's own diagonal legitimately crosses the gap rows
+      // on the left. Two clear rows now (radGap+1).
+      if(ppTestRowAnyLit(132, vx1 - 8, vx1)) ppTestFail("P4 gap row 132 not clear");
       if(ppTestRowAnyLit(133, vx1 - 8, vx1)) ppTestFail("P4 gap row 133 not clear");
       if(!ppTestRectAnyLit(134, 159, vx1 - 10, vx1)) ppTestFail("P4 radicand ink missing");
     }
@@ -388,6 +389,41 @@ void prettyTestPixels(uint16_t unusedButMandatoryParameter) {
   }
   else {
     clearSystemFlag(FLAG_FRACT);
+  }
+
+  // P5 (polish): the integral sign's hooks reach sideways from the
+  // spine — the top hook right, the bottom hook left. A bare vertical
+  // bar (hooks dropped) fails both reach probes.
+  {
+    ppReset();
+    uint8_t body = ppNewRun("1", 1, PP_FONT_STANDARD);
+    uint8_t big = ppNewBox(PP_INT, PP_FONT_STANDARD);
+    if(body == PP_NONE || big == PP_NONE) {
+      ppTestFail("P5 build");
+    }
+    else {
+      ppAppendChild(big, body);
+      if(!ppMeasure(big, 0)) {
+        ppTestFail("P5 measure");
+      }
+      else {
+        const ppNode_t *n = ppNodeAt(big);
+        lcd_fill_rect(0, 60, SCREEN_WIDTH, 120, LCD_SET_VALUE);
+        ppPaintAt(big, 30, 120);
+        uint32_t top = (uint32_t)(120 - n->ascent);
+        uint32_t bot = (uint32_t)(120 + n->descent - 1);
+        // spine column is x+7; the hook tips reach >= 3 px sideways
+        if(!ppTestRowAnyLit(top, 30 + 7 + 3, 30 + 7 + 8)) {
+          ppTestFail("P5 top hook does not reach right");
+        }
+        if(!ppTestRowAnyLit(bot, 30 + 7 - 6, 30 + 7 - 3)) {
+          ppTestFail("P5 bottom hook does not reach left");
+        }
+        if(!ppTestRowAnyLit((top + bot) / 2, 30 + 7, 30 + 8)) {
+          ppTestFail("P5 spine missing");
+        }
+      }
+    }
   }
   ppTestWriteLonI(REGISTER_X, ppTestFailures);
 }
@@ -422,7 +458,7 @@ void prettyTestShow(uint16_t unusedButMandatoryParameter) {
   {
     uint32_t runLen = 0, bestLen = 0, bestEnd = 0;
     for(uint32_t x = 0; x < SCREEN_WIDTH; x++) {
-      if(lcd_buffer_pixel_on(x, 93)) {
+      if(lcd_buffer_pixel_on(x, 92)) {
         runLen++;
         if(runLen > bestLen) { bestLen = runLen; bestEnd = x; }
       }
@@ -431,11 +467,11 @@ void prettyTestShow(uint16_t unusedButMandatoryParameter) {
       }
     }
     if(bestLen < 10) {
-      ppTestFail("S2 bar row 93 missing");
+      ppTestFail("S2 bar row 92 missing");
     }
     else {
       uint32_t bx0 = bestEnd - bestLen + 1, bx1 = bestEnd;
-      if(!ppTestRowAllLit(94, bx0, bx1)) ppTestFail("S2 bar row 94 missing");
+      if(!ppTestRowAllLit(93, bx0, bx1)) ppTestFail("S2 bar row 93 missing");
       // roughly centered: the bar's midpoint within 40 px of screen center
       int32_t mid = (int32_t)(bx0 + bx1) / 2;
       if(mid < SCREEN_WIDTH / 2 - 40 || mid > SCREEN_WIDTH / 2 + 40) {
@@ -1621,7 +1657,7 @@ void prettyTestEquation(uint16_t unusedButMandatoryParameter) {
     ppTestFail("EQ1 parse");
   }
   else {
-    ppfTestExpect("EQ1 precedence", root, "[F(1|X) + 2]");
+    ppfTestExpect("EQ1 precedence", root, "[F(1|x) + 2]");
   }
 
   // EQ2: parens unwrap under the bar
@@ -1639,7 +1675,7 @@ void prettyTestEquation(uint16_t unusedButMandatoryParameter) {
     ppTestFail("EQ3 parse");
   }
   else {
-    ppfTestExpect("EQ3 radical", root, "R([X + 1])");
+    ppfTestExpect("EQ3 radical", root, "R([x + 1])");
   }
 
   // EQ4: declines — no 2D gain, dangling operator, ellipsis, unknown glyph
@@ -1786,7 +1822,7 @@ void prettyTestEquation(uint16_t unusedButMandatoryParameter) {
       ppTestFail("EQ10 parse");
     }
     else {
-      ppfTestExpect("EQ10 integral frame", ppqFrameIntegral(eq), "B([F(1|X) dX]|0.|1.)");
+      ppfTestExpect("EQ10 integral frame", ppqFrameIntegral(eq), "B([F(1|x) dx]|0.|1.)");
     }
 
     // EQ11: without INTERACTIVE the limits are not the session's — the
@@ -1797,7 +1833,7 @@ void prettyTestEquation(uint16_t unusedButMandatoryParameter) {
       ppTestFail("EQ11 parse");
     }
     else {
-      ppfTestExpect("EQ11 bare fallback", ppqFrameIntegral(eq), "I(F(1|X))");
+      ppfTestExpect("EQ11 bare fallback", ppqFrameIntegral(eq), "I(F(1|x))");
     }
 
     // EQ12: first derivative frames d/dX (var name decoded live)
@@ -1807,7 +1843,7 @@ void prettyTestEquation(uint16_t unusedButMandatoryParameter) {
       ppTestFail("EQ12 parse");
     }
     else {
-      ppfTestExpect("EQ12 d/dx", ppqFrameDerivative(eq, false), "[F(d|dX) P(F(1|X))]");
+      ppfTestExpect("EQ12 d/dx", ppqFrameDerivative(eq, false), "[F(d|dx) P(F(1|x))]");
     }
 
     // EQ13: second derivative carries the superscript-2 glyphs
@@ -1817,7 +1853,7 @@ void prettyTestEquation(uint16_t unusedButMandatoryParameter) {
     }
     else {
       char expect13[64];
-      sprintf(expect13, "[F(d" "\xa1\x62" "|dX" "\xa1\x62" ") P(F(1|X))]");
+      sprintf(expect13, "[F(d" "\xa1\x62" "|dx" "\xa1\x62" ") P(F(1|x))]");
       ppfTestExpect("EQ13 d2/dx2", ppqFrameDerivative(eq, true), expect13);
     }
 
@@ -1952,14 +1988,14 @@ void prettyTestEquation(uint16_t unusedButMandatoryParameter) {
       }
       else {
         // HBOX sig children are space-joined
-        ppfTestExpect("EQ20 sum shape", root, "B([X \xa1\x62]|[X = 1]|10)");
+        ppfTestExpect("EQ20 sum shape", root, "B([x \xa1\x62]|[x = 1]|10)");
       }
       ppReset();
       if(!ppqParse("DERIV(X;X;2)", PP_FONT_STANDARD, PP_FONT_TINY, &root)) {
         ppTestFail("EQ21 parse");
       }
       else {
-        ppfTestExpect("EQ21 deriv shape", root, "[F(d|[d X]) U(P(X)|[X = 2])]");
+        ppfTestExpect("EQ21 deriv shape", root, "[F(d|[d x]) U(P(x)|[x = 2])]");
       }
     }
 

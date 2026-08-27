@@ -2,6 +2,37 @@
 
 Non-normative amendment trail. DESIGN.md is authoritative.
 
+## 2026-08-26 — visual polish (Stan's review of the PP12-PP14 shots)
+
+Three findings from human review of the capture sheets — all three were
+invisible to the structural pins and two of them now have pixel pins.
+
+- **The fraction bar sat one row tighter below than above** (2 clear
+  rows over the bar, 1 under — measured off the shot, then explained:
+  descent counts rows at/below a baseline while ascent counts strictly
+  above, so `+ fracGap + den.ascent` lands the denominator one row
+  closer than the numerator's mirror formula). Fixed with an explicit
+  +1 on the denominator side; the radical's vinculum had the same
+  asymmetry over its radicand and got the same +1. Fractions are one
+  row taller: M1/M2/M5 metric pins updated, P4/S2 row pins shifted
+  (fixed-baseline vinculum up 1; the centered PSHOW fraction re-centers
+  up 1). MUT-48 pins the clearance.
+- **The stroke-drawn ∫ read as a slash**: straight-line hooks. Replaced
+  with `ppDrawIntegralSign` — a 2 px spine whose hooks bend along a
+  quadratic per-row offset with terminal dots, shared by PP_INT and the
+  PP_BIGOP ∫ arm (the old shape lived in two copies; now one). P5 pins
+  the hooks' sideways reach; MUT-50 red.
+- **The variable X typeset as a capital**. The fonts carry no italic
+  alphabet (probed x, x̄ 0x837f, χ 0x83c7 as candidates — the plain
+  lowercase x is the closest form to the textbook convention), so the
+  canonical variable X now renders as lowercase x across the pretty
+  surfaces: ppfVariableName (PP12 ∫ bodies, PP13 frames), ppqName and
+  the construct var runs (PP14 bodies and decorations — body and
+  under-limit stay consistent). Scoped to exactly 'X': the first draft
+  lowercased every single capital and renamed A+B to a+b — EQ2's
+  pinned caps caught it. Other names keep their letters; the
+  linear/edit views always show the true text. MUT-49 red.
+
 ## 2026-08-26 — PP14 (equation-language SUM/PROD/DERIV/INTEG)
 
 - The design pass paid for itself three times: (1) parseEquation's whole

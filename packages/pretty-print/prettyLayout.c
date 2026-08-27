@@ -270,7 +270,9 @@ bool_t ppMeasure(uint8_t n, uint8_t depth) {
       ppPool[child].relX    = (int16_t)(idxW + signW);
       ppPool[child].relBase = 0;
       nd->width   = (int16_t)(idxW + signW + ppPool[child].width + m->overhang);
-      nd->ascent  = ppPool[child].ascent + m->radGap + m->vincThick;
+      // radGap+1 for the same asymmetry the fraction bar has: the
+      // radicand's ascent counts strictly above its baseline
+      nd->ascent  = ppPool[child].ascent + m->radGap + 1 + m->vincThick;
       nd->descent = ppPool[child].descent;
       if(!synth && m->radInk - nd->ascent > nd->descent) {
         nd->descent = m->radInk - nd->ascent;   // the raised glyph's tail
@@ -469,10 +471,12 @@ bool_t ppMeasure(uint8_t n, uint8_t depth) {
         return false;
       }
       // Bar rows: [B + barTopRel, B + barTopRel + barThick - 1].
-      // Numerator ink ends fracGap rows above the bar; denominator ink
-      // starts fracGap rows below it.
+      // Clearance is fracGap+1 on BOTH sides: descent counts rows
+      // at/below a baseline while ascent counts strictly above, so the
+      // denominator needs the extra row the numerator gets for free
+      // (the bar read as cutting the denominator's top without it).
       ppPool[num].relBase = m->barTopRel - m->fracGap - ppPool[num].descent;
-      ppPool[den].relBase = m->barTopRel + m->barThick + m->fracGap + ppPool[den].ascent;
+      ppPool[den].relBase = m->barTopRel + m->barThick + m->fracGap + 1 + ppPool[den].ascent;
 
       int16_t inner = (ppPool[num].width > ppPool[den].width) ? ppPool[num].width : ppPool[den].width;
       nd->width = inner + 2 * m->overhang;
@@ -516,6 +520,32 @@ static void ppDrawLine(int16_t x0, int16_t y0, int16_t x1, int16_t y1) {
   }
 }
 
+/* The integral sign, stroke-drawn with curved hooks: a 2 px vertical
+ * spine whose top bends right and bottom bends left along a quadratic
+ * offset — the straight-line hooks read as a slash (found by review).
+ * cx is the spine's left column; rows span [top, bot]. */
+static void ppDrawIntegralSign(int16_t cx, int16_t top, int16_t bot) {
+  int16_t h = (int16_t)(bot - top + 1);
+  int16_t hh = (int16_t)(h / 4);
+  if(hh > 7) hh = 7;
+  if(hh < 3) hh = 3;
+  for(int16_t y = top; y <= bot; y++) {
+    int16_t dxo = 0;
+    if(y < top + hh) {
+      int16_t t = (int16_t)(top + hh - 1 - y);        // 0 at hook base, hh-1 at tip
+      dxo = (int16_t)((5 * t * t) / ((hh - 1) * (hh - 1) > 0 ? (hh - 1) * (hh - 1) : 1));
+    }
+    else if(y > bot - hh) {
+      int16_t t = (int16_t)(y - (bot - hh + 1));
+      dxo = (int16_t)(-(5 * t * t) / ((hh - 1) * (hh - 1) > 0 ? (hh - 1) * (hh - 1) : 1));
+    }
+    lcd_fill_rect((uint32_t)(cx + dxo), (uint32_t)y, 2, 1, LCD_EMPTY_VALUE);
+  }
+  // terminal dots thicken the hook tips
+  lcd_fill_rect((uint32_t)(cx + 5), (uint32_t)(top + 1), 2, 1, LCD_EMPTY_VALUE);
+  lcd_fill_rect((uint32_t)(cx - 5), (uint32_t)(bot - 1), 2, 1, LCD_EMPTY_VALUE);
+}
+
 static void ppPaint(uint8_t n, int16_t x, int16_t baseline) {
   const ppNode_t *nd = &ppPool[n];
   const ppMetrics_t *m = &ppMet[nd->fontId];
@@ -535,7 +565,7 @@ static void ppPaint(uint8_t n, int16_t x, int16_t baseline) {
                      || (index != PP_NONE);
       int16_t signW = synth ? 10 : m->radAdvance;
       int16_t signX = (int16_t)(x + ppPool[child].relX - signW);
-      int16_t vincTop = baseline - ppPool[child].ascent - m->radGap - m->vincThick;
+      int16_t vincTop = baseline - ppPool[child].ascent - m->radGap - 1 - m->vincThick;
       if(index != PP_NONE) {
         ppPaint(index, x + ppPool[index].relX, baseline + ppPool[index].relBase);
       }
@@ -560,14 +590,9 @@ static void ppPaint(uint8_t n, int16_t x, int16_t baseline) {
     case PP_INT: {
       uint8_t child = nd->firstChild;
       ppPaint(child, x + ppPool[child].relX, baseline);
-      // the ∫: top hook right, 2 px vertical, bottom hook left
       int16_t top = baseline - nd->ascent;
       int16_t bot = baseline + nd->descent - 1;
-      lcd_fill_rect((uint32_t)(x + 6), (uint32_t)(top + 3), 2, (uint32_t)(bot - top - 5), LCD_EMPTY_VALUE);
-      ppDrawLine((int16_t)(x + 7), (int16_t)(top + 3), (int16_t)(x + 11), (int16_t)top);
-      ppDrawLine((int16_t)(x + 8), (int16_t)(top + 3), (int16_t)(x + 12), (int16_t)top);
-      ppDrawLine((int16_t)(x + 6), (int16_t)(bot - 3), (int16_t)(x + 2), (int16_t)bot);
-      ppDrawLine((int16_t)(x + 7), (int16_t)(bot - 3), (int16_t)(x + 3), (int16_t)bot);
+      ppDrawIntegralSign((int16_t)(x + 7), top, bot);
       return;
     }
 
@@ -596,12 +621,7 @@ static void ppPaint(uint8_t n, int16_t x, int16_t baseline) {
       int16_t bot = (int16_t)(baseline + gd - 1);
       uint16_t op = nd->textOff;
       if(op == ITM_INTEGRAL_YX) {
-        // the ∫: same stroke shape as PP_INT, at the glyph box
-        lcd_fill_rect((uint32_t)(gx + 6), (uint32_t)(top + 3), 2, (uint32_t)(bot - top - 5), LCD_EMPTY_VALUE);
-        ppDrawLine((int16_t)(gx + 7), (int16_t)(top + 3), (int16_t)(gx + 11), top);
-        ppDrawLine((int16_t)(gx + 8), (int16_t)(top + 3), (int16_t)(gx + 12), top);
-        ppDrawLine((int16_t)(gx + 6), (int16_t)(bot - 3), (int16_t)(gx + 2), bot);
-        ppDrawLine((int16_t)(gx + 7), (int16_t)(bot - 3), (int16_t)(gx + 3), bot);
+        ppDrawIntegralSign((int16_t)(gx + 7), top, bot);
       }
       else if(op == ITM_PIn || op == ITM_iPIn) {
         // the ∏: top bar, two verticals

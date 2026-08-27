@@ -104,7 +104,10 @@ static uint8_t ppqNumber(ppqCtx_t *c, uint8_t font) {
   return ppNewRun(c->s + start, (uint16_t)(c->pos - start), font);
 }
 
-// name: ASCII letters plus subscript digits (X₁ etc.)
+// name: ASCII letters plus subscript digits (X₁ etc.). The canonical
+// variable X typesets as the classic lowercase x — the closest form the
+// fonts have to the italic convention; other names keep their letters
+// and the linear/edit views keep the true text.
 static uint8_t ppqName(ppqCtx_t *c, uint8_t font) {
   int16_t start = c->pos, next;
   bool_t any = false;
@@ -120,6 +123,10 @@ static uint8_t ppqName(ppqCtx_t *c, uint8_t font) {
   }
   if(!any) {
     return PP_NONE;
+  }
+  if(c->pos - start == 1 && c->s[start] == 'X') {
+    char lc = 'x';
+    return ppNewRun(&lc, 1, font);
   }
   return ppNewRun(c->s + start, (uint16_t)(c->pos - start), font);
 }
@@ -149,6 +156,15 @@ static bool_t ppqMatchName(ppqCtx_t *c, const char *name, int16_t *after) {
   }
   *after = (int16_t)(c->pos + l + 1);
   return true;
+}
+
+// the raw-slice twin of ppqName's X-to-x rule, for the d<var> runs
+static uint8_t ppqVarRun(ppqCtx_t *c, int16_t start, int16_t end, uint8_t font) {
+  if(end - start == 1 && c->s[start] == 'X') {
+    char lc = 'x';
+    return ppNewRun(&lc, 1, font);
+  }
+  return ppNewRun(c->s + start, (uint16_t)(end - start), font);
 }
 
 static bool_t ppqEat(ppqCtx_t *c, char ch) {
@@ -255,7 +271,7 @@ static uint8_t ppqBigopConstruct(ppqCtx_t *c, uint8_t font, uint8_t tinyF) {
     uint8_t big = ppNewBox(PP_BIGOP, font);
     uint8_t hb = ppNewBox(PP_HBOX, font);
     uint8_t dRun = ppqRun(" d", font);
-    uint8_t varRun2 = ppNewRun(c->s + varStart, (uint16_t)(varEnd - varStart), font);
+    uint8_t varRun2 = ppqVarRun(c, varStart, varEnd, font);
     if(big == PP_NONE || hb == PP_NONE || dRun == PP_NONE || varRun2 == PP_NONE) {
       c->failed = true;
       return PP_NONE;
@@ -291,7 +307,7 @@ static uint8_t ppqBigopConstruct(ppqCtx_t *c, uint8_t font, uint8_t tinyF) {
     uint8_t num = ppqRun(second ? "d" "\xa1\x62" : "d", font);
     uint8_t denBox = ppNewBox(PP_HBOX, font);
     uint8_t dRun = ppqRun("d", font);
-    uint8_t varRun2 = ppNewRun(c->s + varStart, (uint16_t)(varEnd - varStart), font);
+    uint8_t varRun2 = ppqVarRun(c, varStart, varEnd, font);
     uint8_t par = ppNewBox(PP_PAREN, font);
     uint8_t sub = ppNewBox(PP_SUB, font);
     uint8_t script = ppNewBox(PP_HBOX, tinyF);

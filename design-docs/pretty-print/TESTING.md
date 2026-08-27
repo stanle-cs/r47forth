@@ -213,6 +213,9 @@ after restore.
 | MUT-45 | bound-variable restore dropped (PP14) | EQ14 (X left holding the counter) |
 | MUT-46 | PROD seeded with zero (PP14) | EQ15 (product collapses to 0) |
 | MUT-47 | argument slicer ignores paren depth (PP14) | EQ18 (nested construct mis-sliced) |
+| MUT-48 | denominator bar clearance regressed (polish) | M1/M2 (descent 6), S2/EQ5 (bars move) |
+| MUT-49 | the X-to-x typeset map dropped (polish) | EQ1/EQ3/EQ10-12/EQ21 (X reappears) |
+| MUT-50 | ∫ hooks flattened to a bare bar (polish) | P5 (hook reach probes) |
 
 Two lessons from the first mutation run, kept for honesty: (a) the original
 MUT-4 ("drop the dtReal34 type gate") stays GREEN — a non-real register's
@@ -225,6 +228,22 @@ that the disabled path skips.
 
 A pin that stays green under its mutation is decoration and gets deleted or
 fixed — the forth-core 2026-07-21 rule applies unchanged.
+
+### Visual-polish additions (post-PP14, Stan's review)
+
+- **P5** — the integral sign's hooks reach ≥3 px sideways from the
+  spine at the tip rows, both directions, spine present at mid-height.
+- M1/M2 descent moved 5→6 and M5 ascent 29→30: the symmetric-clearance
+  fix (descent counts rows at/below a baseline, ascent strictly above,
+  so the bar's lower side was one row tighter than its upper side —
+  the bar read as cutting the denominator's / radicand's top). P4 and
+  S2 row pins shifted accordingly (vinculum up 1 at a fixed baseline;
+  the taller PSHOW fraction re-centers one row up).
+- EQ1/EQ3/EQ10-13/EQ20/EQ21 pin the X-to-x typeset convention (the
+  canonical variable X renders as the classic lowercase x in the
+  pretty views only; other names keep their letters — an early draft
+  lowercased EVERY single letter and turned A+B into a+b, caught by
+  EQ2 staying pinned to caps).
 
 ## Blast radius and measurements
 
