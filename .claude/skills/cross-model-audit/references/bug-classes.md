@@ -421,3 +421,37 @@ then paint with the primitive's own no-pre-clear flag.
 Hunt it at: any engine that computes tight bounds and then delegates
 drawing to a primitive with its own clearing policy. Ask what rectangle
 the primitive erases, not what it draws, and whether the two agree.
+
+## the pin whose own guard the production code makes false (pretty-print audit r4)
+
+A test that wraps its assertions in `if(<production accessor> != <empty>)`
+asserts nothing whenever that accessor is the very thing designed to
+return empty in the case under test. The suite stays green, the test
+reads convincingly, and it would pass with the feature deleted.
+
+Found: T21 claimed to pin "a tree with an UNKNOWN operand is built, and
+withheld from display". Every assertion sat behind
+`if(ppcCurrentFormulaRoot() != PPC_NIL)` — and that accessor withholds
+exactly the trees T21 was about, so the guard was false BY CONSTRUCTION
+and the body never ran for three audit rounds. The engine turned out to
+be correct; only the instrument was broken. Seeing through it needed a
+raw accessor that bypasses the screen, which is now the fixture's way in.
+
+Two siblings in the same family, both found the same day:
+
+- **The absence-only oracle.** `if(strstr(sig, "7")) fail` passes for the
+  EMPTY signature, so it passes just as well when capture has stopped
+  working entirely. Assert the whole expected shape, not the absence of
+  the wrong one.
+- **Two states sharing one signature character.** `PPN_VAL` and the
+  `PPC_UNKNOWN` sentinel both printed `#` — precisely the distinction the
+  binding invariant turns on ("degrades to a truthful value leaf, OR
+  invalidates"). Three pins expecting `#` were asserting
+  either-of-two-states without saying so. Splitting the character is the
+  fix; that all three stayed green afterwards is what proves none had
+  been silently accepting the wrong one.
+
+Hunt it at: every assertion nested inside a condition, and every oracle
+phrased as a negative. Ask what the test does when the feature is
+removed — if the answer is "passes", it is not a test. And check that the
+test's own vocabulary can express the distinction it exists to make.

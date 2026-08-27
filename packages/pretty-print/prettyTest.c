@@ -652,7 +652,13 @@ static void ppcTestSigNode(uint8_t n, char *out, size_t cap) {
   }
   const ppcNode_t *nd = ppcNodeAt(n);
   if(n == PPC_UNKNOWN) {
-    strcat(out, "#");
+    // AUDIT R4-2. This used to print "#", the same character PPN_VAL
+    // prints — so no signature pin could tell a truthful value leaf from
+    // the unknown sentinel, which is precisely the distinction the
+    // binding invariant turns on ("degrades to a truthful value leaf, or
+    // the whole shadow invalidates"). Three pins asserting "#" were in
+    // fact asserting either-of-two-states.
+    strcat(out, "~");
     return;
   }
   if(n == PPC_NIL || nd == NULL) {
@@ -1028,20 +1034,42 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
   // It is instead the designed truthful degradation — every consumer
   // screens PPC_UNKNOWN — and this test pins that: no crash, and
   // nothing claiming to be a formula.
+  // AUDIT R4-1: this pin was vacuous for three rounds. Every assertion
+  // below used to sit behind `if(ppcCurrentFormulaRoot() != PPC_NIL)`,
+  // and that accessor withholds any tree containing PPC_UNKNOWN — so the
+  // guard was false BY CONSTRUCTION and the body never ran. It would
+  // have passed identically with ITM_RCLADD removed from the classifier.
+  // The four asserts now name the four separate things the comment above
+  // claims, in order, through the raw accessor.
   ppcTestReset();
   ppcTestType("5");
   ppcTestOpParam(ITM_RCLADD, (uint16_t)REGISTER_Z);   // slot 2 is UNKNOWN
   {
     char sig[128];
     ppcTestSig(sig, sizeof(sig));                     // must not crash
-    uint8_t root = ppcCurrentFormulaRoot();
-    if(root != PPC_NIL) {
+
+    // (1) the operation WAS classified and did build a tree
+    uint8_t raw = ppcTestCurrentRaw();
+    if(raw == PPC_NIL) {
+      ppTestFail("T21 RCL-arith built no tree at all — fixture never reached the state under test");
+    }
+    else {
+      // (2) the sentinel is stored as a child, exactly as designed
+      const ppcNode_t *nd = ppcNodeAt(raw);
+      if(nd == NULL || nd->child[1] != PPC_UNKNOWN) {
+        ppTestFail("T21 the UNKNOWN operand is not the right-hand child");
+      }
+      // (3) and the display path withholds it
+      if(ppcCurrentFormulaRoot() != PPC_NIL) {
+        ppTestFail("T21 a tree with an UNKNOWN operand was offered for display");
+      }
       uint8_t built;
       ppReset();
       if(ppfBuildCurrent(PP_FONT_STANDARD, PP_FONT_STANDARD, &built)) {
         ppTestFail("T21 a tree with an UNKNOWN operand was rendered as a formula");
       }
     }
+    // (4) nothing was filed into history
     ppcTestExpectHist("T21 nothing emitted", 0);
   }
 
@@ -1094,7 +1122,16 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
     ppcTestOpParam(ITM_STO, (uint16_t)REGISTER_Y);  // Y := 5
     ppcTestOp(ITM_MULT);                         // X = 5*5 = 25
     {
-      // whatever is shown must not still claim the 7
+      // AUDIT R4-1: this asserted only that "7" was ABSENT, which an
+      // empty signature satisfies — it would have passed if capture had
+      // stopped working entirely. Assert the whole truthful shape: the
+      // overwritten Y degraded to a value leaf, times the live (2+3).
+      char expect23[64];
+      sprintf(expect23, "# 2 3 %s %s",
+              indexOfItems[ITM_ADD].itemCatalogName,
+              indexOfItems[ITM_MULT].itemCatalogName);
+      ppcTestExpectSig("T23 STO Y leaves a truthful value leaf, not the 7", expect23);
+
       char sig[128];
       ppcTestSig(sig, sizeof(sig));
       if(strstr(sig, "7") != NULL) {
@@ -1167,6 +1204,11 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
     ppcTestType("2");
     ppcTestOp(ITM_ADD);
     {
+      // AUDIT R4-1: absence of the truncated text was satisfied by any
+      // signature at all. The ruled outcome is stronger and exact — the
+      // formula is WITHHELD, so the signature is empty.
+      ppcTestExpectSig("T26 a 31-character literal withholds the formula", "-");
+
       char sig[128];
       ppcTestSig(sig, sizeof(sig));
       if(strstr(sig, d30) != NULL) {

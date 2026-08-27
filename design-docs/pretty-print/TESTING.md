@@ -111,6 +111,28 @@ does this first, always.
   Expected signatures build from `indexOfItems[].itemCatalogName` at
   runtime so name changes never turn them red.
 
+  **Signature alphabet** (postfix): a literal prints its own text, `#` a
+  PPN_VAL value leaf, `~` the PPC_UNKNOWN sentinel, `!` a PPN_OPAQUE
+  node, `?` PPC_NIL or an out-of-range index, `R<nn>` a register
+  reference, `{a,b}NAME` a big operator, and `-` an EMPTY signature —
+  which means the display path WITHHELD the formula, not that nothing
+  happened. Audit R4-2 split `~` out of `#`: the two shared one
+  character, so no pin could tell a truthful value leaf from the unknown
+  sentinel — exactly the distinction the binding invariant turns on. When
+  the split landed, all three existing `#` expectations stayed green,
+  which proves none of them had been silently accepting an UNKNOWN.
+
+  **A signature pin that expects `-` is asserting a real outcome; a pin
+  that merely checks some substring is ABSENT is not.** An absent
+  substring is satisfied by `-`, so such a pin passes just as well when
+  capture has stopped working altogether. Audit R4-1 converted T23 and
+  T26 from absence checks to exact-signature assertions for this reason,
+  and rewrote T21, whose every assertion sat behind a guard that
+  `ppcCurrentFormulaRoot()` made false by construction — it would have
+  passed with ITM_RCLADD removed from the classifier entirely. Where a
+  pin needs to see through that screen, `ppcTestCurrentRaw()` returns the
+  root before it.
+
 ### PP12 additions
 
 - **`prettyTestCapture` B-traces** — the big-operator family, driven

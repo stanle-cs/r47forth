@@ -126,6 +126,7 @@ uint8_t          ppcHistoryCount(void);
 const uint8_t   *ppcHistoryEntry(uint8_t idx, uint16_t *lenOut, uint16_t *seqOut);
 void             ppcHistoryClear(void);
 void             ppcShadowInvalidate(void);   ///< dispatch-bypassing mutations (browser recall)
+uint8_t          ppcTestCurrentRaw(void);   ///< test only: the current root BEFORE the opaque screen, so a pin can tell a truthful degradation from a total invalidation
 void             ppcTestDeinit(void);         ///< test only: re-arm the cold-start path so FV16 can prove lazy init leaves the FLAGS alone
 
 // prettyFormula.c — the browser reuses the pager's packed row builder

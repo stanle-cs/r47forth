@@ -860,3 +860,50 @@ one numerator over three denominators of very different ink height must
 light exactly the same pixels, counted over the numerator's own measured
 box. Red under MUT-A (`noPreClear` → false) with the original 52/38/20;
 green after.
+
+## Audit round 4, wave 1 — the instrument, not the engine (R4-1, R4-2)
+
+Round 4 rotated the axis to failure semantics: what these subsystems
+leave behind when they fail, rather than whether they are right when they
+succeed. The out-of-family pass on the equation constructs (the one
+question: does a partway failure leave the owner's equation list exactly
+as it was?) came back with NO findings and a seven-path
+considered-and-rejected list. The load-bearing claim in it — that
+`restoreRegisterSnapshot` is gated on `restoreVar` and not on `ok`, so
+the owner's loop variable comes back even when the body fails — was
+verified here independently at equation.c:2230.
+
+What the round did find was in the test suite. Three defects, all in the
+same family, none of them in the product:
+
+- **T21 was vacuous for three rounds (R4-1).** It claimed to pin the
+  designed degradation for RCL-arithmetic against an UNKNOWN slot: a tree
+  IS built with the sentinel as a child, and the display path withholds
+  it. Every assertion sat behind `if(ppcCurrentFormulaRoot() != PPC_NIL)`
+  — and that accessor withholds precisely the trees T21 was about, so the
+  guard was false by construction and the body never ran. The test would
+  have passed with ITM_RCLADD removed from the classifier. Seeing through
+  the screen needed `ppcTestCurrentRaw()`; with it, T21 now asserts the
+  four separate things its comment always claimed, in order. The engine
+  was correct all along — MUT-B (disabling the opaque screen) reds the
+  third assertion.
+- **T23 and T26 were absence-only (R4-1).** `if(strstr(sig, "7")) fail`
+  is satisfied by an EMPTY signature, so it passes when capture has
+  stopped working. Both now assert the exact expected signature: T23 the
+  whole truthful shape (`# 2 3 + ×` — the overwritten Y degraded to a
+  value leaf, times the live sum), T26 the ruled outcome that a
+  31-character literal WITHHOLDS the formula (`-`).
+- **Two states shared one signature character (R4-2).** `PPN_VAL` and the
+  `PPC_UNKNOWN` sentinel both printed `#`, which is exactly the
+  distinction the binding invariant turns on. No signature pin could tell
+  a truthful value leaf from an unknown. `~` now marks the sentinel. All
+  three pre-existing `#` expectations stayed green through the split,
+  which is the evidence that none of them had been silently accepting an
+  UNKNOWN where they meant a value.
+
+A false lead worth recording: T23's signature `# 2 3 + ×` read as a tree
+with an UNKNOWN operand that the display had failed to withhold, which
+would have been a real defect. Dumping the node showed `child[0]` was
+node 0 of kind PPN_VAL — the ambiguity above, misleading its own author
+inside the same hour it was found. That is why R4-2 is a fix and not a
+note.

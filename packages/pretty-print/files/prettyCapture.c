@@ -1231,6 +1231,17 @@ const ppcNode_t *ppcNodeAt(uint8_t n) {
   return (n < PPC_NODES) ? &ppcArena[n] : NULL;
 }
 
+/* The raw current root, BEFORE the opaque screen below withholds it.
+ * Tests only, and it earns its place: every public path into the shadow
+ * goes through that screen, so a pin written against them cannot tell a
+ * truthful degradation (tree built, one operand PPC_UNKNOWN, withheld
+ * from display) from a total invalidation or from the operation never
+ * having been classified at all. T21 asserted the second of those for
+ * three rounds while believing it asserted the first. */
+uint8_t ppcTestCurrentRaw(void) {
+  return ppcInited ? ppcCurrent : PPC_NIL;
+}
+
 uint8_t ppcCurrentFormulaRoot(void) {
   if(!ppcInited || ppcCurrent == PPC_NIL) {
     return PPC_NIL;
