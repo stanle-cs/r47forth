@@ -1700,11 +1700,34 @@ void parseEquation(uint16_t equationId, uint16_t parseMode, char *buffer, char *
 #define PPEQ_STATE_BYTES (PARSER_OPERATOR_STACK_SIZE * 2 + REAL34_SIZE_IN_BYTES * (2 + 2 * PARSER_NUMERIC_STACK_SIZE) + 4)
 #define PPEQ_WORD_BYTES  256
 #define PPEQ_SNAP_BYTES  (AIM_BUFFER_LENGTH + PPEQ_STATE_BYTES)
-#define PPEQ_MAX_DEPTH   2
+// The depth cap is only a runaway backstop: the REAL guard is measured
+// stack consumption (below), so render and eval nesting limits match.
+#define PPEQ_MAX_DEPTH   8
 
 void _fnIntegrate(uint16_t labelOrVariable, bool_t XY);   // integrate.c, external but not in its header
 
 static uint8_t ppEqDepth = 0;
+
+/* Stack-consumption guard. The engines the constructs delegate to carry
+ * heavy frames, and the device stack is a scarce OS-provided resource —
+ * upstream's own answer is the blunt MAX_ENGINE_NESTING_DEPTH 1. Inside
+ * the constructs we substitute a sharper fence: the outermost intercept
+ * records the stack pointer, every deeper level measures consumption
+ * against an allowance sized from the measured ultimate-tower cost (the
+ * sim's 64-bit frames are fatter than the ARM's, so the allowance that
+ * passes the sim test over-provisions the device). A breach refuses the
+ * construct cleanly; it never dives on hope. */
+// Measured: the reference tower INTEG(DERIV(SUM/PROD...)) high-waters
+// 5.3 KB on the 64-bit sim (ARM frames are smaller), so 8 KB admits
+// roughly twice the reference depth before refusing — and caps the
+// construct burn well inside a DMCP-class program stack.
+#define PPEQ_STACK_ALLOWANCE 8000
+static const char *ppEqStackBase = NULL;
+
+static bool_t ppEqStackExceeded(void) {
+  char probe;
+  return ppEqStackBase != NULL && ppEqStackBase - &probe > PPEQ_STACK_ALLOWANCE;
+}
 
 static void ppEqSyntaxError(const char *what) {
   displayCalcErrorMessage(ERROR_SYNTAX_ERROR_IN_EQUATION, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
@@ -1719,6 +1742,9 @@ static void ppEqSyntaxError(const char *what) {
  * failure (error already raised by setEquation) */
 static uint16_t ppEqTempAppend(const char *text) {
   formulaHeader_t *newPtr;
+  if(lastErrorCode != ERROR_NONE) {
+    return 0xffff;   // never append under a pending error: the rollback
+  }                  // below must only ever answer for setEquation's own
   if(numberOfFormulae == 0) {
     return 0xffff;   // cannot happen: the outer equation is a formula
   }
@@ -1838,7 +1864,11 @@ static bool_t ppEqDelegate(uint8_t kind, uint16_t order, uint16_t bodySlot,
   currentSolverStatus = SOLVER_STATUS_USES_FORMULA;
 
   bool_t ok = false;
-  if(kind == 2) {   // DERIV at point a
+  bool_t wasRefused = false;
+  if(ppEqStackExceeded()) {
+    ppEqSyntaxError("not enough free stack for this nesting");
+  }
+  else if(kind == 2) {   // DERIV at point a
     // the engine RCLs the point from the solver VARIABLE (covDerivEq
     // stores X there first); feed both channels, direct writes
     reallocateRegister(REGISTER_X, dtReal34, 0, amNone);
@@ -1855,9 +1885,17 @@ static bool_t ppEqDelegate(uint8_t kind, uint16_t order, uint16_t bodySlot,
   else {            // INTEG over [a, b] — XY=false: limits from the reserved vars
     real34Copy(a, REGISTER_REAL34_DATA(RESERVED_VARIABLE_LLIM));
     real34Copy(b, REGISTER_REAL34_DATA(RESERVED_VARIABLE_ULIM));
+    engineNestingWasRefused = false;
     _fnIntegrate((uint16_t)var, false);
   }
-  if(lastErrorCode == ERROR_NONE && getRegisterDataType(REGISTER_X) == dtReal34) {
+  // a REFUSED engine (upstream's nesting guard) leaves no result: X is
+  // stale and must not be read as one, and PGM_WAITING must not stand
+  if(engineNestingWasRefused || programRunStop == PGM_WAITING) {
+    wasRefused = true;
+    programRunStop = PGM_STOPPED;
+    ppEqSyntaxError("engine nesting refused (an integral cannot nest inside an integral)");
+  }
+  if(!wasRefused && lastErrorCode == ERROR_NONE && getRegisterDataType(REGISTER_X) == dtReal34) {
     real34Copy(REGISTER_REAL34_DATA(REGISTER_X), re);
     ok = true;
   }
@@ -1887,7 +1925,33 @@ static int16_t ppEqBigopIntercept(const char *strPtr, uint16_t parseMode, char *
     return 0;
   }
   if(parseMode != EQUATION_PARSER_XEQ) {
-    return nameLen;   // MVAR scan: hide the name, scan the args normally
+    // MVAR scan: consume the WHOLE span — the base grammar rejects the
+    // ';' separators (the differentiator's entry parse runs MVAR mode
+    // and errored on every construct). Construct-internal variables are
+    // not enumerated; the constructs bind their own.
+    const char *q = strPtr + nameLen + 1;
+    int d = 0;
+    while(*q != 0) {
+      if(*q == '(') {
+        ++d;
+      }
+      else if(*q == ')') {
+        if(d == 0) {
+          return (int16_t)(q + 1 - strPtr);
+        }
+        --d;
+      }
+      q += ((*q) & 0x80) ? 2 : 1;
+    }
+    return nameLen;   // unbalanced: let the scan see it
+  }
+  if(ppEqDepth == 0) {
+    char probe;
+    ppEqStackBase = &probe;
+  }
+  else if(ppEqStackExceeded()) {
+    ppEqSyntaxError("not enough free stack for this nesting");
+    return -1;
   }
   if(ppEqDepth >= PPEQ_MAX_DEPTH) {
     ppEqSyntaxError("big-operator constructs nest too deep");

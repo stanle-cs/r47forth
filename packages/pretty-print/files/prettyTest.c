@@ -2103,6 +2103,57 @@ void prettyTestEquation(uint16_t unusedButMandatoryParameter) {
       }
     }
 
+    // EQ26: the render/eval parity ruling — an integral of a numeric
+    // second derivative whose body holds a construct, over limits away
+    // from zero (a limit AT zero collapses the relative-step stencil at
+    // the integrator's endpoint-clustered nodes; upstream's interactive
+    // d²/dx² at 1E-24 fails the same way — documented caveat).
+    // g = SUM(X;X;1;3)/(X+2) = 6/(x+2): integral of g'' over [1,2]
+    // = g'(2)-g'(1) = 7/24.
+    setEquation(currentFormula, "INTEG(DERIV(SUM(X;X;1;3)/(X+2);X;X;2);X;1;2)");
+    lastErrorCode = 0;
+    fnEqCalc(NOPARAM);
+    {
+      real34_t want, diff, tol;
+      stringToReal34("0.2916666666666666666666666666666667", &want);
+      if(lastErrorCode != ERROR_NONE || getRegisterDataType(REGISTER_X) != dtReal34) {
+        ppTestFail("EQ26 tower eval errored");
+      }
+      else {
+        real34Subtract(REGISTER_REAL34_DATA(REGISTER_X), &want, &diff);
+        real34SetPositiveSign(&diff);
+        stringToReal34("1e-10", &tol);
+        if(!real34CompareLessThan(&diff, &tol)) {
+          ppTestFail("EQ26 tower != 7/24");
+        }
+      }
+    }
+    lastErrorCode = 0;
+
+    // EQ27: an integral nests inside an integral — the new
+    // double-exponential path never increments the engine counter, so
+    // nothing upstream refuses it; the package's stack guard is the
+    // bound. Integral over y of (integral of x over [0,1]) = 0.5.
+    setEquation(currentFormula, "INTEG(INTEG(X;X;0;1);X;0;1)");
+    lastErrorCode = 0;
+    fnEqCalc(NOPARAM);
+    {
+      real34_t want, diff, tol;
+      stringToReal34("0.5", &want);
+      if(lastErrorCode != ERROR_NONE || getRegisterDataType(REGISTER_X) != dtReal34) {
+        ppTestFail("EQ27 nested integral errored");
+      }
+      else {
+        real34Subtract(REGISTER_REAL34_DATA(REGISTER_X), &want, &diff);
+        real34SetPositiveSign(&diff);
+        stringToReal34("1e-10", &tol);
+        if(!real34CompareLessThan(&diff, &tol)) {
+          ppTestFail("EQ27 nested integral != 0.5");
+        }
+      }
+    }
+    lastErrorCode = 0;
+
     currentSolverStatus = hadStatus;
     currentSolverVariable = hadVar;
     currentSolverProgram = hadProgram;

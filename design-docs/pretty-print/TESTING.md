@@ -220,6 +220,7 @@ after restore.
 | MUT-52 | additive big-operator bodies lose their parens (stress) | EQ25 (PROD 1+x misreads) |
 | MUT-53 | multiplication dot reverts to the x glyph | FV1 (red only in the COUNTS — glyph bytes suppress the FAIL line) |
 | MUT-54 | vinculum weight regressed to 1 px (standard) | P6 (row-2 probe at the vinculum's RIGHT end — near the sign, the glyph's own hook masked it) |
+| MUT-55 | stack allowance zeroed (parity) | EQ18/EQ26/EQ27 (all nested evaluation refuses) |
 
 Two lessons from the first mutation run, kept for honesty: (a) the original
 MUT-4 ("drop the dtReal34 type gate") stays GREEN — a non-real register's
@@ -272,6 +273,24 @@ fixed — the forth-core 2026-07-21 rule applies unchanged.
   TINY (the operator convention; tinyF only governs the strip's
   fraction shrink, and the '/' deep-refont is skipped when the
   caller's fonts are equal so it cannot flatten them).
+
+### Render/eval parity additions (Stan's ruling: eval must match render)
+
+- **EQ26** — `INTEG(DERIV(SUM(X;X;1;3)/(X+2);X;X;2);X;1;2)` evaluates
+  through the real fnEqCalc path to 7/24 within 1e-10 (~2.5 s sim).
+  The full reference tower (Σ√-fraction / multiplication × ∏, inside
+  d²/dx², inside ∫ over [1,2]) was measured once: 0.18234918164357208…
+  against the analytic value — 16+ digits in 27.8 s sim; recorded here
+  rather than pinned (the gate stays fast).
+- **EQ27** — `INTEG(INTEG(X;X;0;1);X;0;1)` = 0.5: nested integrals
+  work (the new DEI path never increments the engine counter).
+- Debugging trail worth keeping: the differentiator's entry parse runs
+  MVAR mode, which errored on every construct (';' is a base-grammar
+  error) — MVAR now consumes whole construct spans; temp-slot appends
+  refuse under a PENDING error (the rollback previously fired on
+  errors it did not cause); and the zero-limit DERIV-integrand caveat
+  was isolated by a per-sample probe showing the stencil collapse at
+  x ≈ 1E-24 abscissas.
 
 ## Blast radius and measurements
 

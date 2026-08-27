@@ -294,6 +294,22 @@ never asked for — un-determinable state stays unframed.
 
 ### Equation-language big operators (PP14) — RULED design
 
+**Render and eval nesting limits MATCH (ruled on Stan's request).**
+The old fixed eval-depth cap of 2 is replaced by a measured
+stack-consumption guard: the outermost construct records the stack
+pointer, and every deeper construct or delegate refuses cleanly once
+consumption exceeds PPEQ_STACK_ALLOWANCE (8 KB; the reference tower
+high-waters 5.3 KB on the 64-bit sim, ARM frames are smaller). The
+depth cap (8) remains only as a runaway backstop. Known numeric
+caveat, documented not fixed: an INTEG limit exactly at 0 with a DERIV
+integrand collapses the relative-step stencil at the integrator's
+endpoint-clustered nodes (upstream's interactive d²/dx² at 1E-24
+produces the same garbage) — use nonzero limits or shift the variable.
+Nested INTEG-in-INTEG works: the new double-exponential path never
+increments the engine counter, so upstream refuses nothing; the stack
+guard is the bound, and a refused engine (old path, defensive) turns
+into a clean error rather than a stale-X read.
+
 Syntax (parse-level, package-side): `SUM(body;var;from;to[;step])`,
 `PROD(body;var;from;to[;step])`, `DERIV(body;var;at[;order])`,
 `INTEG(body;var;from;to)`. The separator is `;` — today a hard parse

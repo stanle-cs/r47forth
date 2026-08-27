@@ -2,6 +2,43 @@
 
 Non-normative amendment trail. DESIGN.md is authoritative.
 
+## 2026-08-26 — render/eval parity (Stan's ruling, round 5)
+
+Stan asked whether the stack risk could be reduced so the full tower
+EVALUATES — render and eval limits must match, waiting is fine. It can,
+and the guessed numbers were all wrong in the safe direction:
+
+- **Measured, the fear evaporates.** The full tower high-waters 5.3 KB
+  of stack on the 64-bit sim (ARM frames are smaller) and evaluates in
+  27.8 s — not the estimated 8-12 KB and minutes-to-hours. The fixed
+  depth cap of 2 is replaced by a stack-consumption guard: the
+  outermost construct records the SP, every deeper level refuses
+  cleanly past an 8 KB allowance. MUT-55 (allowance zeroed) reds every
+  nested pin, proving the guard live and correctly placed.
+- **The differentiator's entry parse runs MVAR mode and errored on
+  every construct** — ';' is a hard error in the base grammar and the
+  MVAR intercept only hid the NAME. It now consumes the whole span.
+  Construct-internal variables are not enumerated (they bind their own).
+- **Temp-slot appends refused to be blamed:** the append rollback fired
+  on PENDING errors it did not cause, corrupting the formula-list
+  bookkeeping under the differentiator's transient sample errors.
+  Appends and slice evals now refuse under a pending error.
+- **The garbage was numerics, not corruption** (a day of probes said
+  so): tanh-sinh clusters nodes at x ≈ 1E-24 off a zero limit, where
+  the second-derivative's RELATIVE-step stencil collapses
+  catastrophically — upstream's interactive d²/dx² at that abscissa
+  produces the same E+39. Documented caveat: nonzero limits. Over
+  [1,2] the tower matches the analytic value to 16+ digits.
+- **Nested ∫-in-∫ simply works** — the new double-exponential path
+  never increments the engine counter, so upstream refuses nothing
+  (EQ27 pins ∫∫x = 0.5). The refusal-hardening in the delegate stays
+  as defensive code for the old path: a refused engine errors instead
+  of returning a stale X.
+- Probe hygiene lesson: two debugging rounds were spent on artifacts of
+  the probes themselves (a display helper scratching tmpString
+  mid-parse; a probe block reordered by its own patch anchor). Probes
+  print AFTER evals complete, or not at all.
+
 ## 2026-08-26 — typography follow-ups (Stan's review, round 4)
 
 - Multiplication typesets as the raised dot (STD_DOT) in both pretty
