@@ -964,3 +964,71 @@ slash — a 25-level tower measured h=31, one fraction level). A T30
 written for this branch was removed the same hour for failing the very
 rule R4-1 established: a fixture that cannot reach its own state is not a
 pin.
+
+## Audit round 5 — the fix review (R5-1, R5-2, R5-3)
+
+Round 5 audited rounds 3 and 4's FIXES rather than the feature, because
+this project's measured pattern is that most of a round's findings come
+from the previous round's repairs. Three readers: an out-of-family pass on
+`ppShowRun` and every paint call site, and two in-family passes on the
+browser/formula fixes and the keyboard/capture/test fixes.
+
+**Out-of-family: no functional defects in R3-13**, with seven reasoned
+exclusions whose arithmetic on the fraction bounds independently matched
+ours. One exclusion was WRONG and is recorded because it nearly became a
+false finding: it claimed the surviving `showString` in the radical arm
+wipes the root's index. It cannot — `synth` is forced true whenever an
+index exists (`|| (index != PP_NONE)`), paint recomputes the identical
+test, and the `showString` sits inside `if(!synth)`. Round 3's reader had
+this right and round 5's did not; the code comment states the collision and
+the guard explicitly, which is why "argue with a comment, never ignore
+one" is a rule.
+
+**In-family on the browser/formula fixes: no findings**, with the
+four-site sweep independently re-run and both browser passes confirmed to
+paginate bit-for-bit identically.
+
+**R5-1 — the fix invalidated a BINDING rule's justification.** The
+fraction-bar comment and DESIGN.md's paint-order rule both said the bar
+goes last because `showGlyphCode` pre-clears each glyph's full box. True
+when written; false since R3-13 gave the runs `noPreClear`. The rule still
+binds — but now only for the one remaining `showString`, the radical sign.
+For a fraction the clears provably cannot reach the bar (numerator's stops
+`fracGap+1` rows above, denominator's starts `fracGap+2` below), so the
+ordering there is uniformity, not necessity. A sweep for the same class
+found a third instance in the pager's band-inset comment. All three
+corrected. Nothing functional; the hazard is the next person reasoning
+from a stale mechanism.
+
+**R5-2 — half of R3-13 is unverified, and that is now written down.** P13
+was added to hold the dependency the fix rests on: bounding the clear is
+safe only while something else clears the band, and upstream's
+`clearRegisterLine()` calls are commented out at their call sites.
+Measured, a 35-digit value repainted with a 3-glyph one leaves 467 lit
+pixels, exactly a clean paint. Then MUT-D deleted the measured-box clear
+outright and the suite stayed GREEN — P12 and P13 both. That is not a
+coverage hole to close with an invented fixture; it is the truth about the
+fix. Only `noPreClear` is load-bearing; the explicit clear is redundant on
+every surface, because each clears its band and measure lays siblings out
+non-overlapping. Kept as defence, recorded as unverified code. P13 is
+therefore an upstream-drift pin, like P1's exact bar rows.
+
+**R5-3 — the containment guard covered only half the dispatch path.**
+R3-7's guard lives in `processKeyAction`, the direct-key half of the
+driver. The SOFTKEY half is three separate upstream functions, each with
+its own browser list this package never touched — so F-keys ran their
+items underneath the modal browser, including our own `PCLR`, which wipes
+the history being browsed while the browser repaints over the evidence.
+
+The reason four rounds missed it: undo-history had already generalised
+those three lines to `calcMode < 19 /* package browsers 19-23 */`, so the
+COMBINED build was never vulnerable and the hole existed only in SOLO —
+a gated configuration whose gate is green because no test drives a
+softkey. The reader that found it flagged honestly that it could not tell
+whether a sibling closed it; checking that caveat is what located the real
+scope. This package now carries the byte-identical range clause itself
+(the identical-edit claim, as with `NUMBER_OF_SYSTEM_FLAGS`), both gates
+stay green, and FV19 pins `CM_PRETTY_BROWSER` inside 19..23 — renumbering
+it out of that range would silently reopen the hole with nothing else
+going red. DESIGN.md's calcMode row still said "20 reserved (not wired)",
+stale since PP10; corrected in the same pass.

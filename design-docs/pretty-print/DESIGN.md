@@ -57,11 +57,45 @@ glyph get a synthesized sign (integer DDA over `setBlackPixel`).
 
 **Paint-order rule (BINDING, found by pin P1 on 2026-08-26): every painted
 rule (fraction bar, vinculum) goes AFTER the glyph runs it neighbours.**
-`showGlyphCode` pre-clears each glyph's full box, and a glyph box's padding
-rows (`rowsBelowGlyph`/`rowsAboveGlyph`) reach past its ink into the bar
+A glyph painted with a font-box pre-clear erases padding rows
+(`rowsBelowGlyph`/`rowsAboveGlyph`) that reach past its ink into the bar
 band even when the ink honours the gap — a bar painted first is wiped under
 every digit column, leaving only its overhang pixels. Measure-pass gaps are
 ink-relative and correct; only the paint order compensates.
+
+**Scope of that rule since R3-13 (audit R5-1).** The justification above
+was written when every run went through `showString`. It now applies to
+exactly one run — the radical sign glyph, the sole remaining `showString`
+call — because `ppShowRun` gives all other runs `noPreClear` and bounds
+their clear to the measured box. For a fraction the clears provably cannot
+reach the bar (the numerator's stops `fracGap+1` rows above it, the
+denominator's starts `fracGap+2` below), so the ordering there is retained
+for uniformity, not because it is load-bearing. Keep the rule; do not
+re-derive its reason from the fraction case, which no longer demonstrates
+it.
+
+**Softkey containment is a RANGE, and it is not ours (BINDING, audit
+R5-3).** A modal browser must stop softkeys executing underneath it.
+Upstream does this in THREE places — `btnFnPressed`, `btnFnReleased` and
+`executeFunction` — each enumerating its own browsers by name
+(`CM_REGISTER_BROWSER`, `CM_FLAG_BROWSER`, `CM_ASN_BROWSER`,
+`CM_FONT_BROWSER`). A package browser is invisible to that list. Both
+sibling packages therefore carry the byte-identical clause
+`&& calcMode < 19 /* package browsers 19-23, claims registry */` on all
+three lines, and 3-way merge unifies them (the same identical-edit claim
+the `NUMBER_OF_SYSTEM_FLAGS` line uses).
+
+This package carried the guard only in `processKeyAction`, which is the
+DIRECT-key half of the driver. In the combined build undo-history's range
+edit covered us anyway, so the hole was invisible; in the SOLO build —
+one of the two gated configurations — pressing F3 while browsing ran
+`PCLR` and wiped the history being browsed, with the browser repainting
+over the evidence. Found by the round-5 fix review, which correctly
+flagged that it could not tell whether a sibling closed it. Never rely on
+a sibling for containment: the range clause is now in this package's
+`keyboard.c` too, and FV19 pins `CM_PRETTY_BROWSER` inside 19..23, since
+renumbering it out of that range would silently reopen the hole with
+nothing else going red.
 
 **Clearing-extent rule (BINDING, audit R3-13): a node clears exactly the box
 it measured, and never more.** Glyph runs go through `ppShowRun()`, which
@@ -472,7 +506,7 @@ Verified against the tree at branch point (undo-history/stage-u2 tip,
 | resource | claim | verified placement |
 |---|---|---|
 | item rows | **459 `PSHOW`, 460 `PPON`, 461 `PCLR`, 462 `PHIST`** | spare `itemToBeCoded` rows at items.c:2290-2293 — ~30 lines below undo-history's 427-429 hunk (ends :2260); items.h defines at :484-487, ~30 lines below its hunk (:446-454) |
-| calcMode | **20 reserved** (not wired) | PP4 shipped the history view as a manual-paint PAGER instead of a browser mode (see §6), avoiding ~20 keyboard.c sites in the one file where forth-core rewrites the determineItem chain undo-history already squeezed into. If a full browser lands later, its `#define` must NOT be adjacent to undo-history's `CM_HIST_BROWSER 19` insertion (after defines.h:1721) — anchor ≥4 context lines away |
+| calcMode | **20 `CM_PRETTY_BROWSER`, WIRED since PP10** | PP4 shipped the history view as a manual-paint PAGER instead of a browser mode (see §6), avoiding ~20 keyboard.c sites in the one file where forth-core rewrites the determineItem chain undo-history already squeezed into. If a full browser lands later, its `#define` must NOT be adjacent to undo-history's `CM_HIST_BROWSER 19` insertion (after defines.h:1721) — anchor ≥4 context lines away |
 | system flag | **50 `FLAG_PRETTYP` (0x8071)**, **51 `FLAG_PTLINE` (0x8072)** | superseded the v1 "none" ruling. The single `NUMBER_OF_SYSTEM_FLAGS` line cannot be edited by two packages independently, so BOTH packages carry the byte-identical `64+51` line and 3-way unifies them (identical-edit claim). Undo-history owns 49; 50 and 51 are ours. **AMENDED (audit r1, A8):** both SYSFL catalog rows (`PPRTY`, `PTLINE`) now live in THIS package's items.c at rows **218/219**, NOT in undo-history's. They were exiled there by the touching-line rule when they sat at 2300/2301 next to a sibling edit; at 218/219 they are inside our own existing 215-217 hunk and touch nothing of anyone else's. The move was forced: with the count here and the rows there, a SOLO pretty-print build declared 115 flags and supplied 112 rows, and the (un-overridden) flag browser indexed three entries past the end of `menu_SYSFL` into the alpha catalog. **KNOWN, NOT OURS TO FIX ALONE:** a single hardcoded count cannot be right for every package combination — upstream is balanced at 112/112, and every package that adds a flag over-declares in its own solo build. Ours is now exact (115/115) and combined over-SUPPLIES (116 ≥ 115, safe); undo-history's solo build over-declares, which is a property of the shared-count agreement and needs its owner. |
 | menu id | **item 217 = `MNU_PP`** (CAT_MENU) | a `CAT_FREE` "0217" row adjacent to our own 215/216 claims, so the items.c hunk stays contiguous and nowhere near either sibling. forth-core's precedent: it turned free row 213 into `CAT_MENU` "FWRD". |
 | softmenu slots | `menu_DISP` row 5 slot 3 → `-MNU_PP`; `menu_EQN` row 2 slot 2 → `ITM_EQSHW` | DISP and EQN are untouched by BOTH siblings (verified by diff), so neither edit can collide. The stack menu is deliberately AVOIDED: undo-history put `UHIST`/`REDO`/`HCLR` in its free slots and edited that exact line, leaving one slot and a guaranteed touching-line conflict. |

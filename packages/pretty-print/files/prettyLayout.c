@@ -788,10 +788,15 @@ static void ppPaint(uint8_t n, int16_t x, int16_t baseline) {
         ppPaint(c, x + ppPool[c].relX, baseline + ppPool[c].relBase);
       }
       if(nd->kind == PP_FRAC) {
-        // The bar goes AFTER the children: showGlyphCode pre-clears each
-        // glyph's full box, and a digit box's padding rows reach into the
-        // bar band even though its ink honours fracGap. Visible ink is
-        // LCD_EMPTY_VALUE in lcd_fill_rect, the same call
+        // AUDIT R5-1. This used to say the bar goes last because
+        // showGlyphCode pre-clears each glyph's full box — true when it
+        // was written, false since R3-13 gave the runs noPreClear. The
+        // children now clear only their MEASURED boxes, which stop
+        // fracGap+1 rows above the bar and start fracGap+2 below it, so
+        // for a fraction the order is no longer load-bearing. It is kept
+        // because the paint-order rule still binds the one run painted
+        // with a font-box pre-clear: the radical sign glyph.
+        // Ink is LCD_EMPTY_VALUE — the same lcd_fill_rect
         // drawSinglePixelFullWidthLine makes for its visible rules.
         ppFill((int16_t)(x), (int16_t)(baseline + m->barTopRel), (int16_t)(nd->width), (int16_t)(m->barThick));
       }

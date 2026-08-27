@@ -621,10 +621,14 @@ bool_t ppfBuildEntry(const uint8_t *entry, uint8_t ctxFont, uint8_t childFont,
 
 /* ==== PHIST — the history pager ========================================= */
 
-// Inset 4 px from the frame lines at 20/168: glyph BOXES extend past the
-// ink by their padding rows (standardFont boxAscent 16 vs digit ink 12),
-// and showGlyphCode's pre-clear would wipe a frame line the ink never
-// touches (found by FV5 after the variable-height rewrite).
+// Inset 4 px from the frame lines at 20/168. Found by FV5 after the
+// variable-height rewrite, when glyph BOXES extended past the ink by
+// their padding rows (standardFont boxAscent 16 vs digit ink 12) and
+// showGlyphCode's pre-clear wiped a frame line the ink never touched.
+// AUDIT R5-1: that mechanism is gone since R3-13 — ppShowRun clears only
+// the measured ink box — so the inset now buys plain clearance between a
+// row's ink and the frame. Kept at 4: the rows are laid out against it,
+// and nothing is gained by reclaiming the pixels.
 #define PPF_BAND_TOP    25
 #define PPF_BAND_BOTTOM 163
 #define PPF_ROW_GAP     5

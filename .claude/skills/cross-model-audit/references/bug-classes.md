@@ -455,3 +455,32 @@ Hunt it at: every assertion nested inside a condition, and every oracle
 phrased as a negative. Ask what the test does when the feature is
 removed — if the answer is "passes", it is not a test. And check that the
 test's own vocabulary can express the distinction it exists to make.
+
+## containment applied to one half of a dispatch path (pretty-print audit r5)
+
+A modal screen guarded against stray keys on the path the author was
+looking at, while a SECOND, structurally separate path into the same
+functions stays open. The guard reads as complete, and its own comment
+says so.
+
+Found: the browser's containment lived in `processKeyAction`, reached from
+`btnPressed` → `determineItem` — the direct-key half of the driver. The
+SOFTKEY half is three other functions (`btnFnPressed`, `btnFnReleased`,
+`executeFunction`), each carrying its own independent
+`calcMode != CM_x_BROWSER && ...` list that the package never touched. So
+F-keys ran their items underneath the modal browser — including the
+package's OWN `PCLR`, which wipes the history being browsed, after which
+the browser repaints over the evidence.
+
+**The sibling made it invisible.** A neighbouring package had already
+generalised those three upstream lines to a RANGE covering every package
+browser, so the COMBINED build — the shipped shape — was never vulnerable.
+Only the solo build was, and solo is a gated configuration whose gate was
+green because no test drives a softkey. Two lessons: never rely on a
+sibling package for your own containment, and a finding that says "I could
+not tell whether a sibling closes this" is exactly the caveat to go and
+check rather than discount.
+
+Hunt it at: every modal state. Enumerate the DISTINCT entry paths into
+dispatch — not the keys, the paths — and prove containment on each. Then
+ask which of those proofs depends on code you do not own.

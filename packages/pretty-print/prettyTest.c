@@ -1345,6 +1345,46 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
     lastErrorCode = 0;
   }
 
+  // P13 (AUDIT R5-2): repainting the X line must not leave the PREVIOUS
+  // value's ink behind. R3-13 stopped each glyph clearing its whole font
+  // box and made it clear only the measured ink box instead — which is
+  // safe ONLY because the register line's own refresh clears the band
+  // first. Upstream's clearRegisterLine() calls are commented out at
+  // their call sites, so that dependency is worth holding rather than
+  // assuming: measured, a 35-digit value then a 3-glyph one repainted
+  // over it leaves 467 lit pixels, exactly what the short value paints
+  // onto a freshly cleared band.
+  {
+    ppTestSetRealX("0.16666666666666666666666666666666667");
+    ppTestClearBand();
+    refreshRegisterLine(REGISTER_X);
+
+    ppTestSetRealX("0.75");
+    refreshRegisterLine(REGISTER_X);       // deliberately NOT cleared first
+    uint32_t over = 0;
+    for(uint32_t y = PPT_BAND_TOP; y < PPT_BAND_TOP + PPT_BAND_ROWS; y++) {
+      for(uint32_t x = 0; x < SCREEN_WIDTH; x++) {
+        if(lcd_buffer_pixel_on(x, y)) over++;
+      }
+    }
+
+    ppTestClearBand();
+    refreshRegisterLine(REGISTER_X);
+    uint32_t clean = 0;
+    for(uint32_t y = PPT_BAND_TOP; y < PPT_BAND_TOP + PPT_BAND_ROWS; y++) {
+      for(uint32_t x = 0; x < SCREEN_WIDTH; x++) {
+        if(lcd_buffer_pixel_on(x, y)) clean++;
+      }
+    }
+
+    if(clean == 0) {
+      ppTestFail("P13 fixture painted nothing; the pin is not exercising anything");
+    }
+    else if(over != clean) {
+      ppTestFailInt("P13 a repaint left the previous value's ink behind", (int32_t)clean, (int32_t)over);
+    }
+  }
+
   // P12 (AUDIT R3-13): a fraction's numerator ink must not depend on which
   // glyph the denominator is. Nothing about FRAC layout gives the
   // denominator any say over the rows above the bar — num.relBase is
@@ -2317,6 +2357,20 @@ void prettyTestFormula(uint16_t unusedButMandatoryParameter) {
       }
     }
     ppReset();
+  }
+
+  // FV19 (AUDIT R5-3): the browser's softkey containment is a RANGE, and
+  // this pins our calcMode inside it. Upstream's three softkey gates
+  // (btnFnPressed, btnFnReleased, executeFunction) enumerate its own
+  // browsers by name; a package browser is covered only by the shared
+  // `calcMode < 19 /* package browsers 19-23, claims registry */` clause
+  // both sibling packages carry byte-identically. Renumber
+  // CM_PRETTY_BROWSER below 19 and softkeys silently start executing
+  // underneath the browser again — including our own PCLR, which would
+  // wipe the history being browsed. Nothing else would go red.
+  if(CM_PRETTY_BROWSER < 19 || CM_PRETTY_BROWSER > 23) {
+    ppTestFailInt("FV19 calcMode is outside the package-browser range the softkey gates protect",
+                  20, (int32_t)CM_PRETTY_BROWSER);
   }
 
   // FV15 (PP15): the softmenu claims are actually wired — the package's

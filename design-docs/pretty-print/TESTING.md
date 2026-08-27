@@ -428,3 +428,36 @@ removed the same hour for failing that test. If a reaching input is ever
 found — a big operator with a tall body is the untried candidate — the
 pin is a pixel check that the 3px selection marker appears somewhere in
 rows 25..163.
+
+### P13 and a documented gap in R3-13's own fix (audit R5-2)
+
+**P13** repaints the X line: a 35-digit value, then a 3-glyph value over it
+WITHOUT clearing the band, and asserts the result is pixel-identical to
+painting the short value onto a freshly cleared band. Measured, both are
+467 lit pixels. It exists because R3-13 stopped each glyph clearing its
+whole font box, which is safe ONLY while something else clears the band —
+and upstream's `clearRegisterLine()` calls are commented out at their call
+sites, so the thing this depends on is not obviously present. P13 holds
+that dependency instead of assuming it.
+
+**The gap, stated rather than papered over.** MUT-D deleted the
+measured-box `ppFillVal(..., LCD_SET_VALUE)` from `ppShowRun` entirely and
+the suite stayed GREEN — P12 and P13 both. That is not a coverage hole to
+be closed by inventing a fixture; it is the truth about the fix. Of
+R3-13's two halves only one is load-bearing:
+
+- `noPreClear = true` is what fixes the defect. P12 reds without it.
+- The explicit measured-box clear is REDUNDANT on every surface the engine
+  has, because each clears its whole band before painting a tree, and
+  measure lays siblings out non-overlapping so nothing within a tree ever
+  paints over anything else.
+
+It is kept anyway: it costs nothing measurable, it keeps erase-before-draw
+true locally rather than as a property of every caller, and the commented-out
+`clearRegisterLine` above is exactly the kind of upstream change that would
+make it load-bearing overnight. But no mutation of THIS package's code can
+turn it red, so it is unverified code and is recorded as such — the same
+disposition MUT-76 got, not a green light.
+
+P13 is therefore an UPSTREAM-DRIFT pin, in the same family as P1's exact
+bar rows: our own code cannot break it, and that is the point.
