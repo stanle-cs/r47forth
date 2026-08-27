@@ -134,23 +134,26 @@ tests that pin the behaviour. The tests below pin what the shots SHOW;
 they are not the capture drivers.
 
 The full 21-capture working set is preserved in `pretty-print-archive/`
-because it previously lived only in `/tmp`. The three chosen attachments
-(the forum limit is three) are:
+because it previously lived only in `/tmp`. The forum limit is three
+attachments; this post uses TWO, because Stan asked for the shots
+collated. Both are built from captures in the archive, and neither crops
+or retouches a frame — a full 400x240 screen is always shown whole.
 
-1. `pp-attach-1-tline.png` — the ordinary stack screen with the live
-   formula turned on: `(2+3)×4` sits on the T line above its own answer,
-   X=20. The T line's default is OFF; FV11 pins that default and FV13
-   pins that turning it on makes the T band differ from the plain value
-   render.
-2. `pp-attach-2-browser.png` — the formula browser, selection marker on
-   the `|-5| = 5` row, showing four forms the engine draws: a cube root
-   with its index, absolute-value bars, `log₂(8)`, and a square root
-   wrapping a stacked fraction with its result. The browser is driven
-   through `prettyBrowser(NOPARAM)` in the suite (prettyTest.c:1309 and
-   :1619); T29 pins a wide row still panning.
-3. `pp-attach-3-nesting.png` — the capacity case: an integral from 0 to 1
-   of a second derivative, wrapping a Sigma over a root-fraction divided
-   by a product, times a Pi with a nested power fraction, evaluated at
-   x=2. EQ22 pins exactly this expression — its fixture string is the
-   same formula, and it asserts the tree parses, measures, uses most of
-   the node pool, and fits the EQSHW band at full size.
+1. `pp-attach-1-stack-and-browser.png` — two screens stacked with a rule
+   between them, built from `pp8-tline.png` above and `pp6-browser.png`
+   below. The top screen is the ordinary stack after `2 ENTER 3 + 4 x`
+   with the formula line on: `(2+3)x4` on the T line, 20 in X. The T
+   line's default is OFF; FV11 pins that default and FV13 pins that
+   turning it on makes the T band differ from the plain value render.
+   The bottom screen is the formula browser, selection marker on the
+   `|-5| = 5` row, showing a cube root with its index, absolute-value
+   bars, `log2(8)`, and a square root wrapping a stacked fraction with
+   its result. The browser is driven through `prettyBrowser(NOPARAM)` in
+   the suite (prettyTest.c:1309 and :1619); T29 pins a wide row panning.
+2. `pp-attach-2-nesting.png` — `pp-ultimate.png` unmodified: the capacity
+   case, an integral from 0 to 1 of a second derivative wrapping a Sigma
+   over a root-fraction divided by a product, times a Pi with a nested
+   power fraction, evaluated at x=2. EQ22 pins exactly this expression —
+   its fixture string is the same formula, and it asserts the tree
+   parses, measures, uses most of the node pool, and fits the EQSHW band
+   at full size.

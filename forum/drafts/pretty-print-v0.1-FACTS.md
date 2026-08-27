@@ -154,19 +154,15 @@ No dependency on either sibling. It builds and runs alone.
 - The full-screen pager has no "no formulas" message where the browser has
   one; with an empty history it draws an empty frame.
 
-## Attachments (three-slot forum limit, ruled 2026-08-25)
+## Attachments (Stan's call 2026-08-27: collate to TWO)
 
-Candidate captures exist in `/tmp/pp-shots/` (21 files) but are **not yet
-in `forum/screenshots/`**, which is where the spec requires them, with
-provenance recorded in that folder's README. `/tmp` does not survive, so
-moving the three chosen shots is a shipping task, not a formality.
+Captures are now tracked in `forum/screenshots/`, with the full 21-shot
+working set under `pretty-print-archive/` (they previously lived only in
+`/tmp`). The forum allows three; this post uses two.
 
-Strongest three for a first announcement:
+1. `pp-attach-1-stack-and-browser.png` — the everyday view and the
+   browser, stacked with a rule between them. Neither frame is cropped.
+2. `pp-attach-2-nesting.png` — the capacity case, drawn by EQSHW.
 
-1. `pp-ultimate.png` — the nesting stress case: an integral of a second
-   derivative over a Sigma and a Pi, with a fraction and a root inside.
-2. `pp4-phist.png` — the formula browser with real history rows.
-3. `pp7-eqshw.png` — an equation drawn in 2D.
-
-Each needs a one-line factual caption, and each caption goes through the
-same voice gate as body text.
+Provenance and the tests that pin each behaviour are recorded in
+`forum/screenshots/README.md`.

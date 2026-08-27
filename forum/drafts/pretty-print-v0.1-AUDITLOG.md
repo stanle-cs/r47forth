@@ -60,6 +60,20 @@ post; both reworded.
 - Stylometry: mean 16.8w, CV 0.65, longest 59w, shortest 5w — his are
   21.2 / 0.69 / 59 / 4.
 
+**r5 — Stan's decisions applied (2026-08-27).** All three open items
+closed by him, plus the attachment restructure:
+
+| his call | what changed |
+|---|---|
+| "i want to pr" | PR intent added after the opener, in his stake position. Worded fresh — his undo-history line ("built with the hope to be submitted as a PR") is NOT reused, and framescan confirms no shared shingle |
+| "remove that all together" | The soft "roughly a hundred cases of mine" is gone. The testing sentence now claims only what the gate proves |
+| "keep hardware claim" | Read literally: the existing statement stays, which says it has NOT been flashed. No hardware claim was added — DESIGN.md §1 allows one only if he has actually flashed and run the build, and he has not said so |
+| "collate them into 2 attachments" | Three shots became two images. The stack screen and the browser stack into one with a rule between them; the capacity case stands alone. Neither frame is cropped or retouched, so both are still whole 400x240 screens |
+
+r5 re-ran the full battery (every new sentence runs the loop): `aiaudit`
+10, `voicematch2` clean, no cross-document prose reuse, mean 16.4w,
+CV 0.65.
+
 ## Not done, and it matters
 
 The machines endorse this draft. That is not the same as done, and the
@@ -67,15 +81,7 @@ skill says so in as many words. Two of the last three drafts to reach
 this state were rejected on Stan's read — v0.1 for having none of his
 constructions, r2 for wearing them as ornaments. **Only his read gates.**
 
-Open items he should decide:
-
-1. **The PR sentence.** His undo-history post says the package is built
-   hoping to go upstream as a PR. Nothing in the record establishes that
-   intent for this package, so it was not invented. If he wants it, it is
-   his sentence to write.
-2. **"roughly a hundred cases of mine"** is the one soft number in the
-   post. The suite's pretty-print drivers are countable exactly if he
-   wants a precise figure instead.
-3. **Hardware.** The post says it has not been flashed. That stays true
-   unless he flashes it, and then the sentence changes rather than
-   disappears.
+What is left is his read, and one thing the record cannot settle for
+him: whether the two collated images read better than three separate
+ones on the actual forum. The originals are all in
+`forum/screenshots/pretty-print-archive/` if he wants them re-cut.
