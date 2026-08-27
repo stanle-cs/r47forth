@@ -45,6 +45,17 @@ static char     ppcNimText[32];
 static bool_t   ppcNimTextValid;
 static bool_t   ppcInited = false;
 
+/* AUDIT R1-3. The two hooks wrap ONE dispatch, but a dispatch can run a
+ * user program whose every step comes back through them — so the hooks
+ * nest. STAGE was made re-entrancy-safe in PP12; DONE never was, and it
+ * consumed the stage on the FIRST nested step instead of on its own
+ * dispatch. The end state usually coincided (which is why every test
+ * passed), but the error check then ran at step 1 rather than at the
+ * end, so a failure later in the program left the shadow claiming a
+ * finished formula the register did not hold. This counter pairs each
+ * DONE with its own STAGE. */
+static uint8_t ppcDispatchDepth = 0;
+
 static struct {
   int16_t  func;
   uint16_t param;
@@ -52,6 +63,7 @@ static struct {
   uint8_t  stagedMode;
   bool_t   lifted;      // ASLIFT latched at STAGE (LASTX/CONST classes)
   bool_t   valid;
+  uint8_t  depth;       // the dispatch nesting level this was staged at
   uint8_t  stagedFrom;  // BIGOP classes: pre-op limit VAL leaves
   uint8_t  stagedTo;
   uint8_t  stepBytes[16];   // BIGOP sums: the step real34, raw
@@ -448,13 +460,18 @@ static void ppcDisplaced(uint8_t slot, bool_t registerStillLive) {
 
 static void ppcInvalidate(bool_t emitCurrent) {
   if(emitCurrent && ppcCurrent != PPC_NIL) {
-    // the current formula's root sits on some slot; that register holds its value
-    for(uint8_t k = 0; k <= ppcTopSlot(); k++) {
-      if(ppcSlot[k] == ppcCurrent) {
-        ppcEmit(ppcCurrent, (calcRegister_t)(REGISTER_X + k));
-        break;
-      }
-    }
+    // AUDIT R1-5 (bug class: result snapshot taken on the wrong side of
+    // the dispatch). Every OTHER emit-with-register site in this file
+    // runs at STAGE, before the dispatch, where the register genuinely
+    // still holds the formula's value. This one runs at DONE — the
+    // PPC_INVALIDATE arm is deliberately deferred there because the
+    // dispatch may error — so by now the register holds the NEW item's
+    // output. Reading it filed lies permanently: `2 ENTER 3 . 7 +` then
+    // IP recorded `2 + 3.7 = 5.` in the history, and the browser
+    // recalled that 5. Emit with -1, the designed no-result form, which
+    // ppcEmit's own header specifies for exactly this case: "pass -1
+    // when the value has already left the stack".
+    ppcEmit(ppcCurrent, (calcRegister_t)-1);
   }
   for(int i = 0; i < 8; i++) {
     ppcFreeTree(ppcSlot[i] == PPC_UNKNOWN ? PPC_NIL : ppcSlot[i]);
@@ -526,6 +543,14 @@ static uint8_t ppcClassify(int16_t func) {
     // stack mutators that are US_UNCHANGED and would otherwise be ignored
     case ITM_UNDO:
       return PPC_DISCARD;   // the user revoked the current formula
+
+    // AUDIT R1-7. R/S resumes a stopped program, which then rewrites the
+    // stack with every step out of scope — so nothing tells the shadow.
+    // XEQ is the same operation reached by the other key and is
+    // US_ENABLED, so the default rule already covers it; R/S is
+    // US_UNCHANGED and was not.
+    case ITM_RS:
+      return PPC_INVALIDATE;
     case 427: case 428:
       // undo-history package composition claims (DESIGN.md §7): U.HIST
       // opens a browser whose restore bypasses item dispatch; REDO
@@ -543,7 +568,13 @@ static uint8_t ppcClassify(int16_t func) {
   // are display/mode chatter — ignore. Upstream maintains US_STATUS for
   // its own undo correctness, so it maintains our predicate too.
   uint32_t us = indexOfItems[func].status & US_STATUS;
-  if(us == US_ENABLED || us == US_ENABL_XEQ) {
+  // AUDIT R1-6. US_CANCEL belongs on the invalidate side, not the ignore
+  // side: upstream's own header defines it as "the command cancels the
+  // last UNDO data" — the machine moved beyond what undo can describe —
+  // against US_UNCHANGED, "leaves the existing UNDO data as is". LOAD
+  // and LOADST replace the whole register file under that status, and
+  // the shadow went on describing the registers they overwrote.
+  if(us == US_ENABLED || us == US_ENABL_XEQ || us == US_CANCEL) {
     return PPC_INVALIDATE;
   }
   return PPC_IGNORE;
@@ -611,6 +642,9 @@ static void ppcSupersedeCurrent(void) {
 }
 
 void prettyNoteFunction(int16_t func, uint16_t param) {
+  if(ppcDispatchDepth < 255) {
+    ppcDispatchDepth++;
+  }
   if(!ppcInited) {
     ppcInit();
   }
@@ -630,6 +664,7 @@ void prettyNoteFunction(int16_t func, uint16_t param) {
   ppcStage.param = param;
   ppcStage.cls = cls;
   ppcStage.stagedMode = calcMode;
+  ppcStage.depth = ppcDispatchDepth;
   ppcStage.lifted = getSystemFlag(FLAG_ASLIFT);
   ppcStage.valid = true;
 
@@ -752,7 +787,12 @@ void prettyNoteFunction(int16_t func, uint16_t param) {
 }
 
 void prettyNoteFunctionDone(void) {
-  if(!ppcStage.valid) {
+  uint8_t myDepth = ppcDispatchDepth;
+  if(ppcDispatchDepth > 0) {
+    ppcDispatchDepth--;
+  }
+  // only the dispatch that staged it may apply it (AUDIT R1-3)
+  if(!ppcStage.valid || ppcStage.depth != myDepth) {
     return;
   }
   ppcStage.valid = false;
@@ -890,8 +930,25 @@ void prettyNoteFunctionDone(void) {
       ppcSlot[0] = (n == PPC_NIL) ? PPC_UNKNOWN : n;
       break;
     }
-    case PPC_STO_NOP:
+    case PPC_STO_NOP: {
+      // AUDIT R1-8. "register-side only: the stack does not move" is true
+      // about MOTION and irrelevant to the invariant, which is about
+      // VALUES. `STO Y` overwrites register Y while the shadow goes on
+      // showing Y's old tree, so `7 ENTER 2 ENTER 3 + STO Y x` displayed
+      // 7·(2+3) = 25 for a product that is really 25 of something else.
+      // The hand exception is what created the hole: ITM_STO is
+      // undo-enabled, so without it the default rule would have been
+      // safe. A stack target degrades that slot to UNKNOWN, which
+      // re-materialises truthfully from the register on next use.
+      uint16_t t = ppcStage.param;
+      if(t >= REGISTER_X && t <= (uint16_t)getStackTop()) {
+        uint8_t k = (uint8_t)(t - REGISTER_X);
+        ppcFreeTree(ppcSlot[k] == PPC_UNKNOWN ? PPC_NIL : ppcSlot[k]);
+        ppcSlot[k] = PPC_UNKNOWN;
+        ppcCurrentRevalidate();
+      }
       break;
+    }
     case PPC_RCLCLS: {
       // copy-then-lift: a stack-register source is read BEFORE the shift
       uint8_t t;

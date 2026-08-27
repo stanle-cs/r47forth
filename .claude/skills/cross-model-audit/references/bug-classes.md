@@ -325,3 +325,36 @@ additionally overwritten on the way out.
 Hunt it at: every read of a firmware status global after a call. Establish
 it before the call or do not read it after. And a global you did not set
 is not yours to leave changed — snapshot and restore.
+
+## result snapshot taken on the wrong side of the dispatch (pretty-print audit r1, 2026-08-27)
+
+An idiom whose precondition is "a register still holds this value" is
+reused at a site where the dispatch has already run, so the snapshot
+records the NEW value as the old operation's result.
+
+Found: every emit-with-register call in `prettyCapture.c` runs at STAGE,
+before `indexOfItems[func].func(param)`. `ppcInvalidate(true)` runs at
+DONE, after — deliberately, because the dispatch may error. It read
+`REGISTER_X + k` anyway, so `2 ENTER 3 . 7 +` then `IP` filed
+`2 + 3.7 = 5.` permanently, and the browser recalled that 5. Confirmed by
+probe. The comment above it asserted the false premise as fact.
+
+Hunt it at: every reuse of a "read the live register" idiom. Ask which
+side of the dispatch THIS call site is on. Where the value has already
+left, the truthful form is to record no result at all.
+
+## the capture engine trusts a register to still mean what it meant (pretty-print audit r1, D7-8)
+
+The umbrella class the audit named for five separate findings. The shadow
+stack's invariant is about VALUES, and every classifier exception written
+in terms of MOTION ("the stack does not move") leaves a value hole.
+
+Instances: `STO Y` overwrites a register the shadow still describes with
+its old tree; `US_CANCEL` items (LOAD/LOADST) replace the whole register
+file while the default rule waves them through as harmless; `R/S` resumes
+a program that rewrites everything with each step out of scope.
+
+Hunt it at: every hand exception in a classifier. Ask "what VALUES can
+this item change?", never "does the stack move?". Note that in all three
+cases the binding DEFAULT rule would have been safe — the hand exception
+is what created the hole.

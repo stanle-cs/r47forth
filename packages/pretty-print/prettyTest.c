@@ -1021,6 +1021,97 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
   ppcTestExpectSig("T20 x<>reg", expect);
   ppcTestExpectHist("T20 hist", 1);
 
+  // T21 (AUDIT R1-4, Gemini): RCL-arith against a slot that is UNKNOWN.
+  // ppcDeepCopy returns PPC_UNKNOWN unchanged, and the guard beside it
+  // tests only PPC_NIL, so the sentinel is stored as a child. The
+  // out-of-family reader predicted an out-of-bounds index and a crash.
+  // It is instead the designed truthful degradation — every consumer
+  // screens PPC_UNKNOWN — and this test pins that: no crash, and
+  // nothing claiming to be a formula.
+  ppcTestReset();
+  ppcTestType("5");
+  ppcTestOpParam(ITM_RCLADD, (uint16_t)REGISTER_Z);   // slot 2 is UNKNOWN
+  {
+    char sig[128];
+    ppcTestSig(sig, sizeof(sig));                     // must not crash
+    uint8_t root = ppcCurrentFormulaRoot();
+    if(root != PPC_NIL) {
+      uint8_t built;
+      ppReset();
+      if(ppfBuildCurrent(PP_FONT_STANDARD, PP_FONT_STANDARD, &built)) {
+        ppTestFail("T21 a tree with an UNKNOWN operand was rendered as a formula");
+      }
+    }
+    ppcTestExpectHist("T21 nothing emitted", 0);
+  }
+
+  // T22 (AUDIT R1-5..R1-8, class test): the recorded "= result" must be
+  // the value the formula actually had. ppcTestExpectHist compares
+  // COUNTS and cannot see this class, which is how `2 + 3.7 = 5.` was
+  // filed permanently: the PPC_INVALIDATE emit runs at DONE, after the
+  // dispatch has overwritten the register it read.
+  {
+    ppcTestReset();
+    ppcTestType("2");
+    ppcTestOp(ITM_ENTER);
+    ppcTestType("3.7");
+    ppcTestOp(ITM_ADD);                 // X = 5.7, formula 2 + 3.7
+    ppcTestOp(ITM_IP);                  // unmodelled US_ENABLED -> invalidate
+    uint16_t elen, eseq;
+    const uint8_t *e = ppcHistoryEntry(0, &elen, &eseq);
+    if(e == NULL) {
+      ppTestFail("T22 the superseded formula was not filed at all");
+    }
+    else {
+      uint8_t root;
+      ppReset();
+      // withResult=true: if a result was recorded it becomes an " = x"
+      // tail. The truthful outcomes are "no result recorded" or
+      // "= 5.7"; recording the post-dispatch 5 is the defect.
+      if(ppfBuildEntry(e, PP_FONT_STANDARD, PP_FONT_STANDARD, true, &root)) {
+        char sig[192];
+        sig[0] = 0;
+        ppfTestSigNode(root, sig, sizeof(sig));
+        if(strstr(sig, "=") != NULL && strstr(sig, "5.7") == NULL) {
+          ppTestFailures++;
+          printf("prettyPrint test FAIL: T22 filed a result the formula never had ('%s')\n", sig);
+        }
+      }
+    }
+    lastErrorCode = 0;
+  }
+
+  // T23 (AUDIT R1-8): STO to a STACK register changes a value the shadow
+  // claims. 7 ENTER 2 ENTER 3 + STO Y x — the display showed 7·(2+3)=25.
+  {
+    ppcTestReset();
+    ppcTestType("7");
+    ppcTestOp(ITM_ENTER);
+    ppcTestType("2");
+    ppcTestOp(ITM_ENTER);
+    ppcTestType("3");
+    ppcTestOp(ITM_ADD);                          // X=5, Y=7
+    ppcTestOpParam(ITM_STO, (uint16_t)REGISTER_Y);  // Y := 5
+    ppcTestOp(ITM_MULT);                         // X = 5*5 = 25
+    {
+      // whatever is shown must not still claim the 7
+      char sig[128];
+      ppcTestSig(sig, sizeof(sig));
+      if(strstr(sig, "7") != NULL) {
+        // sanitize: a signature carrying glyph bytes makes grep treat the
+        // whole log as binary and swallow the FAIL line (TESTING.md trap)
+        char safe[128];
+        uint16_t si = 0;
+        for(; sig[si] && si < sizeof(safe) - 1; si++) {
+          safe[si] = ((uint8_t)sig[si] >= 32 && (uint8_t)sig[si] < 127) ? sig[si] : '?';
+        }
+        safe[si] = 0;
+        ppTestFailures++;
+        printf("prettyPrint test FAIL: T23 the shadow kept the overwritten register ('%s')\n", safe);
+      }
+    }
+  }
+
   // T16: abort while ASLIFT is set (straight after an operator result) —
   // the deferred-lift design absorbs the upstream undo() for free; a
   // shadow that lifts at NIM open strands the tree one slot up
@@ -1141,6 +1232,38 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
     ppcTestOp(ITM_CLX);
     ppcTestExpectHist("B5 chained formula emitted", 1);
 
+    // B10 (AUDIT R1-3): a big operator whose program fails PART WAY
+    // THROUGH must leave no formula behind. The hooks nest — a
+    // dispatch runs a program whose every step re-enters them — and
+    // DONE used to be consumed by the FIRST nested step, so its error
+    // check ran at step 1 and a later failure was never seen: the
+    // shadow kept claiming a finished sum the register did not hold.
+    {
+      static const uint8_t pgmE[] = {
+        ITM_LBL, STRING_LABEL_VARIABLE, 1, 'E',
+        ITM_LITERAL, STRING_REAL34, 1, '6',
+        ITM_SUB,                                   // n - 6
+        ITM_1ONX,                                  // 1/(n-6): divides by zero at n=6
+        (uint8_t)((ITM_END >> 8) | 0x80), (uint8_t)(ITM_END & 0xff),
+      };
+      ppcTestWriteAndLoadPgm(pgmE, sizeof(pgmE));
+      calcRegister_t eLbl = findNamedLabel("E", GLOBAL_LABELS);
+      if(eLbl != INVALID_VARIABLE) {
+        ppcTestReset();
+        ppcTestType("4");
+        ppcTestOp(ITM_ENTER);
+        ppcTestType("8");
+        ppcTestOp(ITM_ENTER);
+        ppcTestType("1");
+        ppcTestOpParam(ITM_SIGMAn, (uint16_t)eLbl);
+        if(lastErrorCode != ERROR_NONE) {
+          // the run failed: nothing may claim to describe the register
+          ppcTestExpectSig("B10 failed sum left a formula behind", "-");
+        }
+        lastErrorCode = 0;
+      }
+    }
+
     #if defined(OPTION_INFSUMS)
     // B9: the early-stop sum captures like any other sum — it reads the
     // same three stack levels, so its node carries the real limits the
@@ -1233,6 +1356,31 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
     currentSolverProgram  = savedSolverProgram;
     currentSolverVariable = savedSolverVariable;
     currentMvarLabel      = savedMvarLabel;
+  }
+
+  // T24 (AUDIT R1-7): R/S resumes a stopped program that then rewrites
+  // the stack with every step out of scope, so nothing tells the shadow.
+  // XEQ is the same operation by the other key and is US_ENABLED, so the
+  // default rule covered it; R/S is US_UNCHANGED and was not. Pins the
+  // classification: after R/S nothing may still claim to describe a
+  // register.
+  ppcTestReset();
+  ppcTestType("2");
+  ppcTestOp(ITM_ENTER);
+  ppcTestType("3");
+  ppcTestOp(ITM_ADD);
+  {
+    // R/S drives the program runner, so it moves machine state a test
+    // driver owns: put every piece of it back (the aimBuffer rule,
+    // applied to the runner).
+    uint16_t hadRunStop = programRunStop;
+    uint16_t hadPgm = currentProgramNumber;
+    ppcTestOp(ITM_RS);
+    ppcTestExpectSig("T24 R/S left the shadow describing stale registers", "-");
+    programRunStop = hadRunStop;
+    currentProgramNumber = hadPgm;
+    lastErrorCode = 0;
+    ppcTestReset();
   }
 
   ppcTestReset();
