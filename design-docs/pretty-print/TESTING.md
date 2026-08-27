@@ -145,6 +145,20 @@ does this first, always.
   reason recorded: `SOLVER_STATUS_EQUATION_SOLVER` is the zero value,
   so a stale INTERACTIVE bit is indistinguishable from a live session.
 
+### PP14 additions
+
+- **`prettyTestEquation` EQ14-EQ21** — the equation-language constructs,
+  evaluated through the REAL fnEqCalc path: EQ14 `SUM(X^2;X;1;10)` = 385
+  AND the bound variable comes back holding its prior 99, EQ15
+  `PROD(X;X;1;5)` = 120 (seed one), EQ16 `DERIV(X^3;X;2)` = 12 and
+  `DERIV(X^3;X;3;2)` = 18 — EXACT, because the delegate runs the same
+  engine deriv_cov pins, EQ17 `INTEG(X^2;X;0;1)` ≈ 1/3 (the
+  double-exponential integrator itself), EQ18 the nested
+  `SUM(SUM(Y;Y;1;X);X;1;3)` = 10 (argument slicing honours paren
+  depth), EQ19 a wrong argument count raises the equation's own error,
+  EQ20/21 the 2D shapes (`B([X ²]|[X = 1]|10)`,
+  `[F(d|[d X]) U(P(X)|[X = 2])]`).
+
 ## Mutation pins (run each separately, battery green between restores)
 
 All six demonstrated red on 2026-08-26 (targeted single-file battery), green
@@ -196,6 +210,9 @@ after restore.
 | MUT-42 | derivative frame ignores the order (PP13) | EQ13 (superscript-2 glyphs missing; the FAIL line holds glyph bytes — trust the counts) |
 | MUT-43 | integral frame limits swapped (PP13) | EQ10 (under/over flip) |
 | MUT-44 | EQSHW integrate arm dropped (PP13) | EQ8 (∫ sign missing) |
+| MUT-45 | bound-variable restore dropped (PP14) | EQ14 (X left holding the counter) |
+| MUT-46 | PROD seeded with zero (PP14) | EQ15 (product collapses to 0) |
+| MUT-47 | argument slicer ignores paren depth (PP14) | EQ18 (nested construct mis-sliced) |
 
 Two lessons from the first mutation run, kept for honesty: (a) the original
 MUT-4 ("drop the dtReal34 type gate") stays GREEN — a non-real register's

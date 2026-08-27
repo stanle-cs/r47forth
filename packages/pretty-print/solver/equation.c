@@ -705,6 +705,10 @@ static void _menuItem(int16_t item, char *bufPtr) {
 #define PARSER_OPERATOR_ITM_XFACT              5006
 #define PARSER_OPERATOR_ITM_END_OF_FORMULA     5007
 
+/* pretty-print package (PP14): equation-language big operators — the
+ * implementation block sits at the end of this file */
+static int16_t ppEqBigopIntercept(const char *strPtr, uint16_t parseMode, char *mvarBuffer, bool_t wordEmpty);
+
 static uint32_t _operatorPriority(uint16_t func) {
   // priority of operator: smaller number represents higher priority
   // associative property: even number represents left-associativity, odd number represents right-associativity.
@@ -1330,6 +1334,24 @@ void parseEquation(uint16_t equationId, uint16_t parseMode, char *buffer, char *
       ++strPtr;
     }
 
+    /* pretty-print package (PP14): SUM/PROD/DERIV/INTEG constructs are
+     * consumed whole (XEQ) or name-skipped (MVAR); only at a word
+     * boundary, so a variable ending in one of the names never matches */
+    {
+      int16_t ppAdv = ppEqBigopIntercept(strPtr, parseMode, mvarBuffer, bufPtr == buffer);
+      if(ppAdv < 0) {
+        return;   // the construct raised its own error
+      }
+      if(ppAdv > 0) {
+        strPtr += ppAdv;
+        if(parseMode == EQUATION_PARSER_XEQ) {
+          afterClosingParenthesis = true;   // a value landed: operator next
+          unaryMinusCanOccur = false;
+        }
+        continue;
+      }
+    }
+
     #pragma GCC diagnostic push
     #pragma GCC diagnostic ignored "-Wimplicit-fallthrough"
     switch(*strPtr) {
@@ -1657,4 +1679,415 @@ void parseEquation(uint16_t equationId, uint16_t parseMode, char *buffer, char *
   if(parseMode == EQUATION_PARSER_XEQ) {
     _processOperator(PARSER_OPERATOR_ITM_END_OF_FORMULA, mvarBuffer);
   }
+}
+
+
+/* ==== pretty-print package (PP14): equation-language big operators ======
+ * SUM(body;var;from;to[;step])  PROD(body;var;from;to[;step])
+ * DERIV(body;var;at[;order])    INTEG(body;var;from;to)
+ *
+ * The separator is ';' — a hard parse error in the base grammar, so the
+ * syntax space is free and it can never collide with a radix mark. The
+ * parser's whole state lives in its caller's mvarBuffer, so nested slice
+ * evaluation is re-entrant with private buffers; a body slice becomes a
+ * HIDDEN formula slot appended at the list end (fnEqNew opens the editor,
+ * deleteEquation resets currentSolverVariable — both unusable here) and
+ * every buffer is a transient pool block freed on all exits: zero
+ * resident BSS. Live blocks never relocate (free-list allocator), so the
+ * outer parse's string pointer stays valid across the appends.
+ * Design: design-docs/pretty-print/DESIGN.md §PP14. */
+
+#define PPEQ_STATE_BYTES (PARSER_OPERATOR_STACK_SIZE * 2 + REAL34_SIZE_IN_BYTES * (2 + 2 * PARSER_NUMERIC_STACK_SIZE) + 4)
+#define PPEQ_WORD_BYTES  256
+#define PPEQ_SNAP_BYTES  (AIM_BUFFER_LENGTH + PPEQ_STATE_BYTES)
+#define PPEQ_MAX_DEPTH   2
+
+void _fnIntegrate(uint16_t labelOrVariable, bool_t XY);   // integrate.c, external but not in its header
+
+static uint8_t ppEqDepth = 0;
+
+static void ppEqSyntaxError(const char *what) {
+  displayCalcErrorMessage(ERROR_SYNTAX_ERROR_IN_EQUATION, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+  #if (EXTRA_INFO_ON_CALC_ERROR == 1)
+    moreInfoOnError("In function ppEqBigopIntercept:", (char *)what, NULL, NULL);
+  #else
+    (void)what;
+  #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
+}
+
+/* append a hidden formula slot at the LIST END holding text; 0xffff on
+ * failure (error already raised by setEquation) */
+static uint16_t ppEqTempAppend(const char *text) {
+  formulaHeader_t *newPtr;
+  if(numberOfFormulae == 0) {
+    return 0xffff;   // cannot happen: the outer equation is a formula
+  }
+  newPtr = allocC47Blocks(TO_BLOCKS(sizeof(formulaHeader_t)) * (numberOfFormulae + 1));
+  if(newPtr == NULL) {
+    displayCalcErrorMessage(ERROR_RAM_FULL, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+    return 0xffff;
+  }
+  for(uint32_t i = 0; i < numberOfFormulae; ++i) {
+    newPtr[i] = allFormulae[i];
+  }
+  newPtr[numberOfFormulae].pointerToFormulaData = C47_NULL;
+  newPtr[numberOfFormulae].sizeInBlocks = 0;
+  freeC47Blocks(allFormulae, TO_BLOCKS(sizeof(formulaHeader_t)) * numberOfFormulae);
+  allFormulae = newPtr;
+  ++numberOfFormulae;
+  uint16_t slot = (uint16_t)(numberOfFormulae - 1);
+  setEquation(slot, text);
+  if(lastErrorCode != ERROR_NONE) {
+    // roll the append back; the slot may or may not hold data
+    if(allFormulae[slot].sizeInBlocks > 0) {
+      freeC47Blocks(TO_PCMEMPTR(allFormulae[slot].pointerToFormulaData), allFormulae[slot].sizeInBlocks);
+    }
+    reduceC47Blocks(allFormulae, TO_BLOCKS(sizeof(formulaHeader_t)) * numberOfFormulae,
+                                 TO_BLOCKS(sizeof(formulaHeader_t)) * (numberOfFormulae - 1));
+    --numberOfFormulae;
+    return 0xffff;
+  }
+  return slot;
+}
+
+/* tail-delete the hidden slot WITHOUT deleteEquation's
+ * currentSolverVariable/graphVariabl1 resets */
+static void ppEqTempDelete(uint16_t slot) {
+  if(slot != (uint16_t)(numberOfFormulae - 1)) {
+    return;   // discipline: the temp slot is always last
+  }
+  if(allFormulae[slot].sizeInBlocks > 0) {
+    freeC47Blocks(TO_PCMEMPTR(allFormulae[slot].pointerToFormulaData), allFormulae[slot].sizeInBlocks);
+  }
+  reduceC47Blocks(allFormulae, TO_BLOCKS(sizeof(formulaHeader_t)) * numberOfFormulae,
+                               TO_BLOCKS(sizeof(formulaHeader_t)) * (numberOfFormulae - 1));
+  if(--numberOfFormulae == 0) {
+    allFormulae = NULL;
+  }
+}
+
+/* evaluate the hidden slot with private transient buffers; the result is
+ * read from the slice's own numeric stack (END_OF_FORMULA leaves the
+ * value in place). Real path only in v1: a complex result errors. */
+static bool_t ppEqEvalSlot(uint16_t slot, real34_t *re) {
+  char *mvarBuffer;   // the PARSER_* macros bind to this name
+  char *blk = allocC47Blocks(TO_BLOCKS(PPEQ_WORD_BYTES + PPEQ_STATE_BYTES));
+  if(blk == NULL) {
+    displayCalcErrorMessage(ERROR_RAM_FULL, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+    return false;
+  }
+  mvarBuffer = blk + PPEQ_WORD_BYTES;
+  parseEquation(slot, EQUATION_PARSER_XEQ, blk, mvarBuffer);
+  bool_t ok = false;
+  // END_OF_FORMULA pops the numeric stack after writing REGISTER_X, so X
+  // is where the slice's value survives (the differentiator reads it the
+  // same way); a complex result is the v1 decline
+  if(lastErrorCode == ERROR_NONE && getRegisterDataType(REGISTER_X) == dtReal34) {
+    real34Copy(REGISTER_REAL34_DATA(REGISTER_X), re);
+    ok = true;
+  }
+  else if(lastErrorCode == ERROR_NONE) {
+    ppEqSyntaxError("complex value in a big-operator argument");
+  }
+  freeC47Blocks(blk, TO_BLOCKS(PPEQ_WORD_BYTES + PPEQ_STATE_BYTES));
+  return ok;
+}
+
+/* evaluate a text slice (not NUL-terminated) via a temp slot */
+static bool_t ppEqEvalSlice(const char *src, uint16_t len, real34_t *re) {
+  char text[PPEQ_WORD_BYTES];
+  if(len == 0 || len >= sizeof(text)) {
+    ppEqSyntaxError("bad big-operator argument length");
+    return false;
+  }
+  xcopy(text, src, len);
+  text[len] = 0;
+  uint16_t slot = ppEqTempAppend(text);
+  if(slot == 0xffff) {
+    return false;
+  }
+  bool_t ok = ppEqEvalSlot(slot, re);
+  ppEqTempDelete(slot);
+  return ok;
+}
+
+/* DERIV/INTEG delegate to the upstream engines against the temp slot so
+ * the numbers match the interactive surfaces exactly. The outer parse's
+ * buffers (tmpString + state at tmpString+AIM_BUFFER_LENGTH — every XEQ
+ * caller uses them) and the solver globals are snapshotted around the
+ * call; the X-register flow is the engines' own. */
+static bool_t ppEqDelegate(uint8_t kind, uint16_t order, uint16_t bodySlot,
+                           calcRegister_t var, const real34_t *a, const real34_t *b,
+                           real34_t *re) {
+  char *snap = allocC47Blocks(TO_BLOCKS(PPEQ_SNAP_BYTES));
+  if(snap == NULL) {
+    displayCalcErrorMessage(ERROR_RAM_FULL, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+    return false;
+  }
+  xcopy(snap, tmpString, PPEQ_SNAP_BYTES);
+  uint16_t savedFormula = currentFormula;
+  uint16_t savedVar     = currentSolverVariable;
+  uint16_t savedStatus  = currentSolverStatus;
+  uint16_t savedProgram = currentSolverProgram;
+  real34_t savedUlim, savedLlim;
+  real34Copy(REGISTER_REAL34_DATA(RESERVED_VARIABLE_ULIM), &savedUlim);
+  real34Copy(REGISTER_REAL34_DATA(RESERVED_VARIABLE_LLIM), &savedLlim);
+
+  currentFormula = bodySlot;
+  currentSolverVariable = var;
+  currentSolverStatus = SOLVER_STATUS_USES_FORMULA;
+
+  bool_t ok = false;
+  if(kind == 2) {   // DERIV at point a
+    // the engine RCLs the point from the solver VARIABLE (covDerivEq
+    // stores X there first); feed both channels, direct writes
+    reallocateRegister(REGISTER_X, dtReal34, 0, amNone);
+    real34Copy(a, REGISTER_REAL34_DATA(REGISTER_X));
+    reallocateRegister(var, dtReal34, 0, amNone);
+    real34Copy(a, REGISTER_REAL34_DATA(var));
+    if(order == 2) {
+      fn2ndDerivEq(NOPARAM);
+    }
+    else {
+      fn1stDerivEq(NOPARAM);
+    }
+  }
+  else {            // INTEG over [a, b] — XY=false: limits from the reserved vars
+    real34Copy(a, REGISTER_REAL34_DATA(RESERVED_VARIABLE_LLIM));
+    real34Copy(b, REGISTER_REAL34_DATA(RESERVED_VARIABLE_ULIM));
+    _fnIntegrate((uint16_t)var, false);
+  }
+  if(lastErrorCode == ERROR_NONE && getRegisterDataType(REGISTER_X) == dtReal34) {
+    real34Copy(REGISTER_REAL34_DATA(REGISTER_X), re);
+    ok = true;
+  }
+
+  real34Copy(&savedUlim, REGISTER_REAL34_DATA(RESERVED_VARIABLE_ULIM));
+  real34Copy(&savedLlim, REGISTER_REAL34_DATA(RESERVED_VARIABLE_LLIM));
+  currentFormula = savedFormula;
+  currentSolverVariable = savedVar;
+  currentSolverStatus = savedStatus;
+  currentSolverProgram = savedProgram;
+  xcopy(tmpString, snap, PPEQ_SNAP_BYTES);
+  freeC47Blocks(snap, TO_BLOCKS(PPEQ_SNAP_BYTES));
+  return ok;
+}
+
+static int16_t ppEqBigopIntercept(const char *strPtr, uint16_t parseMode, char *mvarBuffer, bool_t wordEmpty) {
+  uint8_t kind;      // 0 SUM, 1 PROD, 2 DERIV, 3 INTEG
+  uint8_t nameLen;
+  if(!wordEmpty) {
+    return 0;
+  }
+  if(strncmp(strPtr, "SUM(", 4) == 0)        { kind = 0; nameLen = 3; }
+  else if(strncmp(strPtr, "PROD(", 5) == 0)  { kind = 1; nameLen = 4; }
+  else if(strncmp(strPtr, "DERIV(", 6) == 0) { kind = 2; nameLen = 5; }
+  else if(strncmp(strPtr, "INTEG(", 6) == 0) { kind = 3; nameLen = 5; }
+  else {
+    return 0;
+  }
+  if(parseMode != EQUATION_PARSER_XEQ) {
+    return nameLen;   // MVAR scan: hide the name, scan the args normally
+  }
+  if(ppEqDepth >= PPEQ_MAX_DEPTH) {
+    ppEqSyntaxError("big-operator constructs nest too deep");
+    return -1;
+  }
+
+  // slice the arguments at top-level ';', find the matching ')'
+  const char *argStart[5];
+  uint16_t   argLen[5];
+  uint8_t    nArgs = 0;
+  const char *p = strPtr + nameLen + 1;
+  const char *start = p;
+  int depth = 0;
+  while(*p != 0) {
+    if(*p == '(') {
+      ++depth;
+    }
+    else if(*p == ')') {
+      if(depth == 0) {
+        break;
+      }
+      --depth;
+    }
+    else if(*p == ';' && depth == 0) {
+      if(nArgs >= 5) {
+        ppEqSyntaxError("too many big-operator arguments");
+        return -1;
+      }
+      argStart[nArgs] = start;
+      argLen[nArgs++] = (uint16_t)(p - start);
+      start = p + 1;
+    }
+    p += ((*p) & 0x80) ? 2 : 1;
+  }
+  if(*p != ')') {
+    ppEqSyntaxError("big-operator parenthesis not closed");
+    return -1;
+  }
+  if(nArgs >= 5) {
+    ppEqSyntaxError("too many big-operator arguments");
+    return -1;
+  }
+  argStart[nArgs] = start;
+  argLen[nArgs++] = (uint16_t)(p - start);
+  uint8_t needMin = (kind == 2) ? 3 : 4;
+  uint8_t needMax = (kind == 3) ? 4 : ((kind == 2) ? 4 : 5);
+  if(nArgs < needMin || nArgs > needMax) {
+    ppEqSyntaxError("wrong number of big-operator arguments");
+    return -1;
+  }
+
+  // the bound variable: a plain name
+  char varName[16];
+  if(argLen[1] == 0 || argLen[1] >= sizeof(varName)) {
+    ppEqSyntaxError("bad big-operator variable name");
+    return -1;
+  }
+  xcopy(varName, argStart[1], argLen[1]);
+  varName[argLen[1]] = 0;
+  calcRegister_t var = findOrAllocateNamedVariable(varName);
+  if(var == INVALID_VARIABLE) {
+    ppEqSyntaxError("bad big-operator variable name");
+    return -1;
+  }
+
+  ++ppEqDepth;
+
+  // numeric arguments evaluate first (they may be expressions)
+  real34_t argA, argB, argS;
+  bool_t ok = ppEqEvalSlice(argStart[2], argLen[2], &argA);
+  if(ok && kind != 2 && nArgs >= 4) {
+    ok = ppEqEvalSlice(argStart[3], argLen[3], &argB);
+  }
+  uint16_t order = 1;
+  if(ok && kind == 2 && nArgs == 4) {
+    ok = ppEqEvalSlice(argStart[3], argLen[3], &argS);
+    if(ok) {
+      order = (uint16_t)real34ToInt32(&argS);
+      if(order != 1 && order != 2) {
+        ppEqSyntaxError("DERIV order must be 1 or 2");
+        ok = false;
+      }
+    }
+  }
+  int32ToReal34(1, &argS);
+  if(ok && kind <= 1 && nArgs == 5) {
+    ok = ppEqEvalSlice(argStart[4], argLen[4], &argS);
+  }
+
+  real34_t result;
+  if(ok) {
+    // the bound variable's own value is kept and put back (the
+    // differentiate.c probe idiom); binding is a DIRECT register write —
+    // no dispatch runs inside the evaluation
+    real_t probe;
+    snap_t savedVarSnap;
+    bool_t restoreVar = getRegisterAsRealQuiet(var, &probe) || getRegisterDataType(var) == dtLongInteger;
+    if(restoreVar) {
+      saveRegisterSnapshot(var, &savedVarSnap);
+    }
+
+    if(kind <= 1) {
+      // the counter walk and accumulator discipline are
+      // _programmableSumProd's own: real accumulation under ctxtReal75,
+      // sign-aware termination, a misdirected range refused
+      char bodyText[PPEQ_WORD_BYTES];
+      if(argLen[0] == 0 || argLen[0] >= sizeof(bodyText)) {
+        ppEqSyntaxError("big-operator body too long");
+        ok = false;
+      }
+      else {
+        xcopy(bodyText, argStart[0], argLen[0]);
+        bodyText[argLen[0]] = 0;
+        uint16_t bodySlot = ppEqTempAppend(bodyText);
+        if(bodySlot == 0xffff) {
+          ok = false;
+        }
+        else {
+          real_t acc, term;
+          real34_t counter, cmp, sgn, next;
+          realCopy(kind == 1 ? const_1 : const_0, &acc);
+          real34Copy(&argA, &counter);
+          if(real34IsZero(&argS) && !real34CompareEqual(&argA, &argB)) {
+            displayCalcErrorMessage(ERROR_BAD_INPUT, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+            ok = false;
+          }
+          if(ok && !real34CompareEqual(&argA, &argB)
+              && ((real34CompareGreaterThan(&argB, &argA) && real34CompareLessEqual(&argS, const34_0))
+               || (real34CompareLessThan(&argB, &argA) && real34CompareGreaterEqual(&argS, const34_0)))) {
+            displayCalcErrorMessage(ERROR_BAD_INPUT, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+            ok = false;
+          }
+          while(ok) {
+            real34Compare(&counter, &argB, &cmp);
+            real34Compare(&argS, const34_0, &sgn);
+            real34Multiply(&cmp, &sgn, &cmp);
+            if(real34ToInt32(&cmp) > 0) {
+              break;
+            }
+            reallocateRegister(var, dtReal34, 0, amNone);
+            real34Copy(&counter, REGISTER_REAL34_DATA(var));
+            real34_t x;
+            ok = ppEqEvalSlot(bodySlot, &x);
+            if(!ok) {
+              break;
+            }
+            real34ToReal(&x, &term);
+            if(kind == 1) {
+              realMultiply(&acc, &term, &acc, &ctxtReal75);
+            }
+            else {
+              realAdd(&acc, &term, &acc, &ctxtReal75);
+            }
+            real34Add(&counter, &argS, &next);
+            if(real34CompareEqual(&next, &counter)) {
+              displayCalcErrorMessage(ERROR_BAD_INPUT, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+              ok = false;   // the step no longer advances the counter
+              break;
+            }
+            real34Copy(&next, &counter);
+          }
+          if(ok) {
+            realToReal34(&acc, &result);
+          }
+          ppEqTempDelete(bodySlot);
+        }
+      }
+    }
+    else {
+      char bodyText[PPEQ_WORD_BYTES];
+      if(argLen[0] == 0 || argLen[0] >= sizeof(bodyText)) {
+        ppEqSyntaxError("big-operator body too long");
+        ok = false;
+      }
+      else {
+        xcopy(bodyText, argStart[0], argLen[0]);
+        bodyText[argLen[0]] = 0;
+        uint16_t bodySlot = ppEqTempAppend(bodyText);
+        if(bodySlot == 0xffff) {
+          ok = false;
+        }
+        else {
+          ok = ppEqDelegate(kind, order, bodySlot, var, &argA, &argB, &result);
+          ppEqTempDelete(bodySlot);
+        }
+      }
+    }
+
+    if(restoreVar) {
+      restoreRegisterSnapshot(var, &savedVarSnap);
+    }
+  }
+
+  --ppEqDepth;
+  if(!ok) {
+    if(lastErrorCode == ERROR_NONE) {
+      ppEqSyntaxError("big-operator evaluation failed");
+    }
+    return -1;
+  }
+  _pushNumericStack(mvarBuffer, &result, const34_0);
+  return (int16_t)(p + 1 - strPtr);
 }

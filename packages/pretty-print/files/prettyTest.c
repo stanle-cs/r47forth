@@ -1825,6 +1825,153 @@ void prettyTestEquation(uint16_t unusedButMandatoryParameter) {
     currentSolverVariable = hadVar;
   }
 
+  /* ==== PP14: equation-language big operators ========================== */
+  {
+    uint16_t hadStatus = currentSolverStatus;
+    uint16_t hadVar = currentSolverVariable;
+    uint16_t hadProgram = currentSolverProgram;
+
+    if(numberOfFormulae == 0) {
+      fnEqNew(NOPARAM);          // the covDerivEq idiom; leaves EIM state
+    }
+    calcMode = CM_NORMAL;
+    aimBuffer[0] = 0;
+    nimNumberPart = NP_EMPTY;
+
+    calcRegister_t varX = findOrAllocateNamedVariable("X");
+
+    // EQ14: SUM evaluates through the real fnEqCalc path, and the bound
+    // variable is put back the way it was found
+    reallocateRegister(varX, dtReal34, 0, amNone);
+    int32ToReal34(99, REGISTER_REAL34_DATA(varX));
+    setEquation(currentFormula, "SUM(X^2;X;1;10)");
+    lastErrorCode = 0;
+    fnEqCalc(NOPARAM);
+    {
+      real34_t want;
+      int32ToReal34(385, &want);
+      if(lastErrorCode != ERROR_NONE || getRegisterDataType(REGISTER_X) != dtReal34
+          || !real34CompareEqual(REGISTER_REAL34_DATA(REGISTER_X), &want)) {
+        ppTestFail("EQ14 SUM != 385");
+      }
+      int32ToReal34(99, &want);
+      if(getRegisterDataType(varX) != dtReal34
+          || !real34CompareEqual(REGISTER_REAL34_DATA(varX), &want)) {
+        ppTestFail("EQ14 bound variable not restored");
+      }
+    }
+
+    // EQ15: PROD seeds with one
+    setEquation(currentFormula, "PROD(X;X;1;5)");
+    lastErrorCode = 0;
+    fnEqCalc(NOPARAM);
+    {
+      real34_t want;
+      int32ToReal34(120, &want);
+      if(lastErrorCode != ERROR_NONE || getRegisterDataType(REGISTER_X) != dtReal34
+          || !real34CompareEqual(REGISTER_REAL34_DATA(REGISTER_X), &want)) {
+        ppTestFail("EQ15 PROD != 120");
+      }
+    }
+
+    // EQ16: DERIV delegates to the upstream engine — exact for a cubic
+    // (deriv_cov's own pin), both orders
+    setEquation(currentFormula, "DERIV(X^3;X;2)");
+    lastErrorCode = 0;
+    fnEqCalc(NOPARAM);
+    {
+      real34_t want;
+      int32ToReal34(12, &want);
+      if(lastErrorCode != ERROR_NONE || getRegisterDataType(REGISTER_X) != dtReal34
+          || !real34CompareEqual(REGISTER_REAL34_DATA(REGISTER_X), &want)) {
+        ppTestFail("EQ16 DERIV != 12");
+      }
+    }
+    setEquation(currentFormula, "DERIV(X^3;X;3;2)");
+    lastErrorCode = 0;
+    fnEqCalc(NOPARAM);
+    {
+      real34_t want;
+      int32ToReal34(18, &want);
+      if(lastErrorCode != ERROR_NONE || getRegisterDataType(REGISTER_X) != dtReal34
+          || !real34CompareEqual(REGISTER_REAL34_DATA(REGISTER_X), &want)) {
+        ppTestFail("EQ16 DERIV order 2 != 18");
+      }
+    }
+
+    // EQ17: INTEG delegates to the double-exponential integrator
+    setEquation(currentFormula, "INTEG(X^2;X;0;1)");
+    lastErrorCode = 0;
+    fnEqCalc(NOPARAM);
+    {
+      real34_t three, one, diff, tol;
+      int32ToReal34(3, &three);
+      int32ToReal34(1, &one);
+      if(lastErrorCode != ERROR_NONE || getRegisterDataType(REGISTER_X) != dtReal34) {
+        ppTestFail("EQ17 INTEG errored");
+      }
+      else {
+        real34Multiply(REGISTER_REAL34_DATA(REGISTER_X), &three, &diff);
+        real34Subtract(&diff, &one, &diff);
+        real34SetPositiveSign(&diff);
+        stringToReal34("1e-6", &tol);
+        if(!real34CompareLessThan(&diff, &tol)) {
+          ppTestFail("EQ17 INTEG != 1/3");
+        }
+      }
+    }
+
+    // EQ18: constructs nest; the argument slicer must honour paren depth
+    setEquation(currentFormula, "SUM(SUM(Y;Y;1;X);X;1;3)");
+    lastErrorCode = 0;
+    fnEqCalc(NOPARAM);
+    {
+      real34_t want;
+      int32ToReal34(10, &want);
+      if(lastErrorCode != ERROR_NONE || getRegisterDataType(REGISTER_X) != dtReal34
+          || !real34CompareEqual(REGISTER_REAL34_DATA(REGISTER_X), &want)) {
+        ppTestFail("EQ18 nested SUM != 10");
+      }
+    }
+
+    // EQ19: a wrong argument count raises the equation's own error
+    setEquation(currentFormula, "SUM(X;X;1)");
+    lastErrorCode = 0;
+    fnEqCalc(NOPARAM);
+    if(lastErrorCode == ERROR_NONE) {
+      ppTestFail("EQ19 malformed SUM accepted");
+    }
+    lastErrorCode = 0;
+
+    // EQ20/EQ21: the constructs render as their 2D shapes (strict parse)
+    {
+      uint8_t root;
+      ppReset();
+      if(!ppqParse("SUM(X" "\xa1\x62" ";X;1;10)", PP_FONT_STANDARD, PP_FONT_TINY, &root)) {
+        ppTestFail("EQ20 parse");
+      }
+      else {
+        // HBOX sig children are space-joined
+        ppfTestExpect("EQ20 sum shape", root, "B([X \xa1\x62]|[X = 1]|10)");
+      }
+      ppReset();
+      if(!ppqParse("DERIV(X;X;2)", PP_FONT_STANDARD, PP_FONT_TINY, &root)) {
+        ppTestFail("EQ21 parse");
+      }
+      else {
+        ppfTestExpect("EQ21 deriv shape", root, "[F(d|[d X]) U(P(X)|[X = 2])]");
+      }
+    }
+
+    currentSolverStatus = hadStatus;
+    currentSolverVariable = hadVar;
+    currentSolverProgram = hadProgram;
+    calcMode = CM_NORMAL;
+    aimBuffer[0] = 0;
+    nimNumberPart = NP_EMPTY;
+    temporaryInformation = TI_NO_INFO;
+  }
+
   ppTestWriteLonI(REGISTER_X, ppTestFailures);
 }
 

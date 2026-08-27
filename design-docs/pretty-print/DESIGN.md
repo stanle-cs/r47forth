@@ -292,6 +292,64 @@ framing (`f(x)=0`) is deliberately absent:
 a stale INTERACTIVE bit would frame a plain view with an `= 0` the user
 never asked for — un-determinable state stays unframed.
 
+### Equation-language big operators (PP14) — RULED design
+
+Syntax (parse-level, package-side): `SUM(body;var;from;to[;step])`,
+`PROD(body;var;from;to[;step])`, `DERIV(body;var;at[;order])`,
+`INTEG(body;var;from;to)`. The separator is `;` — today a hard parse
+error, so the syntax space is free, and unlike `,` it can never collide
+with a radix mark. The constructs nest (a SUM body may hold another);
+depth caps at 2 and errors beyond.
+
+Machinery (one hook line at the top of parseEquation's scan loop + an
+appended block in the same file):
+
+- **Interception.** In XEQ mode the hook consumes the whole
+  `NAME(...)` span (paren-depth scan finds the close), slices the
+  arguments at top-level `;`, and pushes one value onto the OUTER
+  numeric stack; the outer parser state is never touched. In MVAR mode
+  it consumes ONLY the name and `(` so the construct name is not
+  collected as a variable; the arguments scan normally (the bound
+  variable appears in the menu — harmless, documented).
+- **Slice evaluation.** parseEquation's entire state lives in its
+  caller's mvarBuffer, so nested evaluation is re-entrant by
+  construction with private buffers. A slice becomes a HIDDEN formula
+  slot appended at the LIST END (own appender — fnEqNew opens the
+  editor and moves currentFormula; deleteEquation's tail-delete is
+  side-effect free for user slots, but resets currentSolverVariable,
+  which the construct restores). Slice buffers are TRANSIENT pool
+  allocations (allocC47Blocks) freed on every exit — zero resident
+  BSS. Live blocks never relocate (free-list allocator, no
+  compaction), so the outer parse's string pointer stays valid across
+  the appends.
+- **Loop binding.** The bound variable is written DIRECTLY
+  (reallocateRegister + real34Copy), never through reallyRunFunction —
+  no dispatch inside the eval. Its prior content is saved and restored
+  with the saveRegisterSnapshot idiom (differentiate.c's own).
+- **SUM/PROD** accumulate in real_t under ctxtReal75 with
+  _programmableSumProd's counter walk (sign-aware termination, the
+  same direction guard) — package loop, upstream accumulator
+  discipline. Result: real path only in v1; a complex or error result
+  from the body aborts the equation with the body's own error.
+- **DERIV/INTEG delegate to the upstream engines** (fn1stDerivEq /
+  fn2ndDerivEq / _fnIntegrate with a variable param) against the temp
+  slot, so the numbers are IDENTICAL to the interactive surfaces. The
+  delegate snapshots the outer parse's tmpString regions
+  (buffer 1024 B + parser state) into a transient block plus the
+  solver globals (currentFormula/SolverVariable/SolverStatus/
+  currentSolverProgram, ULIM/LLIM for INTEG) and the X register flow
+  is upstream's own (result read from X; the equation's final X
+  overwrites it exactly as fnEqCalc would). _fnIntegrate's saveForUndo
+  fires per INTEG — one extra undo point, same as the interactive ∫,
+  accepted and documented.
+- **Rendering** (ppqParse arms): SUM/PROD → PP_BIGOP Σ/∏ with
+  `var=from` under (`,Δstep` when a step slice exists — textual, not
+  evaluated), `to` over, the body as the operand; INTEG → PP_BIGOP ∫
+  with from/to under/over and ` dvar` appended; DERIV → the PP13
+  d/dx (d²/dx²) fraction with the body in tall parens and `var=at`
+  appended as a subscript-style suffix. Malformed constructs decline
+  the whole strip/EQSHW render (strict; the linear line remains).
+
 ## §7 Composition claims (BINDING for other packages)
 
 Verified against the tree at branch point (undo-history/stage-u2 tip,

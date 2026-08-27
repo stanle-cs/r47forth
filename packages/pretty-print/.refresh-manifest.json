@@ -4,12 +4,12 @@
     "browsers/prettyBrowser.c": "ea5b66886b788b36c49db97318ddb353ffd834ad096d42b0c9f294202575aa81",
     "browsers/prettyBrowser.h": "258582eb5e57612171171e6a4e2113a011acfbf6e431a292645e1dae5f186802",
     "prettyCapture.c": "7c14bf85b564ba6b0ca4a9c78d53a37f82921e2f39465bcac90a6cf0e9487ad3",
-    "prettyEquation.c": "9d4f1cbb5b1e81b2530d4afd582eb37e8267e9930d2b54eb3d386e6063e651aa",
+    "prettyEquation.c": "1757eeab91a5a6a008a808d0788234a260875561b68f87c748bc06b8a3551aff",
     "prettyFormula.c": "3494f2b92a739120749bec0db9ea215c7bf2805767e50ce8e47fe190a29eadab",
     "prettyInternal.h": "ebc71864de8392134d230b65543d420afc58b06443ded3017ef338f9f65f2998",
     "prettyLayout.c": "619d30c98eed0061eb944cef882d58cd45ee7b758cc1e4ed2220dac263b93dfb",
     "prettyPrint.h": "a0fcf21c428a9047562f3bc6469845a1293378db4b7b549fd05306afb9d4e655",
-    "prettyTest.c": "9096482131f9bcca6dd16ed2d92757c34aabfcf48cde0aa282a9e37922c38f43",
+    "prettyTest.c": "1f7fcefffcdd0d9e3fcc95037d0f95df40d02fe059932bad971d23023946cd76",
     "prettyValue.c": "653c07389330fc1ca4fd680a6972a7355ebac82ff703bdf7aedf7fa2981c23e2",
     "testSuite/tests/pretty_print.txt": "778b71cee0339ec87dc971217dc9efcaf0e83609660ebc9b7b9de295bf3c9b4e"
   },
@@ -23,7 +23,7 @@
     "010-items.h.patch": "555aaa7f32bcc8deeccacd0a4b9c4bce0f7434d74ba5e43877ac8be5ba4ae99d",
     "010-keyboard.c.patch": "715c746fa387e23dbde8413e8a0dae6466c565091afacd8b09eabc94242f0a28",
     "010-screen.c.patch": "1fc56a5066fdaddde713de1c3b8283ed6e8e27656cad4058fa1d7de8a5ac57d9",
-    "010-solver__equation.c.patch": "ef875998c004ef8ade4eafb0e38e26ff1ae48e4c76ee07d7b912ee2eb694b7b1",
+    "010-solver__equation.c.patch": "b8404e7e3651c051e3158619ee109da0398ecfd3dade8f9967c759feaaa633f2",
     "010-testSuite__testSuite.c.patch": "5be374ae3f7fbe10998dcb0cf81abc1526f62b94551da35335e0e53e57b37049",
     "010-testSuite__tests__testSuiteList.txt.patch": "7602270613b0807bd2f56e6a3bba266176226695f6f2ba3de0fbe99cf53bf666"
   }

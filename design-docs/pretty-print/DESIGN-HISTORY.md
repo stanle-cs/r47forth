@@ -2,6 +2,42 @@
 
 Non-normative amendment trail. DESIGN.md is authoritative.
 
+## 2026-08-26 — PP14 (equation-language SUM/PROD/DERIV/INTEG)
+
+- The design pass paid for itself three times: (1) parseEquation's whole
+  state lives in its caller's mvarBuffer, so nested slice evaluation is
+  re-entrant by construction with private buffers — no engine refactor;
+  (2) `;` is a hard error in the base grammar, so the separator space
+  was free and radix-proof; (3) every XEQ caller passes
+  tmpString/tmpString+AIM_BUFFER_LENGTH, which fixed exactly what the
+  DERIV/INTEG delegate must snapshot.
+- **END_OF_FORMULA pops the numeric stack after writing REGISTER_X** —
+  the first slice reader took the value from the slice's own stack and
+  read an empty cell (all four constructs dead on first run, err-free).
+  X is where a slice's value survives; the differentiator reads it the
+  same way.
+- **The derivative engine reads its point from the solver VARIABLE, not
+  X** (covDerivEq STOs X into it before calling): the delegate feeds
+  both channels with direct register writes. DERIV then matches
+  deriv_cov's exactness pins digit for digit.
+- The temp formula slot has its own appender and tail-deleter: fnEqNew
+  opens the editor and moves currentFormula; deleteEquation resets
+  currentSolverVariable. Both side effects were found by reading, not
+  debugging.
+- The bound variable binds by DIRECT register write (no dispatch runs
+  inside the evaluation) and restores via the differentiate.c probe
+  idiom; MUT-45 pins the restore.
+- All construct buffers are transient pool blocks — zero resident BSS
+  for the whole stage; the free-list allocator never relocates live
+  blocks, so the outer parse's string pointer survives the formula-list
+  appends.
+- Stack-churn ruling: the evaluator's own operators lift/drop through
+  the machine stack (T is junked by any operator chain), so the
+  constructs' nested evaluations add the same CLASS of churn upstream
+  already produces — no snapshot, documented instead.
+- Solve framing skipped in PP13 stays skipped here; ∪/∩/lim stay
+  excluded (no machine semantics — dead code violates discipline).
+
 ## 2026-08-26 — PP13 (solver-surface templates)
 
 - EQSHW's integrate frame graduated from the bare PP7 stroke ∫ to a

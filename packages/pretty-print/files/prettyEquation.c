@@ -132,10 +132,216 @@ static uint8_t ppqUnwrapParen(uint8_t n) {
   return n;
 }
 
+static uint8_t ppqRun(const char *s, uint8_t fontId) {
+  return ppNewRun(s, (uint16_t)strlen(s), fontId);
+}
+
+// PP14: the equation-language big operators render as their 2D shapes.
+// A probe that does not match consumes nothing; a matched construct that
+// is malformed fails the whole parse (strict declines).
+static bool_t ppqMatchName(ppqCtx_t *c, const char *name, int16_t *after) {
+  int16_t l = (int16_t)strlen(name);
+  if(c->pos + l >= c->len) {
+    return false;
+  }
+  if(strncmp(c->s + c->pos, name, (size_t)l) != 0 || c->s[c->pos + l] != '(') {
+    return false;
+  }
+  *after = (int16_t)(c->pos + l + 1);
+  return true;
+}
+
+static bool_t ppqEat(ppqCtx_t *c, char ch) {
+  int16_t next;
+  ppqSkipSpace(c);
+  if(ppqPeek(c, &next) != (uint16_t)ch) {
+    c->failed = true;
+    return false;
+  }
+  c->pos = next;
+  return true;
+}
+
+static uint8_t ppqBigopConstruct(ppqCtx_t *c, uint8_t font, uint8_t tinyF) {
+  int16_t after;
+  uint16_t tag;
+  uint8_t kind;   // 0 sum, 1 prod, 2 deriv, 3 integ
+  if(ppqMatchName(c, "SUM", &after))        { kind = 0; tag = ITM_SIGMAn; }
+  else if(ppqMatchName(c, "PROD", &after))  { kind = 1; tag = ITM_PIn; }
+  else if(ppqMatchName(c, "DERIV", &after)) { kind = 2; tag = 0; }
+  else if(ppqMatchName(c, "INTEG", &after)) { kind = 3; tag = ITM_INTEGRAL_YX; }
+  else {
+    return PP_NONE;
+  }
+  c->pos = after;
+
+  uint8_t body = ppqExpr(c, font, tinyF);
+  if(c->failed || body == PP_NONE || !ppqEat(c, ';')) {
+    c->failed = true;
+    return PP_NONE;
+  }
+  ppqSkipSpace(c);
+  int16_t varStart = c->pos;
+  uint8_t varRun = ppqName(c, tinyF);
+  int16_t varEnd = c->pos;
+  if(c->failed || varRun == PP_NONE || !ppqEat(c, ';')) {
+    c->failed = true;
+    return PP_NONE;
+  }
+  uint8_t fromN = ppqExpr(c, tinyF, tinyF);
+  if(c->failed || fromN == PP_NONE) {
+    c->failed = true;
+    return PP_NONE;
+  }
+  uint8_t toN = PP_NONE, stepN = PP_NONE;
+  if(kind != 2) {
+    if(!ppqEat(c, ';')) {
+      return PP_NONE;
+    }
+    toN = ppqExpr(c, tinyF, tinyF);
+    if(c->failed || toN == PP_NONE) {
+      c->failed = true;
+      return PP_NONE;
+    }
+  }
+  {
+    int16_t next;
+    ppqSkipSpace(c);
+    if(ppqPeek(c, &next) == ';') {
+      c->pos = next;
+      stepN = ppqExpr(c, tinyF, tinyF);   // step (sums) / order (deriv)
+      if(c->failed || stepN == PP_NONE) {
+        c->failed = true;
+        return PP_NONE;
+      }
+    }
+  }
+  if(!ppqEat(c, ')')) {
+    return PP_NONE;
+  }
+
+  c->fracSeen = true;
+  if(kind == 0 || kind == 1) {
+    uint8_t big = ppNewBox(PP_BIGOP, font);
+    uint8_t under = ppNewBox(PP_HBOX, tinyF);
+    uint8_t eqRun = ppqRun("=", tinyF);
+    if(big == PP_NONE || under == PP_NONE || eqRun == PP_NONE) {
+      c->failed = true;
+      return PP_NONE;
+    }
+    ppSetBoxTag(big, tag);
+    ppSetFontDeep(fromN, tinyF);
+    ppSetFontDeep(toN, tinyF);
+    ppAppendChild(under, varRun);
+    ppAppendChild(under, eqRun);
+    ppAppendChild(under, fromN);
+    if(stepN != PP_NONE) {
+      // a non-unit step is part of the range: show it
+      uint8_t dRun = ppqRun("," STD_DELTA, tinyF);
+      if(dRun == PP_NONE) {
+        c->failed = true;
+        return PP_NONE;
+      }
+      ppSetFontDeep(stepN, tinyF);
+      ppAppendChild(under, dRun);
+      ppAppendChild(under, stepN);
+    }
+    ppAppendChild(big, body);
+    ppAppendChild(big, under);
+    ppAppendChild(big, toN);
+    return big;
+  }
+  if(kind == 3) {
+    uint8_t big = ppNewBox(PP_BIGOP, font);
+    uint8_t hb = ppNewBox(PP_HBOX, font);
+    uint8_t dRun = ppqRun(" d", font);
+    uint8_t varRun2 = ppNewRun(c->s + varStart, (uint16_t)(varEnd - varStart), font);
+    if(big == PP_NONE || hb == PP_NONE || dRun == PP_NONE || varRun2 == PP_NONE) {
+      c->failed = true;
+      return PP_NONE;
+    }
+    ppSetBoxTag(big, tag);
+    ppSetFontDeep(fromN, tinyF);
+    ppSetFontDeep(toN, tinyF);
+    ppAppendChild(hb, body);
+    ppAppendChild(hb, dRun);
+    ppAppendChild(hb, varRun2);
+    ppAppendChild(big, hb);
+    ppAppendChild(big, fromN);
+    ppAppendChild(big, toN);
+    return big;
+  }
+  // DERIV: d/dvar (body) with var=at as a subscript suffix; an order-2
+  // argument raises the superscript-2 glyphs
+  {
+    bool_t second = false;
+    if(stepN != PP_NONE) {
+      const ppNode_t *sn = ppNodeAt(stepN);
+      second = (sn != NULL && sn->kind == PP_RUN && strcmp(ppTextAt(sn->textOff), "2") == 0);
+      if(!second) {
+        const ppNode_t *sn1 = ppNodeAt(stepN);
+        if(sn1 == NULL || sn1->kind != PP_RUN || strcmp(ppTextAt(sn1->textOff), "1") != 0) {
+          c->failed = true;   // only literal order 1 or 2 renders
+          return PP_NONE;
+        }
+      }
+    }
+    uint8_t hb = ppNewBox(PP_HBOX, font);
+    uint8_t frac = ppNewBox(PP_FRAC, font);
+    uint8_t num = ppqRun(second ? "d" "\xa1\x62" : "d", font);
+    uint8_t denBox = ppNewBox(PP_HBOX, font);
+    uint8_t dRun = ppqRun("d", font);
+    uint8_t varRun2 = ppNewRun(c->s + varStart, (uint16_t)(varEnd - varStart), font);
+    uint8_t par = ppNewBox(PP_PAREN, font);
+    uint8_t sub = ppNewBox(PP_SUB, font);
+    uint8_t script = ppNewBox(PP_HBOX, tinyF);
+    uint8_t eqRun = ppqRun("=", tinyF);
+    if(hb == PP_NONE || frac == PP_NONE || num == PP_NONE || denBox == PP_NONE
+        || dRun == PP_NONE || varRun2 == PP_NONE || par == PP_NONE
+        || sub == PP_NONE || script == PP_NONE || eqRun == PP_NONE) {
+      c->failed = true;
+      return PP_NONE;
+    }
+    ppAppendChild(denBox, dRun);
+    ppAppendChild(denBox, varRun2);
+    if(second) {
+      uint8_t s2 = ppqRun("\xa1\x62", font);
+      if(s2 == PP_NONE) {
+        c->failed = true;
+        return PP_NONE;
+      }
+      ppAppendChild(denBox, s2);
+    }
+    ppAppendChild(frac, num);
+    ppAppendChild(frac, denBox);
+    ppAppendChild(par, body);
+    ppSetFontDeep(varRun, tinyF);
+    ppSetFontDeep(fromN, tinyF);
+    ppAppendChild(script, varRun);
+    ppAppendChild(script, eqRun);
+    ppAppendChild(script, fromN);
+    ppAppendChild(sub, par);
+    ppAppendChild(sub, script);
+    ppAppendChild(hb, frac);
+    ppAppendChild(hb, sub);
+    return hb;
+  }
+}
+
 static uint8_t ppqPrimary(ppqCtx_t *c, uint8_t font, uint8_t tinyF) {
   int16_t next;
   ppqSkipSpace(c);
   uint16_t code = ppqPeek(c, &next);
+
+  if(code >= 'A' && code <= 'Z') {
+    uint8_t big = ppqBigopConstruct(c, font, tinyF);
+    if(c->failed) {
+      return PP_NONE;
+    }
+    if(big != PP_NONE) {
+      return big;
+    }
+  }
 
   if(code == '(') {
     c->pos = next;
