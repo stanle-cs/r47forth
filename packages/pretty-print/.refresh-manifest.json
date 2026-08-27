@@ -7,9 +7,9 @@
     "prettyEquation.c": "3a2f5fc5a720e0b35278f631005559619dc29ff5a3ccf9b983763ba3814c207b",
     "prettyFormula.c": "969663552c136a356137ad72cc26bd55059fa52793b4f138a3b5683fbb612fd6",
     "prettyInternal.h": "be142c147233ef455f0d4aacb0d1ce79b8d12ad460579f79978ba61d4ca509dc",
-    "prettyLayout.c": "33743536639cd0946e6afd8426abd68b3ab2676bfb584bdd04da08d7c23d8803",
+    "prettyLayout.c": "738a5143840263ec7477aa6de30dad7318a523d2d09704eca639f9b3944681c0",
     "prettyPrint.h": "a0fcf21c428a9047562f3bc6469845a1293378db4b7b549fd05306afb9d4e655",
-    "prettyTest.c": "ff2c847a4bf04e315555a5c96a5c60230dbb896a8812e90c25b82660b665ae66",
+    "prettyTest.c": "43c96c3b0fba678396d77f17f31d57db4fa99b30e214e7f589c3c12fece9c7f9",
     "prettyValue.c": "33d5af1b521a858c7761f6610edd02783bf2be97285d184b63a189652718d455",
     "testSuite/tests/pretty_print.txt": "778b71cee0339ec87dc971217dc9efcaf0e83609660ebc9b7b9de295bf3c9b4e"
   },

@@ -392,3 +392,32 @@ closed one hole opened another in the same commit.
 
 Hunt it at: every new early-return or swallow in a key path. Enumerate
 the feature's keys and prove, per key, which clause handles it.
+
+## the paint pass erases more than the measure pass promised (pretty-print audit r3)
+
+A layout engine that measures INK extents but paints through a text
+primitive that clears the FONT box has two different rectangles for the
+same node. Every layout decision is made from the small one; the pixels
+are destroyed over the large one. Siblings placed by measure to sit
+exactly clear of each other still overwrite each other.
+
+Found: `showString` paints each glyph via `showGlyphCode` with
+`noPreClear` false, and that clear covers `rowsAboveGlyph + rowsGlyph +
+rowsBelowGlyph` (screen.c:1239). A fraction's denominator with SHORT ink
+has its baseline pushed up so its ink still clears the bar by `fracGap`;
+its font box then reaches `fracGap + (boxAscent - ascent)` rows higher,
+across the bar and into the numerator painted before it. Measured over
+the numerator's own columns, an '8' numerator kept 52 lit rows over an
+'8' denominator, 38 over an 'x', 20 over a '.'. The same overshoot let a
+run packed against a band edge clear frame rows its measured ink never
+touched.
+
+Note the near-miss: reordering the paint (denominator first) LOOKS like
+the fix and changed nothing measurable, because the erasure is not an
+ordering problem — the rectangles simply disagree. A fix that does not
+move the measurement is not a fix. Clear the measured box explicitly,
+then paint with the primitive's own no-pre-clear flag.
+
+Hunt it at: any engine that computes tight bounds and then delegates
+drawing to a primitive with its own clearing policy. Ask what rectangle
+the primitive erases, not what it draws, and whether the two agree.

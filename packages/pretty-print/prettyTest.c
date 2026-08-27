@@ -1303,6 +1303,53 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
     lastErrorCode = 0;
   }
 
+  // P12 (AUDIT R3-13): a fraction's numerator ink must not depend on which
+  // glyph the denominator is. Nothing about FRAC layout gives the
+  // denominator any say over the rows above the bar — num.relBase is
+  // barTopRel - fracGap - num.descent, none of which reads the
+  // denominator — so the same numerator over three denominators of very
+  // different ink height must light exactly the same pixels. Measured
+  // over the numerator's OWN columns, so re-centring cannot flatter it.
+  {
+    const char *dens[3] = { "8", "x", "." };
+    uint32_t ink[3] = { 0, 0, 0 };
+
+    for(int c = 0; c < 3; c++) {
+      ppReset();
+      uint8_t fr = ppNewBox(PP_FRAC, PP_FONT_STANDARD);
+      uint8_t nn = ppNewRun("8", 1, PP_FONT_STANDARD);
+      uint8_t dd = ppNewRun(dens[c], 1, PP_FONT_STANDARD);
+      if(fr == PP_NONE || nn == PP_NONE || dd == PP_NONE) { ppTestFail("P12 build"); break; }
+      ppAppendChild(fr, nn);
+      ppAppendChild(fr, dd);
+      if(!ppMeasure(fr, 0)) { ppTestFail("P12 measure"); break; }
+
+      lcd_fill_rect(0, 60, SCREEN_WIDTH, 100, LCD_SET_VALUE);
+      ppPaintAt(fr, 40, 120);
+
+      // the numerator's own measured ink box, x and y both
+      const ppNode_t *n = ppNodeAt(nn);
+      const uint32_t nx0 = (uint32_t)(40 + n->relX);
+      const uint32_t nx1 = nx0 + (uint32_t)n->width;
+      const uint32_t ytop = (uint32_t)(120 + n->relBase - n->ascent);
+      const uint32_t ybot = (uint32_t)(120 + n->relBase + n->descent);
+      for(uint32_t y = ytop; y < ybot; y++) {
+        for(uint32_t x = nx0; x < nx1; x++) {
+          if(lcd_buffer_pixel_on(x, y)) ink[c]++;
+        }
+      }
+    }
+
+    if(ink[0] == 0) {
+      ppTestFail("P12 numerator ink missing entirely");
+    }
+    else if(ink[1] != ink[0] || ink[2] != ink[0]) {
+      printf("prettyPrint P12 probe: numerator ink over 8/8=%u 8/x=%u 8/.=%u\n",
+             ink[0], ink[1], ink[2]);
+      ppTestFail("P12 denominator glyph ate the numerator");
+    }
+  }
+
   // T16: abort while ASLIFT is set (straight after an operator result) —
   // the deferred-lift design absorbs the upstream undo() for free; a
   // shadow that lifts at NIM open strands the tree one slot up

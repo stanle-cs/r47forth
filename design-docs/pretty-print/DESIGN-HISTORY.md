@@ -798,3 +798,65 @@ the real paths (6 ENTER 5 x<>y ÷ 4 x<>y + 3 x<>y ÷ 2 x<>y + 1 x<>y ÷):
   checked against EVERY package's hunks in that file, and natural append
   points (list tails, section ends) are exactly where everyone lands —
   prefer mid-list anchors next to entries no package will move.
+
+## Audit round 3, wave 2 — the pre-clear box is not the ink box (R3-13)
+
+Round 3's axis was "what does the owner actually SEE?", and it kept
+paying at the paint layer. Wave 1 fixed the `.d` pan key (R3-10) and
+clipped fill-drawn rules at a negative origin (R3-11/R3-12). Wave 2
+closed the finding that was hardest to see, because the obvious fix for
+it does nothing.
+
+**The defect.** The engine measures tight INK extents — `ppRunInk`
+derives ascent/descent per glyph from `boxAscent - rowsAboveGlyph` — and
+every placement decision in `ppMeasure` uses them. Paint went through
+`showString`, which paints each glyph via `showGlyphCode` with
+`noPreClear` false, and that clear covers the whole FONT box:
+`rowsAboveGlyph + rowsGlyph + rowsBelowGlyph` (screen.c:1239). Measure
+and paint therefore used two different rectangles for the same node.
+
+It bites hardest where a node's baseline is placed FROM its ink. A
+fraction denominator gets
+`relBase = barTopRel + barThick + fracGap + 1 + den.ascent`: the shorter
+its ink, the higher its baseline must sit for the ink to clear the bar
+by `fracGap` — and the higher its font box reaches, by
+`fracGap + (boxAscent - ascent)` rows, across the bar and into the
+numerator, which PP_FRAC paints first. Measured over the numerator's own
+columns, an '8' numerator kept **52** lit rows over an '8' denominator,
+**38** over an 'x', **20** over a '.'. The same overshoot let a run
+packed against a band edge clear frame rows its measured ink never
+touches (round 3's separate frame-line finding — same root, same fix).
+
+**The near-miss worth recording.** Reordering PP_FRAC to paint the
+denominator first reads like the fix and changed the measurement by
+nothing at all. The erasure is not an ordering problem: the two
+rectangles disagree, and no permutation of the paint order makes them
+agree. That dead end cost a full measure/rebuild cycle and is why the
+class entry says *a fix that does not move the measurement is not a fix*.
+
+**The fix.** `ppShowRun()` clears the MEASURED box with `ppFillVal(…,
+LCD_SET_VALUE)` and then paints the glyphs with upstream's own
+`noPreClear` flag, so paint covers exactly what measure promised. The
+erase-before-draw contract is unchanged — only its extent is. The
+denominator's clear now stops at `barTopRel + barThick + fracGap + 1`,
+below the bar for every denominator by construction. `ppFill` splits
+into `ppFillVal(…, val)` with `ppFill` as the ink wrapper. PP_PAREN's
+glyph parens go through the same helper (they paint AFTER their child,
+so a font-box clear there could eat the child's ink); the radical sign's
+glyph keeps `showString` — it is the only thing painted in its columns,
+and the vinculum follows it under the paint-order rule.
+
+`slc`/`sec` in the glyph loop reproduce `_doShowString`
+(screen.c:1365-1380) for the `showLeadingCols=false, showEndingCols=true`
+call it replaces, so the advance stays the one `stringWidth()` measured.
+Negative x and y are upstream's own convention at this call: it recovers
+a wrapped y at screen.c:1226 and column positions wrap back into range
+unsigned — verified against both simulator HALs, which reject an
+out-of-range x in `bitblt24` and never index the buffer with it.
+
+**Pin P12**, written from the semantics rather than the fix: nothing in
+FRAC layout gives the denominator any say over the rows above the bar, so
+one numerator over three denominators of very different ink height must
+light exactly the same pixels, counted over the numerator's own measured
+box. Red under MUT-A (`noPreClear` → false) with the original 52/38/20;
+green after.

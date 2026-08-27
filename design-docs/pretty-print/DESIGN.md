@@ -49,7 +49,7 @@ overhang, gaps, vinculum thickness, superscript drop.
 Two passes. **Measure** (post-order) computes width/ascent/descent per node,
 with run ink extents taken from real glyph metrics (`findGlyph`,
 `rowsAboveGlyph`/`rowsGlyph`). **Paint** draws runs via
-`showString(text, font, x, baselineY − boxAscent, vmNormal, false, true)` and
+`ppShowRun()` (see the clearing-extent rule below) and
 bars/vinculums via `lcd_fill_rect(..., LCD_EMPTY_VALUE)` — the same call
 shape as `drawSinglePixelFullWidthLine` (screen.c:1554). The radical glyph is
 painted raised so its top row meets the vinculum; radicands taller than the
@@ -62,6 +62,20 @@ rows (`rowsBelowGlyph`/`rowsAboveGlyph`) reach past its ink into the bar
 band even when the ink honours the gap — a bar painted first is wiped under
 every digit column, leaving only its overhang pixels. Measure-pass gaps are
 ink-relative and correct; only the paint order compensates.
+
+**Clearing-extent rule (BINDING, audit R3-13): a node clears exactly the box
+it measured, and never more.** Glyph runs go through `ppShowRun()`, which
+clears the measured ink box with `ppFillVal(…, LCD_SET_VALUE)` and then
+paints via `showGlyphCode` with `noPreClear` TRUE. Calling `showString`
+directly from paint is a defect: its per-glyph font-box clear is larger than
+anything measure reasoned about, so nodes measure-placed to sit clear of each
+other still erase each other. The case that found it: a fraction denominator's
+baseline rises as its ink shortens, so its font box crosses the bar into the
+numerator — an '8' numerator kept 52 lit rows over an '8' denominator, 38 over
+an 'x', 20 over a '.'. Pin P12 holds the three equal. The rule also keeps a
+run packed against a band edge from clearing frame rows outside that band.
+The one deliberate exception is the radical sign glyph, which is alone in its
+columns; the paint-order rule above still governs its vinculum.
 
 **Font ladder per surface**, rebuild-per-rung until the layout fits:
 - `PP_SURF_INLINE` (register line, 36 px band): numeric ctx / standard

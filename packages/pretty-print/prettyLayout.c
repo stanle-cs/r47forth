@@ -500,7 +500,7 @@ bool_t ppMeasure(uint8_t n, uint8_t depth) {
  * measured: 1243 lit pixels with one solid run before panning, 910 and
  * NO solid run after. Clip here, once, rather than at nineteen call
  * sites. ppDrawLine already screens negatives per pixel. */
-static void ppFill(int16_t x, int16_t y, int16_t w, int16_t h) {
+static void ppFillVal(int16_t x, int16_t y, int16_t w, int16_t h, int val) {
   if(w <= 0 || h <= 0) {
     return;
   }
@@ -521,7 +521,52 @@ static void ppFill(int16_t x, int16_t y, int16_t w, int16_t h) {
   if(y + h > SCREEN_HEIGHT) {
     h = (int16_t)(SCREEN_HEIGHT - y);
   }
-  lcd_fill_rect((uint32_t)x, (uint32_t)y, (uint32_t)w, (uint32_t)h, LCD_EMPTY_VALUE);
+  lcd_fill_rect((uint32_t)x, (uint32_t)y, (uint32_t)w, (uint32_t)h, val);
+}
+
+static void ppFill(int16_t x, int16_t y, int16_t w, int16_t h) {    // ink
+  ppFillVal(x, y, w, h, LCD_EMPTY_VALUE);
+}
+
+/* AUDIT R3-13. showString paints every glyph through showGlyphCode with
+ * noPreClear false, and that pre-clear covers the glyph's whole FONT box
+ * — rowsAboveGlyph + rowsGlyph + rowsBelowGlyph (screen.c:1239) — not
+ * the ink this engine measured. Two consequences, both of them visible.
+ * A denominator whose ink is short sits with its baseline pushed UP so
+ * the ink still clears the bar by fracGap; its font box then reaches
+ * fracGap + (boxAscent - ascent) rows higher, across the bar and into
+ * the numerator, which is painted first and so is erased. Measured over
+ * the numerator's own columns, an '8' numerator kept 52 lit rows over an
+ * '8' denominator, 38 over an 'x', and 20 over a '.'. The same overshoot
+ * lets a run packed against the band edge clear frame rows its measured
+ * ink never touches.
+ *
+ * Clear the MEASURED box here and paint the glyphs with noPreClear, so
+ * paint covers exactly what measure promised. The denominator's clear
+ * now stops at barTopRel + barThick + fracGap + 1 — below the bar for
+ * every denominator, by construction. Ordering rules and stretched
+ * parens still paint after their glyph runs; that rule is unchanged.
+ *
+ * slc/sec reproduce _doShowString (screen.c:1365-1380) for the
+ * showLeadingCols=false, showEndingCols=true call this replaces, so the
+ * advance stays the one stringWidth() measured. Negative x and y are
+ * upstream's own convention here: showGlyphCode recovers a wrapped y at
+ * screen.c:1226, and column positions wrap back into range unsigned. */
+static void ppShowRun(const char *s, const ppMetrics_t *m, int16_t x, int16_t baseline,
+                      int16_t asc, int16_t desc) {
+  ppFillVal(x, (int16_t)(baseline - asc), (int16_t)stringWidth(s, m->font, false, true),
+            (int16_t)(asc + desc), LCD_SET_VALUE);
+
+  uint16_t ch = 0;
+  uint32_t px = (uint32_t)(int32_t)x;
+  const uint32_t py = (uint32_t)(int32_t)(baseline - m->boxAscent);
+
+  bool_t slc = false;   // first glyph takes showLeadingCols; the rest take
+  while(s[ch] != 0) {   // true, and sec is showEndingCols or true — both true
+    const uint16_t code = charCodeFromString(s, &ch);
+    px  = showGlyphCode(code, m->font, px, py, vmNormal, slc, true, true);
+    slc = true;
+  }
 }
 
 // integer Bresenham over setBlackPixel — the synthesized radical sign
@@ -532,7 +577,11 @@ static void ppDrawLine(int16_t x0, int16_t y0, int16_t x1, int16_t y1) {
   int16_t sy = (int16_t)(y0 < y1 ? 1 : -1);
   int16_t err = (int16_t)(dx - dy);
   for(;;) {
-    if(x0 >= 0 && y0 >= 0) {
+    // AUDIT R3-12. This screened negatives but not the far edges, and
+    // setBlackPixel is a thin bitblt24 wrapper with no bounds check of
+    // its own — a panned or oversized stroke wrote past the frame
+    // buffer. Both ends, both axes.
+    if(x0 >= 0 && y0 >= 0 && x0 < SCREEN_WIDTH && y0 < SCREEN_HEIGHT) {
       setBlackPixel((uint32_t)x0, (uint32_t)y0);
     }
     if(x0 == x1 && y0 == y1) {
@@ -588,11 +637,11 @@ static void ppDrawIntegralSign(int16_t cx, int16_t top, int16_t bot) {
       int16_t t = (int16_t)(y - (bot - hh + 1));
       dxo = (int16_t)(-(5 * t * t) / ((hh - 1) * (hh - 1) > 0 ? (hh - 1) * (hh - 1) : 1));
     }
-    lcd_fill_rect((uint32_t)(cx + dxo), (uint32_t)y, 2, 1, LCD_EMPTY_VALUE);
+    ppFill((int16_t)((cx + dxo)), (int16_t)(y), (int16_t)(2), (int16_t)(1));
   }
   // terminal dots thicken the hook tips
-  lcd_fill_rect((uint32_t)(cx + 5), (uint32_t)(top + 1), 2, 1, LCD_EMPTY_VALUE);
-  lcd_fill_rect((uint32_t)(cx - 5), (uint32_t)(bot - 1), 2, 1, LCD_EMPTY_VALUE);
+  ppFill((int16_t)((cx + 5)), (int16_t)((top + 1)), (int16_t)(2), (int16_t)(1));
+  ppFill((int16_t)((cx - 5)), (int16_t)((bot - 1)), (int16_t)(2), (int16_t)(1));
 }
 
 static void ppPaint(uint8_t n, int16_t x, int16_t baseline) {
@@ -601,7 +650,7 @@ static void ppPaint(uint8_t n, int16_t x, int16_t baseline) {
 
   switch(nd->kind) {
     case PP_RUN:
-      showString(ppText + nd->textOff, m->font, x, baseline - m->boxAscent, vmNormal, false, true);
+      ppShowRun(ppText + nd->textOff, m, x, baseline, nd->ascent, nd->descent);
       return;
 
     case PP_RAD: {
@@ -709,9 +758,13 @@ static void ppPaint(uint8_t n, int16_t x, int16_t baseline) {
       ppPaint(child, x + ppPool[child].relX, baseline + ppPool[child].relBase);
       int16_t h = ppPool[child].ascent + ppPool[child].descent;
       if(h <= m->parInk + 2) {
-        showString("(", m->font, x, baseline - m->boxAscent, vmNormal, false, true);
-        showString(")", m->font, (int16_t)(x + nd->width - m->parAdvance),
-                   baseline - m->boxAscent, vmNormal, false, true);
+        // pAsc/pDesc are measure's own glyph-paren extents (see PP_PAREN
+        // in ppMeasure); the child is already painted, so a font-box
+        // clear here would eat its ink
+        const int16_t pAsc  = (int16_t)(m->boxAscent - m->parAbove);
+        const int16_t pDesc = (int16_t)((m->parAbove + m->parInk) - m->boxAscent);
+        ppShowRun("(", m, x, baseline, pAsc, pDesc);
+        ppShowRun(")", m, (int16_t)(x + nd->width - m->parAdvance), baseline, pAsc, pDesc);
       }
       else {
         int16_t top = baseline - nd->ascent;
