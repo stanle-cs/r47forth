@@ -1384,7 +1384,15 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
         ppcTestOp(ITM_ENTER);
         ppcTestType("1");
         ppcTestOpParam(ITM_SIGMAn, (uint16_t)eLbl);
-        if(lastErrorCode != ERROR_NONE) {
+        // AUDIT R3-9 (fixture rule): this is the ONLY pin for R1-3's
+        // dispatch-depth pairing, and it used to assert only INSIDE
+        // `if(lastErrorCode != ERROR_NONE)` — so if the program ever
+        // stopped failing mid-loop the pin vanished silently and the
+        // suite still passed. Assert that we REACHED the failure.
+        if(lastErrorCode == ERROR_NONE) {
+          ppTestFail("B10 fixture no longer fails mid-loop; the depth pin is not being exercised");
+        }
+        else {
           // the run failed: nothing may claim to describe the register
           ppcTestExpectSig("B10 failed sum left a formula behind", "-");
         }
@@ -2697,6 +2705,21 @@ void prettyTestEquation(uint16_t unusedButMandatoryParameter) {
       setEquation(currentFormula, "SUM(A;A;1;2)");
       lastErrorCode = 0;
       fnEqCalc(NOPARAM);
+      // AUDIT R3-8 (fixture rule): this used to assert only that A was
+      // unchanged, which a REFUSED construct satisfies without ever
+      // exercising the save/restore it exists to test — and R3-1 has
+      // since made refusal a real path. Prove the sum RAN: 1+2 = 3.
+      {
+        real34_t want3;
+        int32ToReal34(3, &want3);
+        if(lastErrorCode != ERROR_NONE) {
+          ppTestFailInt("EQ31 the sum refused instead of running", 0, (int32_t)lastErrorCode);
+        }
+        else if(getRegisterDataType(REGISTER_X) != dtReal34
+                 || !real34CompareEqual(REGISTER_REAL34_DATA(REGISTER_X), &want3)) {
+          ppTestFail("EQ31 the sum did not produce 3, so the restore is untested");
+        }
+      }
       lastErrorCode = 0;
       if(getRegisterDataType(vA) != dtComplex34) {
         ppTestFailInt("EQ31 complex loop variable destroyed", dtComplex34,

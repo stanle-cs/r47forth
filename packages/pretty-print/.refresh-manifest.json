@@ -9,7 +9,7 @@
     "prettyInternal.h": "be142c147233ef455f0d4aacb0d1ce79b8d12ad460579f79978ba61d4ca509dc",
     "prettyLayout.c": "47c793be5224b55e0829cb31e67fb90a8044d4717a083b054e344f8dc944c594",
     "prettyPrint.h": "a0fcf21c428a9047562f3bc6469845a1293378db4b7b549fd05306afb9d4e655",
-    "prettyTest.c": "55f516beba5e5ae76c5ea8c452269c4c6e704fb4015a3fbe83754b9128ff39d7",
+    "prettyTest.c": "5c940e6bb7fb3e832a68165708e02765de0a6403e4d0187f330b756d6d95cc0e",
     "prettyValue.c": "33d5af1b521a858c7761f6610edd02783bf2be97285d184b63a189652718d455",
     "testSuite/tests/pretty_print.txt": "778b71cee0339ec87dc971217dc9efcaf0e83609660ebc9b7b9de295bf3c9b4e"
   },
