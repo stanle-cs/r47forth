@@ -1240,6 +1240,69 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
     }
   }
 
+  // T29 (AUDIT R3-10, R3-11): the browser's pan must reach the code AND
+  // the paint must survive a negative origin. Two defects met here: the
+  // R3-7 containment guard swallowed `.d` (UP/DOWN are matched earlier
+  // in that chain and ENTER/EXIT/BACKSPACE have their own cases, but
+  // `.d` has neither), and every rule this engine paints is an
+  // lcd_fill_rect whose uint32_t coordinates turn a negative x into a
+  // huge one, dropping the rule WHOLE while glyph ink clipped fine.
+  // Measured before the fix: 1243 lit pixels with one solid run
+  // unpanned, 910 and NO solid run after panning.
+  {
+    int16_t hadScrUpd = screenUpdatingMode;
+    uint16_t hadMode = calcMode;
+    screenUpdatingMode = SCRUPD_AUTO;
+    temporaryInformation = TI_NO_INFO;
+    ppcTestReset();
+    ppcTestType("1234567890123456");
+    ppcTestOp(ITM_ENTER);
+    ppcTestType("2345678901234567");
+    ppcTestOp(ITM_ADD);
+    ppcTestType("3456789012345678");
+    ppcTestOp(ITM_ADD);
+    ppcTestType("7");
+    ppcTestOp(ITM_DIV);          // wide numerator under a long fill-drawn bar
+    ppcTestOp(ITM_CLX);
+    prettyBrowser(NOPARAM);
+    {
+      uint8_t rr; int16_t aa, hh;
+      if(!ppfBuildRow(0, 0, true, &rr, &aa, &hh)
+          || ppNodeAt(rr)->width <= SCREEN_WIDTH - 12) {
+        ppTestFail("T29 fixture is not wide enough to pan; the pin is not exercising anything");
+      }
+    }
+    refreshScreen(200);
+    uint32_t runBefore = 0;
+    for(uint32_t y = 21; y <= 167 && runBefore == 0; y++) {
+      uint32_t run = 0;
+      for(uint32_t x = 0; x < SCREEN_WIDTH; x++) {
+        run = lcd_buffer_pixel_on(x, y) ? run + 1 : 0;
+        if(run >= 20) { runBefore = run; break; }
+      }
+    }
+    prettyBrowserPan();
+    refreshScreen(201);
+    uint32_t runAfter = 0;
+    for(uint32_t y = 21; y <= 167 && runAfter == 0; y++) {
+      uint32_t run = 0;
+      for(uint32_t x = 0; x < SCREEN_WIDTH; x++) {
+        run = lcd_buffer_pixel_on(x, y) ? run + 1 : 0;
+        if(run >= 20) { runAfter = run; break; }
+      }
+    }
+    if(runBefore == 0) {
+      ppTestFail("T29 the unpanned row has no fill-drawn rule to test");
+    }
+    else if(runAfter == 0) {
+      ppTestFail("T29 panning dropped the fill-drawn rule instead of clipping it");
+    }
+    prettyBrowserLeave();
+    calcMode = hadMode;
+    screenUpdatingMode = hadScrUpd;
+    lastErrorCode = 0;
+  }
+
   // T16: abort while ASLIFT is set (straight after an operator result) —
   // the deferred-lift design absorbs the upstream undo() for free; a
   // shadow that lifts at NIM open strands the tree one slot up

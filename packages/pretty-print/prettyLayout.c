@@ -490,6 +490,40 @@ bool_t ppMeasure(uint8_t n, uint8_t depth) {
 }
 
 
+/* AUDIT R3-11. Every rule this engine paints — fraction bars, radical
+ * vinculums, the |x| strokes, tall parens, the Sigma/Pi/integral
+ * glyphs — is an lcd_fill_rect, and its coordinates are uint32_t. The
+ * browser's pan paints from a NEGATIVE origin, and a negative x cast to
+ * uint32_t becomes a huge value, so the rectangle lands nowhere and the
+ * rule is dropped WHOLE. Glyph ink clips correctly through showString,
+ * so a panned row lost its fraction bar while keeping its digits —
+ * measured: 1243 lit pixels with one solid run before panning, 910 and
+ * NO solid run after. Clip here, once, rather than at nineteen call
+ * sites. ppDrawLine already screens negatives per pixel. */
+static void ppFill(int16_t x, int16_t y, int16_t w, int16_t h) {
+  if(w <= 0 || h <= 0) {
+    return;
+  }
+  if(x < 0) {                 // trim what falls off the left edge
+    w += x;
+    x = 0;
+  }
+  if(y < 0) {
+    h += y;
+    y = 0;
+  }
+  if(x >= SCREEN_WIDTH || y >= SCREEN_HEIGHT || w <= 0 || h <= 0) {
+    return;
+  }
+  if(x + w > SCREEN_WIDTH) {
+    w = (int16_t)(SCREEN_WIDTH - x);
+  }
+  if(y + h > SCREEN_HEIGHT) {
+    h = (int16_t)(SCREEN_HEIGHT - y);
+  }
+  lcd_fill_rect((uint32_t)x, (uint32_t)y, (uint32_t)w, (uint32_t)h, LCD_EMPTY_VALUE);
+}
+
 // integer Bresenham over setBlackPixel — the synthesized radical sign
 static void ppDrawLine(int16_t x0, int16_t y0, int16_t x1, int16_t y1) {
   int16_t dx = (int16_t)(x1 > x0 ? x1 - x0 : x0 - x1);
@@ -596,9 +630,7 @@ static void ppPaint(uint8_t n, int16_t x, int16_t baseline) {
         }
       }
       ppPaint(child, x + ppPool[child].relX, baseline);
-      lcd_fill_rect((uint32_t)(x + ppPool[child].relX - 1), (uint32_t)vincTop,
-                    (uint32_t)(ppPool[child].width + m->overhang + 1), (uint32_t)m->vincThick,
-                    LCD_EMPTY_VALUE);
+      ppFill((int16_t)((x + ppPool[child].relX - 1)), (int16_t)(vincTop), (int16_t)((ppPool[child].width + m->overhang + 1)), (int16_t)(m->vincThick));
       return;
     }
 
@@ -638,11 +670,9 @@ static void ppPaint(uint8_t n, int16_t x, int16_t baseline) {
         if(barT < 2) barT = 2;
         int16_t legW = (int16_t)(gw / 5);
         if(legW < 2) legW = 2;
-        lcd_fill_rect((uint32_t)gx, (uint32_t)top, (uint32_t)gw, (uint32_t)barT, LCD_EMPTY_VALUE);
-        lcd_fill_rect((uint32_t)(gx + 1), (uint32_t)(top + barT), (uint32_t)legW,
-                      (uint32_t)(bot - top + 1 - barT), LCD_EMPTY_VALUE);
-        lcd_fill_rect((uint32_t)(gx + gw - 1 - legW), (uint32_t)(top + barT), (uint32_t)legW,
-                      (uint32_t)(bot - top + 1 - barT), LCD_EMPTY_VALUE);
+        ppFill((int16_t)(gx), (int16_t)(top), (int16_t)(gw), (int16_t)(barT));
+        ppFill((int16_t)((gx + 1)), (int16_t)((top + barT)), (int16_t)(legW), (int16_t)((bot - top + 1 - barT)));
+        ppFill((int16_t)((gx + gw - 1 - legW)), (int16_t)((top + barT)), (int16_t)(legW), (int16_t)((bot - top + 1 - barT)));
       }
       else {
         // the Σ, the font's own design scaled: full-width bars whose
@@ -654,8 +684,8 @@ static void ppPaint(uint8_t n, int16_t x, int16_t baseline) {
         int16_t dt = (int16_t)(gw / 5);
         if(dt < 2) dt = 2;
         int16_t apexX = (int16_t)(gx + (gw * 2) / 5);
-        lcd_fill_rect((uint32_t)gx, (uint32_t)top, (uint32_t)gw, (uint32_t)barT, LCD_EMPTY_VALUE);
-        lcd_fill_rect((uint32_t)gx, (uint32_t)(bot - barT + 1), (uint32_t)gw, (uint32_t)barT, LCD_EMPTY_VALUE);
+        ppFill((int16_t)(gx), (int16_t)(top), (int16_t)(gw), (int16_t)(barT));
+        ppFill((int16_t)(gx), (int16_t)((bot - barT + 1)), (int16_t)(gw), (int16_t)(barT));
         for(int16_t t = 0; t < dt; t++) {
           ppDrawLine((int16_t)(gx + 1 + t), (int16_t)(top + barT), (int16_t)(apexX + t), mid);
           ppDrawLine((int16_t)(apexX + t), mid, (int16_t)(gx + 1 + t), (int16_t)(bot - barT));
@@ -669,8 +699,8 @@ static void ppPaint(uint8_t n, int16_t x, int16_t baseline) {
       ppPaint(child, x + ppPool[child].relX, baseline);
       int16_t top = baseline - nd->ascent;
       int16_t hh = nd->ascent + nd->descent;
-      lcd_fill_rect((uint32_t)(x + 1), (uint32_t)top, 2, (uint32_t)hh, LCD_EMPTY_VALUE);
-      lcd_fill_rect((uint32_t)(x + nd->width - 3), (uint32_t)top, 2, (uint32_t)hh, LCD_EMPTY_VALUE);
+      ppFill((int16_t)((x + 1)), (int16_t)(top), (int16_t)(2), (int16_t)(hh));
+      ppFill((int16_t)((x + nd->width - 3)), (int16_t)(top), (int16_t)(2), (int16_t)(hh));
       return;
     }
 
@@ -687,12 +717,12 @@ static void ppPaint(uint8_t n, int16_t x, int16_t baseline) {
         int16_t top = baseline - nd->ascent;
         int16_t hh  = nd->ascent + nd->descent;
         int16_t xr  = (int16_t)(x + nd->width - 5);
-        lcd_fill_rect(x + 1,  top + 2, 2, hh - 4, LCD_EMPTY_VALUE);
-        lcd_fill_rect(x + 2,  top,     2, 2,      LCD_EMPTY_VALUE);
-        lcd_fill_rect(x + 2,  top + hh - 2, 2, 2, LCD_EMPTY_VALUE);
-        lcd_fill_rect(xr + 2, top + 2, 2, hh - 4, LCD_EMPTY_VALUE);
-        lcd_fill_rect(xr,     top,     2, 2,      LCD_EMPTY_VALUE);
-        lcd_fill_rect(xr,     top + hh - 2, 2, 2, LCD_EMPTY_VALUE);
+        ppFill((int16_t)(x + 1), (int16_t)(top + 2), (int16_t)(2), (int16_t)(hh - 4));
+        ppFill((int16_t)(x + 2), (int16_t)(top), (int16_t)(2), (int16_t)(2));
+        ppFill((int16_t)(x + 2), (int16_t)(top + hh - 2), (int16_t)(2), (int16_t)(2));
+        ppFill((int16_t)(xr + 2), (int16_t)(top + 2), (int16_t)(2), (int16_t)(hh - 4));
+        ppFill((int16_t)(xr), (int16_t)(top), (int16_t)(2), (int16_t)(2));
+        ppFill((int16_t)(xr), (int16_t)(top + hh - 2), (int16_t)(2), (int16_t)(2));
       }
       return;
     }
@@ -710,7 +740,7 @@ static void ppPaint(uint8_t n, int16_t x, int16_t baseline) {
         // bar band even though its ink honours fracGap. Visible ink is
         // LCD_EMPTY_VALUE in lcd_fill_rect, the same call
         // drawSinglePixelFullWidthLine makes for its visible rules.
-        lcd_fill_rect(x, baseline + m->barTopRel, nd->width, m->barThick, LCD_EMPTY_VALUE);
+        ppFill((int16_t)(x), (int16_t)(baseline + m->barTopRel), (int16_t)(nd->width), (int16_t)(m->barThick));
       }
       return;
 

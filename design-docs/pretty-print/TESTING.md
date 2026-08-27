@@ -222,6 +222,8 @@ after restore.
 | MUT-54 | vinculum weight regressed to 1 px (standard) | P6 (row-2 probe at the vinculum's RIGHT end — near the sign, the glyph's own hook masked it) |
 | MUT-55 | stack allowance zeroed (parity) | EQ18/EQ26/EQ27 (all nested evaluation refuses) |
 | MUT-56 | MVAR scan hides only the construct NAME again (Bug 1) | EQ29 (the commit rejects the typed equation, error 45) |
+| MUT-75 | negative paint x left unclipped (r3) | T29 (the fill-drawn rule is dropped instead of clipped) |
+| MUT-76 | the `.d` exemption removed from the containment guard (r3) | **UNFALSIFIABLE from the harness — documented gap, not a coverage hole.** The guard lives in `executeFunction`, which is `static` and whose only entry point hard-codes its item argument, so no test can drive a chosen key through it. Verified by trace instead: UP/DOWN are matched earlier in the same chain (`item == ITM_DOWN_ARROW \|\| item == ITM_UP_ARROW`), ENTER/EXIT/BACKSPACE have their own `case ITM_...` upstream, and `.d` has neither — which is why it needs the exemption. |
 | MUT-57 | prettyReset stops restoring the T-line default (PP15) | FV14 |
 | MUT-58 | cold start restores factory defaults again (the PP11 persistence bug) | FV16 (both flags clobbered) |
 | MUT-59 | the `-MNU_PP` slot in menu_DISP reverted to ITM_NULL (PP15) | FV15 |

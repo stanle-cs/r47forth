@@ -1,5 +1,5 @@
 diff --git a/src/c47/keyboard.c b/src/c47/keyboard.c
-index bc44026016e94a8865b8acc886386341596641c6..e8b525bc4667ac0b09fe2e718ae4da8f41e5956a 100644
+index bc44026016e94a8865b8acc886386341596641c6..66237b4ab4812c101c9fd0ab0b2fdfb6eca5dc29 100644
 --- a/src/c47/keyboard.c
 +++ b/src/c47/keyboard.c
 @@ -1688,6 +1688,21 @@ endReturnTrue:
@@ -24,7 +24,7 @@ index bc44026016e94a8865b8acc886386341596641c6..e8b525bc4667ac0b09fe2e718ae4da8f
      else {
        displayBugScreen(bugScreenItemNotDetermined);
        result = 0;
-@@ -2777,6 +2792,23 @@ RELEASE_END:
+@@ -2777,6 +2792,34 @@ RELEASE_END:
              }
            }
  
@@ -41,14 +41,25 @@ index bc44026016e94a8865b8acc886386341596641c6..e8b525bc4667ac0b09fe2e718ae4da8f
 +          // fires first wherever the sibling is absent. The browser's
 +          // OWN keys are handled in the fnKeyXxx functions, exactly as
 +          // the flag and font browsers handle theirs.
-+          else if(calcMode == CM_PRETTY_BROWSER) {
++          //
++          // AUDIT R3-10 — the exemption is load-bearing, and the first
++          // version of this guard did not have it. UP and DOWN are
++          // matched earlier in this same chain (`item == ITM_DOWN_ARROW
++          // || item == ITM_UP_ARROW`), and ENTER, EXIT and BACKSPACE
++          // have their own `case ITM_...` blocks upstream of it — but
++          // `.d` has NEITHER, so a bare guard swallowed the pan key and
++          // made prettyBrowserPan() unreachable from the keyboard. That
++          // is precisely the "pan cannot engage" finding round 2
++          // reported, and this guard would have turned it from
++          // conditional into certain.
++          else if(calcMode == CM_PRETTY_BROWSER && item != ITM_dotD) {
 +            keyActionProcessed = true;
 +          }
 +
            else {
              switch(calcMode) {
                case CM_NORMAL: {
-@@ -3577,6 +3609,11 @@ void fnKeyEnter(uint16_t unusedButMandatoryParameter) {
+@@ -3577,6 +3620,11 @@ void fnKeyEnter(uint16_t unusedButMandatoryParameter) {
          break;
        }
  
@@ -60,7 +71,7 @@ index bc44026016e94a8865b8acc886386341596641c6..e8b525bc4667ac0b09fe2e718ae4da8f
        case CM_TIMER: {
          fnRegAddTimerApp(NOPARAM);     //ENTER
          break;
-@@ -3938,6 +3975,11 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
+@@ -3938,6 +3986,11 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
          break;
        }
  
@@ -72,7 +83,7 @@ index bc44026016e94a8865b8acc886386341596641c6..e8b525bc4667ac0b09fe2e718ae4da8f
        case CM_ASN_BROWSER: {
          if(previousCalcMode == CM_AIM || tam.alpha) {
            if(currentMenu() == -MNU_AIMCATALOG) {
-@@ -4348,6 +4390,11 @@ void fnKeyBackspace(uint16_t unusedButMandatoryParameter) {
+@@ -4348,6 +4401,11 @@ void fnKeyBackspace(uint16_t unusedButMandatoryParameter) {
          break;
        }
  
@@ -84,7 +95,7 @@ index bc44026016e94a8865b8acc886386341596641c6..e8b525bc4667ac0b09fe2e718ae4da8f
        case CM_BUG_ON_SCREEN:
        case CM_LISTXY:
        case CM_GRAPH:
-@@ -4612,6 +4659,11 @@ void fnKeyUp(uint16_t unusedButMandatoryParameter) {
+@@ -4612,6 +4670,11 @@ void fnKeyUp(uint16_t unusedButMandatoryParameter) {
          break;
        }
  
@@ -96,7 +107,7 @@ index bc44026016e94a8865b8acc886386341596641c6..e8b525bc4667ac0b09fe2e718ae4da8f
        case CM_PEM: {
          resetAlphaSelectionBuffer();
          if(getSystemFlag(FLAG_ALPHA) && alphaCase == AC_LOWER) {
-@@ -4830,6 +4882,11 @@ void fnKeyDown(uint16_t unusedButMandatoryParameter) {
+@@ -4830,6 +4893,11 @@ void fnKeyDown(uint16_t unusedButMandatoryParameter) {
          break;
        }
  
@@ -108,7 +119,7 @@ index bc44026016e94a8865b8acc886386341596641c6..e8b525bc4667ac0b09fe2e718ae4da8f
        case CM_PEM: {
          resetAlphaSelectionBuffer();
          if(getSystemFlag(FLAG_ALPHA) && alphaCase == AC_UPPER) {
-@@ -4931,6 +4988,11 @@ void fnKeyDotD(uint16_t unusedButMandatoryParameter) {
+@@ -4931,6 +4999,11 @@ void fnKeyDotD(uint16_t unusedButMandatoryParameter) {
          break;
        }
  

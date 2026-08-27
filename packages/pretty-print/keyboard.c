@@ -2805,7 +2805,18 @@ RELEASE_END:
           // fires first wherever the sibling is absent. The browser's
           // OWN keys are handled in the fnKeyXxx functions, exactly as
           // the flag and font browsers handle theirs.
-          else if(calcMode == CM_PRETTY_BROWSER) {
+          //
+          // AUDIT R3-10 — the exemption is load-bearing, and the first
+          // version of this guard did not have it. UP and DOWN are
+          // matched earlier in this same chain (`item == ITM_DOWN_ARROW
+          // || item == ITM_UP_ARROW`), and ENTER, EXIT and BACKSPACE
+          // have their own `case ITM_...` blocks upstream of it — but
+          // `.d` has NEITHER, so a bare guard swallowed the pan key and
+          // made prettyBrowserPan() unreachable from the keyboard. That
+          // is precisely the "pan cannot engage" finding round 2
+          // reported, and this guard would have turned it from
+          // conditional into certain.
+          else if(calcMode == CM_PRETTY_BROWSER && item != ITM_dotD) {
             keyActionProcessed = true;
           }
 

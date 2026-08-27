@@ -358,3 +358,37 @@ Hunt it at: every hand exception in a classifier. Ask "what VALUES can
 this item change?", never "does the stack move?". Note that in all three
 cases the binding DEFAULT rule would have been safe — the hand exception
 is what created the hole.
+
+## unsigned cast swallows a negative coordinate (pretty-print audit r3, 2026-08-27)
+
+A drawing primitive takes unsigned coordinates. A negative value cast to
+unsigned becomes enormous, so the shape lands nowhere and is dropped
+WHOLE — while a neighbouring primitive that clips properly keeps drawing.
+The result is a partially-rendered picture that looks deliberate.
+
+Found: every rule this engine paints (fraction bars, radical vinculums,
+|x| strokes, tall parens, the Sigma/Pi/integral glyphs) is an
+`lcd_fill_rect` with `uint32_t` coordinates. The browser's horizontal pan
+paints from a negative origin, so a panned row lost its fraction bar
+while keeping every digit: measured 1243 lit pixels with one solid run
+unpanned, 910 and NO solid run after one pan step. Glyph ink survived
+because `showString` clips.
+
+Hunt it at: every mixed-signedness drawing call, and anywhere a paint
+origin can go negative (scrolling, panning, centring a too-wide object).
+Clip once in a wrapper, not at each of the nineteen call sites.
+
+## a containment guard that swallows the feature's own key (pretty-print audit r3)
+
+A guard added to stop stray keys acting under a modal screen must exempt
+that screen's OWN keys — and "its own keys" is not the obvious list.
+
+Found: the browser's UP/DOWN are matched by an earlier clause in the same
+if-chain, and ENTER/EXIT/BACKSPACE have their own `case ITM_...` upstream
+of it, so all five survived a blanket guard. `.d` (the pan key) had
+NEITHER, so the guard silently made panning unreachable — turning a
+round-2 finding that was conditional into a certainty. The fix that
+closed one hole opened another in the same commit.
+
+Hunt it at: every new early-return or swallow in a key path. Enumerate
+the feature's keys and prove, per key, which clause handles it.
