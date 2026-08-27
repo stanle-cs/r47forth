@@ -21,7 +21,7 @@
     "010-defines.h.patch": "6a6c0f84d7456bbc509b93f134bde8434c878b66b663027a204fde74c0494ad6",
     "010-items.c.patch": "1e2bf628bc073b3bbc6fb3301a1f7e36fd31942df773a18f934756b53f4454f6",
     "010-items.h.patch": "968f535efa868937e91dde4ab7bd8c912bd78d17d19f4df0abdac4e0a6edbdf4",
-    "010-keyboard.c.patch": "40b1877bfc1c19a69aab9c812b8fb51bfdd2e09bbb576a6ace4898651a01ae42",
+    "010-keyboard.c.patch": "bb7366257b6b44a5222b3ad3f5c6e2cfdef08388e0583a6eccb1b8508476e67c",
     "010-screen.c.patch": "1fc56a5066fdaddde713de1c3b8283ed6e8e27656cad4058fa1d7de8a5ac57d9",
     "010-softmenus.c.patch": "528b588450396251b05d4858bfd2c52c415119b4c622c6ccb686202f678e761a",
     "010-solver__equation.c.patch": "5e0ea20b92d25b78d6fb14af81d5423bac795e4feb5af5ed8cd86a1bb93468f7",

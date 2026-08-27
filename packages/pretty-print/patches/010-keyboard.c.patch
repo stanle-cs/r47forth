@@ -1,5 +1,5 @@
 diff --git a/src/c47/keyboard.c b/src/c47/keyboard.c
-index bc44026016e94a8865b8acc886386341596641c6..60e4bd240d0f4f1b57dff8ff42b26fe659205e20 100644
+index bc44026016e94a8865b8acc886386341596641c6..e8b525bc4667ac0b09fe2e718ae4da8f41e5956a 100644
 --- a/src/c47/keyboard.c
 +++ b/src/c47/keyboard.c
 @@ -1688,6 +1688,21 @@ endReturnTrue:
@@ -24,7 +24,31 @@ index bc44026016e94a8865b8acc886386341596641c6..60e4bd240d0f4f1b57dff8ff42b26fe6
      else {
        displayBugScreen(bugScreenItemNotDetermined);
        result = 0;
-@@ -3577,6 +3592,11 @@ void fnKeyEnter(uint16_t unusedButMandatoryParameter) {
+@@ -2777,6 +2792,23 @@ RELEASE_END:
+             }
+           }
+ 
++          // AUDIT R3-7. A2's fix opened the RESOLUTION door
++          // (determineItem now resolves keys in calcMode 20) but not the
++          // CONTAINMENT one: the switch below decides whether a resolved
++          // item may EXECUTE, and with no arm for the browser every key
++          // that is not one of its own ran its item UNDERNEATH the
++          // browser in a solo build. Written as a guard rather than a
++          // `case CM_PRETTY_BROWSER:` because undo-history already adds
++          // `case 20:` to that switch — two packages contributing the
++          // same label is a duplicate-case compile error in the combined
++          // build (caught by the gate). A guard is idempotent: it simply
++          // fires first wherever the sibling is absent. The browser's
++          // OWN keys are handled in the fnKeyXxx functions, exactly as
++          // the flag and font browsers handle theirs.
++          else if(calcMode == CM_PRETTY_BROWSER) {
++            keyActionProcessed = true;
++          }
++
+           else {
+             switch(calcMode) {
+               case CM_NORMAL: {
+@@ -3577,6 +3609,11 @@ void fnKeyEnter(uint16_t unusedButMandatoryParameter) {
          break;
        }
  
@@ -36,7 +60,7 @@ index bc44026016e94a8865b8acc886386341596641c6..60e4bd240d0f4f1b57dff8ff42b26fe6
        case CM_TIMER: {
          fnRegAddTimerApp(NOPARAM);     //ENTER
          break;
-@@ -3938,6 +3958,11 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
+@@ -3938,6 +3975,11 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
          break;
        }
  
@@ -48,7 +72,7 @@ index bc44026016e94a8865b8acc886386341596641c6..60e4bd240d0f4f1b57dff8ff42b26fe6
        case CM_ASN_BROWSER: {
          if(previousCalcMode == CM_AIM || tam.alpha) {
            if(currentMenu() == -MNU_AIMCATALOG) {
-@@ -4348,6 +4373,11 @@ void fnKeyBackspace(uint16_t unusedButMandatoryParameter) {
+@@ -4348,6 +4390,11 @@ void fnKeyBackspace(uint16_t unusedButMandatoryParameter) {
          break;
        }
  
@@ -60,7 +84,7 @@ index bc44026016e94a8865b8acc886386341596641c6..60e4bd240d0f4f1b57dff8ff42b26fe6
        case CM_BUG_ON_SCREEN:
        case CM_LISTXY:
        case CM_GRAPH:
-@@ -4612,6 +4642,11 @@ void fnKeyUp(uint16_t unusedButMandatoryParameter) {
+@@ -4612,6 +4659,11 @@ void fnKeyUp(uint16_t unusedButMandatoryParameter) {
          break;
        }
  
@@ -72,7 +96,7 @@ index bc44026016e94a8865b8acc886386341596641c6..60e4bd240d0f4f1b57dff8ff42b26fe6
        case CM_PEM: {
          resetAlphaSelectionBuffer();
          if(getSystemFlag(FLAG_ALPHA) && alphaCase == AC_LOWER) {
-@@ -4830,6 +4865,11 @@ void fnKeyDown(uint16_t unusedButMandatoryParameter) {
+@@ -4830,6 +4882,11 @@ void fnKeyDown(uint16_t unusedButMandatoryParameter) {
          break;
        }
  
@@ -84,7 +108,7 @@ index bc44026016e94a8865b8acc886386341596641c6..60e4bd240d0f4f1b57dff8ff42b26fe6
        case CM_PEM: {
          resetAlphaSelectionBuffer();
          if(getSystemFlag(FLAG_ALPHA) && alphaCase == AC_UPPER) {
-@@ -4931,6 +4971,11 @@ void fnKeyDotD(uint16_t unusedButMandatoryParameter) {
+@@ -4931,6 +4988,11 @@ void fnKeyDotD(uint16_t unusedButMandatoryParameter) {
          break;
        }
  

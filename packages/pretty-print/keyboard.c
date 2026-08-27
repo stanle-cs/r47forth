@@ -2792,6 +2792,23 @@ RELEASE_END:
             }
           }
 
+          // AUDIT R3-7. A2's fix opened the RESOLUTION door
+          // (determineItem now resolves keys in calcMode 20) but not the
+          // CONTAINMENT one: the switch below decides whether a resolved
+          // item may EXECUTE, and with no arm for the browser every key
+          // that is not one of its own ran its item UNDERNEATH the
+          // browser in a solo build. Written as a guard rather than a
+          // `case CM_PRETTY_BROWSER:` because undo-history already adds
+          // `case 20:` to that switch — two packages contributing the
+          // same label is a duplicate-case compile error in the combined
+          // build (caught by the gate). A guard is idempotent: it simply
+          // fires first wherever the sibling is absent. The browser's
+          // OWN keys are handled in the fnKeyXxx functions, exactly as
+          // the flag and font browsers handle theirs.
+          else if(calcMode == CM_PRETTY_BROWSER) {
+            keyActionProcessed = true;
+          }
+
           else {
             switch(calcMode) {
               case CM_NORMAL: {
