@@ -1078,12 +1078,13 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
         }
         else {
           // B8: pixel pin for the stroke-drawn operator. Probe rows
-          // [base-12, base-2] x cols [x, x+26]: the body run starts at
-          // x + colW + 3 = 29 (its ink shares these rows — a wider probe
-          // let it mask a stroke deletion), the limits sit above/below.
+          // [base-12, base-2] x cols [x, x+22]: the glyph box is at
+          // most colW wide (~13 here) and the body run starts past
+          // colW + 3 (body ink shares these rows — a wider probe let
+          // it mask a stroke deletion), the limits sit above/below.
           lcd_fill_rect(0, 60, SCREEN_WIDTH, 84, LCD_SET_VALUE);
           ppPaintAt(root, 10, 120);
-          if(!ppTestRectAnyLit(108, 118, 10, 26)) {
+          if(!ppTestRectAnyLit(108, 118, 10, 22)) {
             ppTestFail("B8 operator strokes missing");
           }
         }

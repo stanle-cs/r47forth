@@ -2,6 +2,28 @@
 
 Non-normative amendment trail. DESIGN.md is authoritative.
 
+## 2026-08-26 — big-operator letterforms (Stan's review, round 2)
+
+- Stan asked whether the hand-drawn operators could match the real
+  symbols. The right references were already on the machine: the
+  FONT'S OWN Σ/∏/∫ glyphs, rendered and read back as bitmaps. The
+  numeric Σ is 14x25 (w/h 9/16) with 3-row bars, thick diagonals and
+  its apex at ~40% width — while ours was a fixed 16 px box with 2 px
+  bars, which left tall operators pinched and chevron-like. Σ and ∏
+  now scale from ppBigopBox (one function, called by measure and
+  paint) with the font's proportions; the ∏ gains its overhanging bar
+  and inset legs. The ∫ keeps the curved textbook S from the previous
+  round — the font's ∫ is a straight stem with blob terminals, which
+  at operator scale reads as a bar.
+- **Paid the stale-binary trap in full, from the harness side.** The
+  helper landed below ppMeasure's use of it: implicit declaration, a
+  compile ERROR — and pp-iter.sh's ninja pipe ended in `|| true` with
+  the output greppped away, so the OLD binary ran and reported 7
+  green, and MUT-41's "red check" ran the same stale binary green. A
+  pin that stays green under its mutation was the tell (the rule
+  caught the harness, not the code). pp-iter.sh now fails loudly on a
+  build error; "silence is not-run" applies to one's own tooling.
+
 ## 2026-08-26 — visual polish (Stan's review of the PP12-PP14 shots)
 
 Three findings from human review of the capture sheets — all three were

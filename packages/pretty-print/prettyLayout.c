@@ -92,6 +92,9 @@ static void ppMetricsInit(void) {
   ppMetReady = true;
 }
 
+static void ppBigopBox(const ppNode_t *body, const ppMetrics_t *m,
+                       int16_t *ga, int16_t *gd, int16_t *gw);
+
 static bool_t ppMetricsOk(void) {
   if(!ppMetReady) {
     ppMetricsInit();
@@ -355,15 +358,8 @@ bool_t ppMeasure(uint8_t n, uint8_t depth) {
           || !ppMeasure(over, depth + 1)) {
         return false;
       }
-      int16_t ga = (int16_t)(ppPool[body].ascent + 2);   // glyph rows above baseline
-      if(ga < m->boxAscent) {
-        ga = m->boxAscent;
-      }
-      int16_t gd = (int16_t)(ppPool[body].descent + 2);  // glyph rows at/below
-      if(gd < 4) {
-        gd = 4;
-      }
-      int16_t gw = 16;
+      int16_t ga, gd, gw;
+      ppBigopBox(&ppPool[body], m, &ga, &gd, &gw);
       int16_t colW = gw;
       if(ppPool[under].width > colW) colW = ppPool[under].width;
       if(ppPool[over].width  > colW) colW = ppPool[over].width;
@@ -520,6 +516,25 @@ static void ppDrawLine(int16_t x0, int16_t y0, int16_t x1, int16_t y1) {
   }
 }
 
+/* The big-operator glyph box: ga/gd rows above/below the baseline and
+ * a width that scales with the height at the font's own Σ proportions
+ * (the numeric Σ measures 14x25, w/h ≈ 0.56) — a fixed width left tall
+ * operators pinched. Measure and paint call this same function. */
+static void ppBigopBox(const ppNode_t *body, const ppMetrics_t *m,
+                       int16_t *ga, int16_t *gd, int16_t *gw) {
+  *ga = (int16_t)(body->ascent + 2);
+  if(*ga < m->boxAscent) {
+    *ga = m->boxAscent;
+  }
+  *gd = (int16_t)(body->descent + 2);
+  if(*gd < 4) {
+    *gd = 4;
+  }
+  *gw = (int16_t)(((*ga + *gd) * 9) / 16);
+  if(*gw < 12) *gw = 12;
+  if(*gw > 28) *gw = 28;
+}
+
 /* The integral sign, stroke-drawn with curved hooks: a 2 px vertical
  * spine whose top bends right and bottom bends left along a quadratic
  * offset — the straight-line hooks read as a slash (found by review).
@@ -604,15 +619,8 @@ static void ppPaint(uint8_t n, int16_t x, int16_t baseline) {
       ppPaint(body,  x + ppPool[body].relX,  baseline);
       ppPaint(under, x + ppPool[under].relX, baseline + ppPool[under].relBase);
       ppPaint(over,  x + ppPool[over].relX,  baseline + ppPool[over].relBase);
-      int16_t ga = (int16_t)(ppPool[body].ascent + 2);
-      if(ga < m->boxAscent) {
-        ga = m->boxAscent;
-      }
-      int16_t gd = (int16_t)(ppPool[body].descent + 2);
-      if(gd < 4) {
-        gd = 4;
-      }
-      int16_t gw = 16;
+      int16_t ga, gd, gw;
+      ppBigopBox(&ppPool[body], m, &ga, &gd, &gw);
       int16_t colW = gw;
       if(ppPool[under].width > colW) colW = ppPool[under].width;
       if(ppPool[over].width  > colW) colW = ppPool[over].width;
@@ -624,20 +632,34 @@ static void ppPaint(uint8_t n, int16_t x, int16_t baseline) {
         ppDrawIntegralSign((int16_t)(gx + 7), top, bot);
       }
       else if(op == ITM_PIn || op == ITM_iPIn) {
-        // the ∏: top bar, two verticals
-        lcd_fill_rect((uint32_t)gx, (uint32_t)top, (uint32_t)gw, 2, LCD_EMPTY_VALUE);
-        lcd_fill_rect((uint32_t)(gx + 3), (uint32_t)(top + 2), 2, (uint32_t)(bot - top - 1), LCD_EMPTY_VALUE);
-        lcd_fill_rect((uint32_t)(gx + gw - 5), (uint32_t)(top + 2), 2, (uint32_t)(bot - top - 1), LCD_EMPTY_VALUE);
+        // the ∏, the font's own design scaled: an overhanging top bar
+        // and inset legs (numeric glyph: bar 16 wide, legs 3, inset 1)
+        int16_t barT = (int16_t)((bot - top + 1) / 10);
+        if(barT < 2) barT = 2;
+        int16_t legW = (int16_t)(gw / 5);
+        if(legW < 2) legW = 2;
+        lcd_fill_rect((uint32_t)gx, (uint32_t)top, (uint32_t)gw, (uint32_t)barT, LCD_EMPTY_VALUE);
+        lcd_fill_rect((uint32_t)(gx + 1), (uint32_t)(top + barT), (uint32_t)legW,
+                      (uint32_t)(bot - top + 1 - barT), LCD_EMPTY_VALUE);
+        lcd_fill_rect((uint32_t)(gx + gw - 1 - legW), (uint32_t)(top + barT), (uint32_t)legW,
+                      (uint32_t)(bot - top + 1 - barT), LCD_EMPTY_VALUE);
       }
       else {
-        // the Σ: top and bottom bars, chevron strokes between
+        // the Σ, the font's own design scaled: full-width bars whose
+        // thickness follows the height, thick diagonals meeting at an
+        // apex at ~40% width (numeric glyph: 14x25, apex col 5 of 14)
         int16_t mid = (int16_t)((top + bot) / 2);
-        lcd_fill_rect((uint32_t)gx, (uint32_t)top, (uint32_t)gw, 2, LCD_EMPTY_VALUE);
-        lcd_fill_rect((uint32_t)gx, (uint32_t)(bot - 1), (uint32_t)gw, 2, LCD_EMPTY_VALUE);
-        ppDrawLine((int16_t)(gx + 1), (int16_t)(top + 2), (int16_t)(gx + gw - 6), mid);
-        ppDrawLine((int16_t)(gx + 2), (int16_t)(top + 2), (int16_t)(gx + gw - 5), mid);
-        ppDrawLine((int16_t)(gx + gw - 6), mid, (int16_t)(gx + 1), (int16_t)(bot - 2));
-        ppDrawLine((int16_t)(gx + gw - 5), mid, (int16_t)(gx + 2), (int16_t)(bot - 2));
+        int16_t barT = (int16_t)((bot - top + 1) / 10);
+        if(barT < 2) barT = 2;
+        int16_t dt = (int16_t)(gw / 5);
+        if(dt < 2) dt = 2;
+        int16_t apexX = (int16_t)(gx + (gw * 2) / 5);
+        lcd_fill_rect((uint32_t)gx, (uint32_t)top, (uint32_t)gw, (uint32_t)barT, LCD_EMPTY_VALUE);
+        lcd_fill_rect((uint32_t)gx, (uint32_t)(bot - barT + 1), (uint32_t)gw, (uint32_t)barT, LCD_EMPTY_VALUE);
+        for(int16_t t = 0; t < dt; t++) {
+          ppDrawLine((int16_t)(gx + 1 + t), (int16_t)(top + barT), (int16_t)(apexX + t), mid);
+          ppDrawLine((int16_t)(apexX + t), mid, (int16_t)(gx + 1 + t), (int16_t)(bot - barT));
+        }
       }
       return;
     }

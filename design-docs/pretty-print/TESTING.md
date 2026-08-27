@@ -233,6 +233,12 @@ fixed — the forth-core 2026-07-21 rule applies unchanged.
 
 - **P5** — the integral sign's hooks reach ≥3 px sideways from the
   spine at the tip rows, both directions, spine present at mid-height.
+- The Σ/∏ letterforms follow the FONT'S OWN designs scaled (the glyph
+  bitmaps were rendered and read back as the reference): width tracks
+  height at the numeric Σ's 9/16 ratio via ppBigopBox (shared by
+  measure and paint — the fixed 16 px width left tall operators
+  pinched), bar thickness height/10, the Σ apex at 40% width, the ∏
+  bar overhanging inset legs. B8's probe narrowed to the scaled box.
 - M1/M2 descent moved 5→6 and M5 ascent 29→30: the symmetric-clearance
   fix (descent counts rows at/below a baseline, ascent strictly above,
   so the bar's lower side was one row tighter than its upper side —
