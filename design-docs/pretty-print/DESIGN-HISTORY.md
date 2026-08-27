@@ -907,3 +907,60 @@ would have been a real defect. Dumping the node showed `child[0]` was
 node 0 of kind PPN_VAL — the ambiguity above, misleading its own author
 inside the same hour it was found. That is why R4-2 is a fix and not a
 note.
+
+## Audit round 4, wave 2 — a formula displayed with an operand missing (R4-3)
+
+The in-family failure-axis pass over the renderer found the round's one
+product defect, and it is the same shape as R3-13 in a different layer: a
+check the container cannot make, in the one container that cannot make it.
+
+**R4-3.** `ppfCombine2` builds two of its forms — `LOGₓy` and the generic
+`name(a, b)` function form — by appending `ppfParen(...)` straight into a
+PP_HBOX without binding the result. `ppfParen` ALLOCATES, so it returns
+`PP_NONE` when the 72-node pool is exhausted. Every other operand in both
+forms is checked before use; these two were not, and `ppAppendChild`
+silently no-ops on a `PP_NONE` child.
+
+Nothing downstream catches it. `ppMeasure` checks arity for PP_FRAC,
+PP_SUP, PP_SUB, PP_RAD, PP_BARS, PP_PAREN and PP_BIGOP — but PP_HBOX is
+variadic by construction, so its measure walks `firstChild`/`nextSibling`
+with no arity check at all, and paint does the same. The tree measures
+and paints as a finished formula with an operand simply absent:
+`log₂(8)` renders as `log₂`, `atan2(3, 4)` as `atan2`. The builder
+returns TRUE. It reaches all three surfaces that funnel through
+`ppfCombine2` — the T line, the PHIST pager and the browser.
+
+The pool is the only way in, which makes the window narrow but real: for
+any allocation, some input size is the one that exhausts the pool exactly
+there. **FV18 calibrates that input at runtime rather than hardcoding
+it** — it builds the formula once with a full pool, counts the nodes used
+by scanning `ppNodeAt`, then rebuilds with the pool starved by exactly
+one node, which lands the failure on `ppfParen` because it is the last
+allocation in both forms. It asserts both halves, so the calibration
+itself is pinned: at the measured count the build must succeed, one node
+short it must FAIL rather than yield a partial tree. MUT-C (disabling the
+new guard) reds it.
+
+A sweep for the same shape found four sites in the package. The two in
+`prettyEquation.c` pass `ppqUnwrapParen`, which never allocates, and feed
+PP_RAD and PP_SUP, whose measure DOES check arity. So the two fixed here
+are the whole exposure.
+
+### R4-4 — hardened, not pinned
+
+`pbPaint` used to `continue` an unbuildable row out of both passes, which
+also skipped `selPage = page` when it was the SELECTED row: `selPage` kept
+its initialiser, pass 2 painted page 0, and no selection marker appeared
+anywhere, so pressing DOWN onto such a row looked like the browser had
+reset itself. Both passes now reserve a fixed-height placeholder reading
+"(too large to show)", so the row pages, selects and marks like any other
+— the same reasoning that made an empty browser say "no formulas".
+
+No reaching input could be constructed, and that is recorded rather than
+papered over: see TESTING.md's documented-gap section for the two
+ceilings that sit below the layout engine's (the 24-node capture arena,
+and the renderer's depth guard dropping nested division to an inline
+slash — a 25-level tower measured h=31, one fraction level). A T30
+written for this branch was removed the same hour for failing the very
+rule R4-1 established: a fixture that cannot reach its own state is not a
+pin.

@@ -397,3 +397,34 @@ fixed — the forth-core 2026-07-21 rule applies unchanged.
   reconfigure flag the number is the previous tree's).
 - Visual confirmation via the run-sim skill's capture driver (not a gate;
   the pixel pins are the gate).
+
+### Documented gap: the browser's unbuildable-row branch (AUDIT R4-4)
+
+`pbPaint`'s `!ppfBuildRow(...)` arm is HARDENED but NOT PINNED, because no
+reaching input for it could be constructed. The code defect is real and
+was fixed: both passes used to `continue` a failed row out, which also
+skipped `selPage = page` when that row was the selected one, so `selPage`
+kept its initialiser, pass 2 painted page 0, and no selection marker
+appeared anywhere. Both passes now reserve a fixed-height placeholder,
+so the row pages, selects and marks like any other.
+
+What could not be shown is that a row ever fails to build. Two ceilings
+sit below the layout engine's:
+
+- The capture arena is 24 nodes (`PPC_NODES`), and a chained operator
+  costs an OP2 plus a literal, so a filed formula tops out near eleven
+  operators — well inside the 72-node layout pool.
+- Deep division chains do not stack. A 25-level tower measured **h=31,
+  w=278**: one fraction level, because the renderer's depth guard drops
+  nested division to an inline slash. Height failure needs a tower the
+  arena cannot hold in the first place.
+
+So this is recorded the way round 4's `.d` exemption was — a documented
+gap with the analysis that reaches it, not a coverage hole. **Do not
+"fix" this by writing a fixture that forces the state artificially:** a
+pin that cannot reach its own state through a real gesture is the exact
+vacuity class R4-1 was about, and a T30 written for this branch was
+removed the same hour for failing that test. If a reaching input is ever
+found — a big operator with a tall body is the untried candidate — the
+pin is a pixel check that the 3px selection marker appears somewhere in
+rows 25..163.

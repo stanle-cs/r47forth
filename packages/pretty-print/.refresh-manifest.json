@@ -1,15 +1,15 @@
 {
   "base_commit": "70f8b7db7425422ec80e0342e627ed3e2cfd71a6",
   "files": {
-    "browsers/prettyBrowser.c": "f24a33c1e0eb635b2b84ee99d6b42c4a1ea5c4b6f41433ea7b3e7f4c2de5badf",
+    "browsers/prettyBrowser.c": "2713e702221371f8ae88a5573ca4da6b6cb373cb4f69e0276ba37bbcfc9a5b54",
     "browsers/prettyBrowser.h": "258582eb5e57612171171e6a4e2113a011acfbf6e431a292645e1dae5f186802",
     "prettyCapture.c": "31aa44e982b9db708be471fca947922276ef3d1656ddd552c1d34547a200f9e0",
     "prettyEquation.c": "3a2f5fc5a720e0b35278f631005559619dc29ff5a3ccf9b983763ba3814c207b",
-    "prettyFormula.c": "969663552c136a356137ad72cc26bd55059fa52793b4f138a3b5683fbb612fd6",
+    "prettyFormula.c": "0aa9354e2166870c692477008a06639c5949b06862932ebf4fd3cda45262771e",
     "prettyInternal.h": "ef846339479d7dead7c89a1b46661a11d4c10b39f555dca0c2e99e77c8dbaab8",
     "prettyLayout.c": "738a5143840263ec7477aa6de30dad7318a523d2d09704eca639f9b3944681c0",
     "prettyPrint.h": "a0fcf21c428a9047562f3bc6469845a1293378db4b7b549fd05306afb9d4e655",
-    "prettyTest.c": "f6206c7dd49fc56eee7b0ab8d54b139dd22871f52f007ef84d015e329b44af53",
+    "prettyTest.c": "7f2eb422cdc0d66dafd23164ce28a3bc0c72715ab35922a7a04aea868c79d577",
     "prettyValue.c": "33d5af1b521a858c7761f6610edd02783bf2be97285d184b63a189652718d455",
     "testSuite/tests/pretty_print.txt": "778b71cee0339ec87dc971217dc9efcaf0e83609660ebc9b7b9de295bf3c9b4e"
   },

@@ -2270,6 +2270,55 @@ void prettyTestFormula(uint16_t unusedButMandatoryParameter) {
     prettyReset();                   // back to defaults for later tests
   }
 
+  // FV18 (AUDIT R4-3): the builder must never report success with a child
+  // silently missing. ppfParen ALLOCATES, and PP_HBOX is the one variadic
+  // container — ppMeasure checks arity for FRAC/SUP/SUB/RAD/BARS/PAREN/
+  // BIGOP but cannot for HBOX — so an unchecked append there measures and
+  // paints as a finished formula with an operand simply absent. LOGXY is
+  // the shape: "log2" with no argument, reported true.
+  //
+  // The fixture starves the pool by EXACTLY one node, calibrated at
+  // runtime rather than hardcoded, and asserts both halves: with the
+  // measured node count the build succeeds (so the calibration is real),
+  // and one node short it must FAIL rather than yield a partial tree.
+  {
+    ppcTestReset();
+    ppcTestType("8");
+    ppcTestOp(ITM_ENTER);
+    ppcTestType("2");
+    ppcTestOp(ITM_LOGXY);
+
+    uint8_t root = PP_NONE;
+    ppReset();
+    if(!ppfBuildCurrent(PP_FONT_STANDARD, PP_FONT_STANDARD, &root)) {
+      ppTestFail("FV18 fixture never built at all — LOGXY was not captured");
+    }
+    else {
+      uint8_t used = 0;
+      while(ppNodeAt(used) != NULL) {
+        used++;
+      }
+      if(used < 2 || used > PP_POOL_NODES) {
+        ppTestFailInt("FV18 implausible node count", PP_POOL_NODES, used);
+      }
+      else {
+        // one node short: the LAST allocation in ppfCombine2 is ppfParen
+        ppReset();
+        for(uint8_t i = 0; i < (uint8_t)(PP_POOL_NODES - (used - 1)); i++) {
+          if(ppNewBox(PP_HBOX, PP_FONT_STANDARD) == PP_NONE) {
+            ppTestFail("FV18 could not starve the pool");
+            break;
+          }
+        }
+        uint8_t starved = PP_NONE;
+        if(ppfBuildCurrent(PP_FONT_STANDARD, PP_FONT_STANDARD, &starved)) {
+          ppTestFail("FV18 the builder reported success one node short — a formula is missing an operand");
+        }
+      }
+    }
+    ppReset();
+  }
+
   // FV15 (PP15): the softmenu claims are actually wired — the package's
   // own menu resolves with its six entries, and both parent slots hold
   // what the claims registry says they hold. Pins the menu tables the

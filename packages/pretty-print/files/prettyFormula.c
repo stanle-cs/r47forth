@@ -139,10 +139,18 @@ static uint8_t ppfCombine2(uint16_t item, uint8_t a, int aPrec, uint8_t b, int b
           || a == PP_NONE || b == PP_NONE) {
         return PP_NONE;
       }
+      // AUDIT R4-3. ppfParen allocates, so it can fail — and PP_HBOX is
+      // the one variadic container, so ppMeasure has no arity check that
+      // would catch the missing child. An unchecked append here renders
+      // "log2" with its argument silently absent, reported as success.
+      uint8_t par = ppfParen(a, ctxFont);
+      if(par == PP_NONE) {
+        return PP_NONE;
+      }
       ppAppendChild(sub, name);
       ppAppendChild(sub, b);
       ppAppendChild(box, sub);
-      ppAppendChild(box, ppfParen(a, ctxFont));
+      ppAppendChild(box, par);
       return box;
     }
     case ITM_ADD: case ITM_SUB: case ITM_MULT: {
@@ -172,11 +180,17 @@ static uint8_t ppfCombine2(uint16_t item, uint8_t a, int aPrec, uint8_t b, int b
           || a == PP_NONE || b == PP_NONE) {
         return PP_NONE;
       }
+      // AUDIT R4-3, the same shape: unchecked, this renders the function
+      // NAME alone with "(a, b)" absent, and reports success.
+      uint8_t par = ppfParen(inner, ctxFont);
+      if(par == PP_NONE) {
+        return PP_NONE;
+      }
       ppAppendChild(inner, a);
       ppAppendChild(inner, comma);
       ppAppendChild(inner, b);
       ppAppendChild(box, name);
-      ppAppendChild(box, ppfParen(inner, ctxFont));
+      ppAppendChild(box, par);
       return box;
     }
   }

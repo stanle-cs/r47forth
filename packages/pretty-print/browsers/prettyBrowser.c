@@ -45,12 +45,24 @@ static void pbPaint(void) {
     return;
   }
 
+  /* AUDIT R4-4. A row that will not build used to be `continue`d out of
+   * both passes — so it occupied no space, and if it was the SELECTED row
+   * the `selPage = page` assignment was skipped with it. selPage kept its
+   * initialiser, pass 2 painted page 0, and no selection marker appeared
+   * anywhere: pressing DOWN onto such a row looked like the browser had
+   * reset itself. A row that cannot be drawn still EXISTS, and the owner
+   * is entitled to see that it does — the same reasoning that made the
+   * empty browser say "no formulas" rather than paint a blank frame.
+   * Both passes now reserve a fixed-height placeholder for it, so every
+   * row pages, selects and marks like any other. */
+  #define PB_UNSHOWN_H 20
+
   // pass 1: which page holds the selection (variable-height packing)
   uint8_t page = 0, selPage = 0;
   int16_t y = 25;
   for(uint8_t row = 0; row < totalRows; row++) {
     if(!ppfBuildRow(row, haveCurrent, true, &root, &asc, &h)) {
-      continue;
+      h = PB_UNSHOWN_H;
     }
     if(y + h - 1 > 163) {
       page++;
@@ -66,8 +78,9 @@ static void pbPaint(void) {
   page = 0;
   y = 25;
   for(uint8_t row = 0; row < totalRows && page <= selPage; row++) {
-    if(!ppfBuildRow(row, haveCurrent, true, &root, &asc, &h)) {
-      continue;
+    bool_t built = ppfBuildRow(row, haveCurrent, true, &root, &asc, &h);
+    if(!built) {
+      h = PB_UNSHOWN_H;
     }
     if(y + h - 1 > 163) {
       page++;
@@ -77,6 +90,14 @@ static void pbPaint(void) {
       int16_t x = 8;
       if(row == pbSelection) {
         lcd_fill_rect(0, (uint32_t)y, 3, (uint32_t)h, LCD_EMPTY_VALUE);
+      }
+      if(!built) {
+        showString("(too large to show)", &standardFont, 8, (uint32_t)y,
+                   vmNormal, false, true);
+        y = (int16_t)(y + h + 5);
+        continue;
+      }
+      if(row == pbSelection) {
         const ppNode_t *n = ppNodeAt(root);
         // AUDIT R1-10. This used to be the only place a wide row was
         // handled, but the row builder rejected everything wider than
