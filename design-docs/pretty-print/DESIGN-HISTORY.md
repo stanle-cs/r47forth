@@ -2,6 +2,53 @@
 
 Non-normative amendment trail. DESIGN.md is authoritative.
 
+## 2026-08-26 — the appnotes, and the remedy that was there all along (round 7)
+
+Stan asked whether the project's application notes covered the
+derivative behaviour. Reading them (docs/appnotes, 30 notes; sources
+are .docx/.odt zips, so the prose extracts without a PDF tool)
+answered a different and better question.
+
+What the notes say: **AN0011** documents `f'`/`f''` as EQN-menu
+features — "evaluates the current expression's derivative using the
+value in X" — with no accuracy guidance at all. **AN0022** (RPN solve,
+integration, plot; 2026-07-13) carries a substantial "Accuracy, in
+plain terms" section and an "Accuracy when you nest" subsection
+covering solve-in-solve, integral-in-integral, solve-in-plot and
+integral-in-plot, with the SDIGS and ACC dials explained — and does
+not mention derivatives once in that prose, though its own test
+program nests derivative engines THREE deep (PLOT(DERIV(DERIV(DERIV)))
+and SOLVE(DERIV(DERIV))). So: deep engine nesting is explicitly an
+intended, exercised use case (which vindicates round 5's parity work),
+while derivative ACCURACY is simply undocumented.
+
+Two things fell out of reading them:
+
+- **The failure band is narrower than round 6 recorded.** Sweeping the
+  same function: x = 0.1, 0.05, 0.025 and 0.01 are all EXACT; 0.005
+  returns 4.28 for a true 1.4888; 0.001 returns −1511. Upstream's own
+  derivative plots sample −5..5 at ~0.025 intervals, which is why
+  their tests never met it.
+- **The remedy already exists in the firmware.** `deriv_user_step`
+  (differentiate.c:240) honours a step the user puts in the named
+  variable `δ_d`, exposed as the Δ softkey in the derivative menu.
+  Set it, and the relative-step collapse cannot occur. The case this
+  package cares about — INTEG(DERIV(...)) over [0,1], true 5/6 — goes
+  from −2.947e23 to 0.8333333333333333333333333332992391 in 266 ms.
+  EQ28 pins it.
+
+So the verdict sharpens rather than softens: still a genuine silent
+defect at default settings (the built-in key at X = 0.005 answers
+confidently with nonsense), but fully mitigable with a control that
+already ships. The real gap is documentation — the notes explain the
+integrator's ACC and the solver's SDIGS at length and never connect
+the Δ step to the failure it prevents. That is the shape the upstream
+report should take.
+
+Method note: the appnotes were the right place to look and I had not
+looked. The answer to "is this a known limitation?" lives in the
+project's own documentation, and reading it cost minutes.
+
 ## 2026-08-26 — the zero-limit caveat was wrong (Stan asked; round 6)
 
 Stan asked whether the numeric quirk recorded in round 5 was a genuine

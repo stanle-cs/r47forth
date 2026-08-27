@@ -286,6 +286,12 @@ fixed — the forth-core 2026-07-21 rule applies unchanged.
   rather than pinned (the gate stays fast).
 - **EQ27** — `INTEG(INTEG(X;X;0;1);X;0;1)` = 0.5: nested integrals
   work (the new DEI path never increments the engine counter).
+- **EQ28** — the upstream near-zero second-derivative defect and its
+  upstream-native remedy: the same integral over [0,1] that returns
+  −2.947e23 at default settings returns 5/6 to 31 digits once the
+  derivative's own step variable `δ_d` is set. The test restores the
+  variable to zero (which the engine reads as "unset") so it cannot
+  leak into later suite files.
 - Debugging trail worth keeping: the differentiator's entry parse runs
   MVAR mode, which errored on every construct (';' is a base-grammar
   error) — MVAR now consumes whole construct spans; temp-slot appends

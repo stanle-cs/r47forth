@@ -324,11 +324,31 @@ second derivative, NO package code involved (true value ≈ 1.4978):
 So exactly zero WORKS and small nonzero values FAIL — the reverse of
 what was written here before. The first derivative is robust to
 ~1e−24; only the second derivative is fragile, which is what the h²
-division predicts. Consequence for `INTEG(DERIV(...))`: tanh-sinh
-clusters its nodes near the endpoints, so an integration range that
-touches or approaches 0 samples the integrand squarely in the failing
-band. Use ranges away from zero. Reachable from the built-in d²/dx²
-key with no package involvement — UPSTREAM-REPORTABLE, not ours.
+division predicts. The failing band for this function begins below
+about x = 0.01 (0.01 is exact, 0.005 already returns 4.28 for a true
+1.4888) — which is why upstream's own AN0022 derivative plots, which
+sample −5..5 at roughly 0.025 intervals, never meet it.
+
+**There is an upstream-native remedy, and it is complete.** The
+derivative honours a user-set step in the named variable
+`δ_d` (`deriv_user_step`, differentiate.c:240 — exposed as the Δ
+softkey in the derivative menu). With it set, the relative-step
+collapse cannot happen. Measured on the case this package cares about,
+`INTEG(DERIV(SUM(X;X;1;3)/(X+2);X;X;2);X;0;1)`, true value 5/6:
+
+- default relative step → **−2.947e23** (garbage)
+- `δ_d` = 0.001 → **0.8333333333333333333333333332992391** in 266 ms
+
+EQ28 pins that remedy. So the guidance is: for a derivative sampled
+near zero — which any `INTEG(DERIV(...))` over a range touching zero
+will do — SET THE STEP, or keep the range away from zero.
+
+Status: a genuine, silent, user-reachable UPSTREAM defect (the
+built-in d²/dx² key at X = 0.005 answers confidently with nonsense at
+default settings), fully mitigable with an existing built-in control
+that the application notes never connect to this failure. Not the
+package's to patch — and not worth patching around, since setting the
+step is the upstream-convention answer. UPSTREAM-REPORTABLE.
 Nested INTEG-in-INTEG works: the new double-exponential path never
 increments the engine counter, so upstream refuses nothing; the stack
 guard is the bound, and a refused engine (old path, defensive) turns

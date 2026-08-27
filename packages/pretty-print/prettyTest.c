@@ -2154,6 +2154,38 @@ void prettyTestEquation(uint16_t unusedButMandatoryParameter) {
     }
     lastErrorCode = 0;
 
+    // EQ28: the upstream second-derivative defect near zero, and its
+    // upstream-native remedy. The same integral over [0,1] — a range
+    // whose endpoint samples land in the failing band — is garbage with
+    // the default relative step and EXACT once the derivative's own
+    // step variable is set. Pins the remedy so the DESIGN.md guidance
+    // cannot rot.
+    {
+      calcRegister_t vd = findOrAllocateNamedVariable(STD_delta STD_SUB_d);
+      reallocateRegister(vd, dtReal34, 0, amNone);
+      stringToReal34("0.001", REGISTER_REAL34_DATA(vd));
+      setEquation(currentFormula, "INTEG(DERIV(SUM(X;X;1;3)/(X+2);X;X;2);X;0;1)");
+      lastErrorCode = 0;
+      fnEqCalc(NOPARAM);
+      real34_t want, diff, tol;
+      stringToReal34("0.8333333333333333333333333333333333", &want);
+      if(lastErrorCode != ERROR_NONE || getRegisterDataType(REGISTER_X) != dtReal34) {
+        ppTestFail("EQ28 stepped derivative errored");
+      }
+      else {
+        real34Subtract(REGISTER_REAL34_DATA(REGISTER_X), &want, &diff);
+        real34SetPositiveSign(&diff);
+        stringToReal34("1e-25", &tol);
+        if(!real34CompareLessThan(&diff, &tol)) {
+          ppTestFail("EQ28 stepped derivative != 5/6");
+        }
+      }
+      // zero disables it again: the engine ignores a zero step
+      reallocateRegister(vd, dtReal34, 0, amNone);
+      int32ToReal34(0, REGISTER_REAL34_DATA(vd));
+      lastErrorCode = 0;
+    }
+
     currentSolverStatus = hadStatus;
     currentSolverVariable = hadVar;
     currentSolverProgram = hadProgram;
