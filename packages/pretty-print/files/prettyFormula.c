@@ -297,7 +297,7 @@ static void ppfLabelName(uint16_t param, char *out) {
       }
     }
   }
-  sprintf(out, "LBL %u", (unsigned)param);
+  snprintf(out, 17, "LBL %u", (unsigned)param);
 }
 
 static uint8_t ppfBigop(uint16_t item, uint16_t label, const uint8_t *stepBytes,
@@ -313,18 +313,20 @@ static uint8_t ppfBigop(uint16_t item, uint16_t label, const uint8_t *stepBytes,
   ppSetFontDeep(fromN, childFont);
   ppSetFontDeep(toN, childFont);
 
-  char lbl[24], text[64];
+  // sized so neither overflow NOR truncation is possible: lbl 23 +
+  // '(' + dv 19 + ')d' + dv 19 + NUL = 66 worst case
+  char lbl[24], text[96];
   ppfLabelName(label, lbl);
   if(isInt) {
     // the d-variable rides in the step payload; decode its name,
     // display-time best-effort like the label
     char dv[20];
     ppfVariableName((uint16_t)(stepBytes[0] | ((uint16_t)stepBytes[1] << 8)), dv);
-    sprintf(text, "%s(%s)d%s", lbl, dv, dv);
+    snprintf(text, sizeof(text), "%s(%s)d%s", lbl, dv, dv);
   }
   else {
     // sums iterate the label program over the counter n
-    sprintf(text, "%s(n)", lbl);
+    snprintf(text, sizeof(text), "%s(n)", lbl);
   }
   uint8_t body = ppfRun(text, ctxFont);
   if(body == PP_NONE) {
@@ -349,7 +351,7 @@ static uint8_t ppfBigop(uint16_t item, uint16_t label, const uint8_t *stepBytes,
     if(!real34CompareEqual(&step, const34_1)) {
       char sb[48], stext[52];
       real34ToDisplayString(&step, amNone, sb, &standardFont, 60, 6, LIMITEXP, !FRONTSPACE, NOIRFRAC);
-      sprintf(stext, "," STD_DELTA "%s", sb);
+      snprintf(stext, sizeof(stext), "," STD_DELTA "%s", sb);
       uint8_t st = ppfRun(stext, childFont);
       if(st == PP_NONE) {
         return PP_NONE;
@@ -397,7 +399,7 @@ static uint8_t ppfFromCaptureNode(uint8_t cap, uint8_t ctxFont, uint8_t childFon
       return ppfRun(indexOfItems[nd->item].itemCatalogName, ctxFont);
     case PPN_RCL: {
       char rname[8];
-      sprintf(rname, "R%02u", (unsigned)nd->item);
+      snprintf(rname, sizeof(rname), "R%02u", (unsigned)nd->item);
       return ppfRun(rname, ctxFont);
     }
     case PPN_OP1: {
@@ -514,7 +516,7 @@ bool_t ppfBuildEntry(const uint8_t *entry, uint8_t ctxFont, uint8_t childFont,
         }
         if(tok == PPT_TKR) {
           char rname[8];
-          sprintf(rname, "R%02u", (unsigned)item);
+          snprintf(rname, sizeof(rname), "R%02u", (unsigned)item);
           stackNode[sp] = ppfRun(rname, ctxFont);
         }
         else {

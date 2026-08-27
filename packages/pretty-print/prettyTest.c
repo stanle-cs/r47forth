@@ -1360,7 +1360,6 @@ void prettyTestFormula(uint16_t unusedButMandatoryParameter) {
   char expect[192];
   uint8_t root;
   const char *nADD  = indexOfItems[ITM_ADD].itemCatalogName;
-  const char *nMULT = indexOfItems[ITM_MULT].itemCatalogName;
 
   // FV1: precedence parens — (2+3)×4
   ppcTestReset();

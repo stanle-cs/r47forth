@@ -283,7 +283,7 @@ bool_t ppParseExponent(const char *src, uint8_t ctxFont, uint8_t childFont, uint
   char expd[24];
   uint16_t o = 0;
   pos = expOff;
-  while(pos < len && o + 1 < sizeof(expd)) {
+  while(pos < len && (size_t)(o + 1) < sizeof(expd)) {
     uint16_t code = ppGlyphAt(src, pos, &next);
     expd[o++] = (code == PP_SUP_MINUS_CODE) ? '-' : (char)('0' + (code & 0x000F));
     pos = next;
@@ -496,12 +496,12 @@ bool_t ppParseIrfrac(const char *src, uint8_t ctxFont, uint8_t childFont, uint8_
   if(multStart >= 0) {
     uint16_t o = 0;
     int16_t p = multStart, n;
-    while(p < multEnd && o + 1 < sizeof(mapped)) {
+    while(p < multEnd && (size_t)(o + 1) < sizeof(mapped)) {
       uint16_t c = ppGlyphAt(src, p, &n);
       mapped[o++] = PP_IS_SUP_DIGIT(c) ? (char)('0' + (c & 0x000F)) : src[p];
       p = n;
     }
-    if(prodOff >= 0 && o + 2 < sizeof(mapped)) {
+    if(prodOff >= 0 && (size_t)(o + 2) < sizeof(mapped)) {
       mapped[o++] = src[prodOff];
       mapped[o++] = src[prodOff + 1];
     }

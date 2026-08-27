@@ -4,13 +4,13 @@
     "browsers/prettyBrowser.c": "ea5b66886b788b36c49db97318ddb353ffd834ad096d42b0c9f294202575aa81",
     "browsers/prettyBrowser.h": "258582eb5e57612171171e6a4e2113a011acfbf6e431a292645e1dae5f186802",
     "prettyCapture.c": "6632ca5a91b019e1705443103106705f4dc7238f054796dadf6d1fbb1dcaf735",
-    "prettyEquation.c": "0be0d2572b274e27b31d6950f87d0c36a9b60d8a5c475e1dc081e16ba1df5495",
-    "prettyFormula.c": "2e6dc89f755e09b658d6c3e35bf1376231dfd9036bed7bf08bd40b1a0e82a6de",
+    "prettyEquation.c": "3a2f5fc5a720e0b35278f631005559619dc29ff5a3ccf9b983763ba3814c207b",
+    "prettyFormula.c": "3caf98aa98b5683b8184a039135f11db7d0a487df03c20821c35ee9b7ea4ddd3",
     "prettyInternal.h": "0f410048b8f8a6821f6fed0650a528413eefcc63b64489e6c503a470100adc80",
     "prettyLayout.c": "47c793be5224b55e0829cb31e67fb90a8044d4717a083b054e344f8dc944c594",
     "prettyPrint.h": "a0fcf21c428a9047562f3bc6469845a1293378db4b7b549fd05306afb9d4e655",
-    "prettyTest.c": "e07bad69dd7b2e6ed7bba9cd6466d4a01ba07da731d7abeb1240084598f3915d",
-    "prettyValue.c": "3c45bbae46d345ea10810698c66e1100effa6471d6788c0be25c59969b9adf4e",
+    "prettyTest.c": "94cce70a63ff6b07364e4d53a460a64e13d27ca2d63283f6702187a322a11db6",
+    "prettyValue.c": "4ad25899466460192fd8f3bed5ca27cefa2f021178ef5076f335df5a067c12b7",
     "testSuite/tests/pretty_print.txt": "778b71cee0339ec87dc971217dc9efcaf0e83609660ebc9b7b9de295bf3c9b4e"
   },
   "patches": {

@@ -716,7 +716,7 @@ uint8_t ppqFrameIntegral(uint8_t eq) {
                           &standardFont, 110, 6, LIMITEXP, !FRONTSPACE, NOIRFRAC);
     real34ToDisplayString(REGISTER_REAL34_DATA(RESERVED_VARIABLE_ULIM), amNone, hi,
                           &standardFont, 110, 6, LIMITEXP, !FRONTSPACE, NOIRFRAC);
-    sprintf(dtext, " d%s", dv);
+    snprintf(dtext, sizeof(dtext), " d%s", dv);
     uint8_t big   = ppNewBox(PP_BIGOP, PP_FONT_STANDARD);
     uint8_t body  = ppNewBox(PP_HBOX, PP_FONT_STANDARD);
     uint8_t dRun  = ppNewRun(dtext, (uint16_t)strlen(dtext), PP_FONT_STANDARD);
@@ -750,7 +750,7 @@ uint8_t ppqFrameDerivative(uint8_t eq, bool_t second) {
   ppfVariableName(currentSolverVariable, dv);
   // 0xa162 is the superscript-2 glyph
   strcpy(num, second ? "d" "\xa1\x62" : "d");
-  sprintf(den, second ? "d%s" "\xa1\x62" : "d%s", dv);
+  snprintf(den, sizeof(den), second ? "d%s" "\xa1\x62" : "d%s", dv);
   uint8_t hb   = ppNewBox(PP_HBOX, PP_FONT_STANDARD);
   uint8_t frac = ppNewBox(PP_FRAC, PP_FONT_STANDARD);
   uint8_t nRun = ppNewRun(num, (uint16_t)strlen(num), PP_FONT_STANDARD);
