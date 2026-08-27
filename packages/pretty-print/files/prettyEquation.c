@@ -529,7 +529,10 @@ static uint8_t ppqTerm(ppqCtx_t *c, uint8_t font, uint8_t tinyF) {
         return PP_NONE;
       }
       uint8_t box = ppNewBox(PP_HBOX, font);
-      uint8_t opRun = ppNewRun((code == 0x80d7) ? "\x80\xd7" : "\x80\xb7", 2, font);
+      // multiplication typesets as the raised dot regardless of how it
+      // was typed — the x glyph reads heavy beside fractions and big
+      // operators; the linear/edit views keep the true text
+      uint8_t opRun = ppNewRun(STD_DOT, 2, font);
       if(box == PP_NONE || opRun == PP_NONE) {
         c->failed = true;
         return PP_NONE;

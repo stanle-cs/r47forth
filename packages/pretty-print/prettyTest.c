@@ -391,6 +391,40 @@ void prettyTestPixels(uint16_t unusedButMandatoryParameter) {
     clearSystemFlag(FLAG_FRACT);
   }
 
+  // P6 (polish): the vinculum carries the sign's stroke weight — two
+  // lit rows over a standard-font radicand (it was 1 px against the
+  // glyph's 2 px strokes)
+  {
+    ppReset();
+    uint8_t arg = ppNewRun("2", 1, PP_FONT_STANDARD);
+    uint8_t rad = ppNewBox(PP_RAD, PP_FONT_STANDARD);
+    if(arg == PP_NONE || rad == PP_NONE) {
+      ppTestFail("P6 build");
+    }
+    else {
+      ppAppendChild(rad, arg);
+      if(!ppMeasure(rad, 0)) {
+        ppTestFail("P6 measure");
+      }
+      else {
+        const ppNode_t *n = ppNodeAt(rad);
+        lcd_fill_rect(0, 60, SCREEN_WIDTH, 80, LCD_SET_VALUE);
+        ppPaintAt(rad, 30, 120);
+        // vinculum rows: the top two rows of the node's ink, probed at
+        // the vinculum's RIGHT end (the sign glyph's own hook lights
+        // rows near its column and masked the first probe)
+        uint32_t vtop = (uint32_t)(120 - n->ascent);
+        uint32_t rx = (uint32_t)(30 + n->width - 2);
+        if(!ppTestRowAnyLit(vtop, rx - 2, rx)) {
+          ppTestFail("P6 vinculum row 1 missing");
+        }
+        if(!ppTestRowAnyLit(vtop + 1, rx - 2, rx)) {
+          ppTestFail("P6 vinculum row 2 missing");
+        }
+      }
+    }
+  }
+
   // P5 (polish): the integral sign's hooks reach sideways from the
   // spine — the top hook right, the bottom hook left. A bare vertical
   // bar (hooks dropped) fails both reach probes.
@@ -1322,7 +1356,8 @@ void prettyTestFormula(uint16_t unusedButMandatoryParameter) {
     ppTestFail("FV1 build");
   }
   else {
-    sprintf(expect, "[P([2 %s 3]) %s 4]", nADD, nMULT);
+    // multiplication typesets as the raised dot in the layout
+    sprintf(expect, "[P([2 %s 3]) " STD_DOT " 4]", nADD);
     ppfTestExpect("FV1 precedence", root, expect);
   }
 

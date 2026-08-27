@@ -2,6 +2,22 @@
 
 Non-normative amendment trail. DESIGN.md is authoritative.
 
+## 2026-08-26 — typography follow-ups (Stan's review, round 4)
+
+- Multiplication typesets as the raised dot (STD_DOT) in both pretty
+  renderers — the x glyph reads heavy beside fractions and big
+  operators. The linear/edit views keep the true text; FV1 pins the
+  dot (MUT-53's red shows only in the pass/fail counts — the expected
+  and actual strings differ only in glyph bytes, which grep's binary
+  mode suppresses).
+- The vinculum now carries the radical sign's stroke weight: standard
+  font strokes are 2 px but vincThick was 1 there, so the bar read
+  thinner than the sign it joins. Only tiny stays 1 px. P6 pins the
+  weight — its first probe sat beside the raised glyph's own top hook,
+  which lit the row and kept MUT-54 green; the probe moved to the
+  vinculum's right end (a pin green under its mutation is decoration,
+  applied once more).
+
 ## 2026-08-26 — ultimate nesting (Stan's stress request, round 3)
 
 - Stan asked for the full tower: Σ over a multiplication, times ∏,

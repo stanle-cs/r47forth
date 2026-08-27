@@ -151,7 +151,8 @@ static uint8_t ppfCombine2(uint16_t item, uint8_t a, int aPrec, uint8_t b, int b
       uint8_t l = ppfWrapIf(a, aPrec, myPrec, ctxFont);
       // right side of SUB needs parens at equal precedence: a-(b+c)
       uint8_t r = ppfWrapIf(b, bPrec, (item == ITM_SUB) ? myPrec + 1 : myPrec, ctxFont);
-      uint8_t op = ppfRun(indexOfItems[item].itemCatalogName, ctxFont);
+      // multiplication typesets as the raised dot (matches the EQN view)
+      uint8_t op = ppfRun(item == ITM_MULT ? STD_DOT : indexOfItems[item].itemCatalogName, ctxFont);
       if(box == PP_NONE || l == PP_NONE || r == PP_NONE || op == PP_NONE) {
         return PP_NONE;
       }

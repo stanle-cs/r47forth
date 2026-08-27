@@ -69,7 +69,7 @@ static void ppMetricsInit(void) {
     ppMet[i].barThick  = (i == PP_FONT_NUMERIC) ? 2 : 1;
     ppMet[i].fracGap   = (i == PP_FONT_NUMERIC) ? 2 : 1;
     ppMet[i].overhang  = (i == PP_FONT_NUMERIC) ? 2 : 1;
-    ppMet[i].vincThick = (i == PP_FONT_NUMERIC) ? 2 : 1;
+    ppMet[i].vincThick = (i == PP_FONT_TINY) ? 1 : 2;   // matches the sign's stroke weight
     ppMet[i].radGap    = (i == PP_FONT_TINY) ? 0 : 1;
     ppMet[i].supDrop   = (i == PP_FONT_NUMERIC) ? 10 : (i == PP_FONT_STANDARD ? 6 : 4);
     {

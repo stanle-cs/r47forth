@@ -218,6 +218,8 @@ after restore.
 | MUT-50 | ∫ hooks flattened to a bare bar (polish) | P5 (hook reach probes) |
 | MUT-51 | PP_MAX_DEPTH regressed to 6 (stress) | EQ22 (the ultimate nesting fails to measure) |
 | MUT-52 | additive big-operator bodies lose their parens (stress) | EQ25 (PROD 1+x misreads) |
+| MUT-53 | multiplication dot reverts to the x glyph | FV1 (red only in the COUNTS — glyph bytes suppress the FAIL line) |
+| MUT-54 | vinculum weight regressed to 1 px (standard) | P6 (row-2 probe at the vinculum's RIGHT end — near the sign, the glyph's own hook masked it) |
 
 Two lessons from the first mutation run, kept for honesty: (a) the original
 MUT-4 ("drop the dtReal34 type gate") stays GREEN — a non-real register's
