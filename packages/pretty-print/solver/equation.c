@@ -2099,7 +2099,7 @@ static int16_t ppEqBigopIntercept(const char *strPtr, uint16_t parseMode, char *
       ok = false;
     }
 
-    if(kind <= 1) {
+    if(kind <= 1 && ok) {
       // the counter walk and accumulator discipline are
       // _programmableSumProd's own: real accumulation under ctxtReal75,
       // sign-aware termination, a misdirected range refused
@@ -2201,7 +2201,13 @@ static int16_t ppEqBigopIntercept(const char *strPtr, uint16_t parseMode, char *
         }
       }
     }
-    else {
+    else if(ok) {
+      // AUDIT R3-1. R1-1 refuses a loop variable it cannot snapshot by
+      // setting ok = false — but this arm never read it, so DERIV/INTEG
+      // ran anyway and ppEqDelegate's own `reallocateRegister(var, ...)`
+      // destroyed the very value the refusal existed to protect. A
+      // refusal that does not stop the work is not a refusal. (The
+      // SUM/PROD arm above was already safe: its loop is `while(ok)`.)
       char bodyText[PPEQ_WORD_BYTES];
       if(argLen[0] == 0 || argLen[0] >= sizeof(bodyText)) {
         ppEqSyntaxError("big-operator body too long");

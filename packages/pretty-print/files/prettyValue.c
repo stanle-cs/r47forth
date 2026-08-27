@@ -839,10 +839,14 @@ void fnPrettyShow(uint16_t unusedButMandatoryParameter) {
   // guard. stringWidth compensates horizontally, so ppMeasure succeeded
   // and the fnC47Show fallback never fired — the owner got a garbled
   // screen at roughly twice the budgeted height, ink outside the band.
-  if(lastErrorCode != ERROR_NONE || checkHP) {
-    if(checkHP) {
-      fnC47Show(NOPARAM);   // the ordinary SHOW, which HP layout handles
-    }
+  // AUDIT R3-6. Folding checkHP into the error guard made PSHOW run the
+  // ordinary SHOW while an error was still pending — the original guard
+  // returned silently. An error takes precedence over everything.
+  if(lastErrorCode != ERROR_NONE) {
+    return;
+  }
+  if(checkHP) {
+    fnC47Show(NOPARAM);   // the ordinary SHOW, which HP layout handles
     return;
   }
 

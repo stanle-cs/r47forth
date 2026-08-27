@@ -1,5 +1,5 @@
 diff --git a/src/c47/solver/equation.c b/src/c47/solver/equation.c
-index ca3da3341ccc17998627221684ba14c7f7559138..5a4ad24e22040f015381b3791d289fb1cee33505 100644
+index ca3da3341ccc17998627221684ba14c7f7559138..3e5d91d5a77f7414e23dcb9cfd45af4aa2d49e68 100644
 --- a/src/c47/solver/equation.c
 +++ b/src/c47/solver/equation.c
 @@ -657,7 +657,11 @@ void showEquation(uint16_t equationId, uint16_t startAt, uint16_t cursorAt, bool
@@ -51,7 +51,7 @@ index ca3da3341ccc17998627221684ba14c7f7559138..5a4ad24e22040f015381b3791d289fb1
      #pragma GCC diagnostic push
      #pragma GCC diagnostic ignored "-Wimplicit-fallthrough"
      switch(*strPtr) {
-@@ -1654,3 +1680,559 @@ void parseEquation(uint16_t equationId, uint16_t parseMode, char *buffer, char *
+@@ -1654,3 +1680,565 @@ void parseEquation(uint16_t equationId, uint16_t parseMode, char *buffer, char *
      _processOperator(PARSER_OPERATOR_ITM_END_OF_FORMULA, mvarBuffer);
    }
  }
@@ -474,7 +474,7 @@ index ca3da3341ccc17998627221684ba14c7f7559138..5a4ad24e22040f015381b3791d289fb1
 +      ok = false;
 +    }
 +
-+    if(kind <= 1) {
++    if(kind <= 1 && ok) {
 +      // the counter walk and accumulator discipline are
 +      // _programmableSumProd's own: real accumulation under ctxtReal75,
 +      // sign-aware termination, a misdirected range refused
@@ -576,7 +576,13 @@ index ca3da3341ccc17998627221684ba14c7f7559138..5a4ad24e22040f015381b3791d289fb1
 +        }
 +      }
 +    }
-+    else {
++    else if(ok) {
++      // AUDIT R3-1. R1-1 refuses a loop variable it cannot snapshot by
++      // setting ok = false — but this arm never read it, so DERIV/INTEG
++      // ran anyway and ppEqDelegate's own `reallocateRegister(var, ...)`
++      // destroyed the very value the refusal existed to protect. A
++      // refusal that does not stop the work is not a refusal. (The
++      // SUM/PROD arm above was already safe: its loop is `while(ok)`.)
 +      char bodyText[PPEQ_WORD_BYTES];
 +      if(argLen[0] == 0 || argLen[0] >= sizeof(bodyText)) {
 +        ppEqSyntaxError("big-operator body too long");

@@ -733,6 +733,22 @@ void prettyNoteFunction(int16_t func, uint16_t param) {
     case PPC_XSWAPREG:
       // the tree's value still sits in register X at STAGE
       ppcDisplaced(0, true);
+      // AUDIT R3-5. x<> to a STACK register swaps X with that slot's
+      // register, so the PARTNER slot's tree stops describing it — the
+      // same hole R1-8 closed for STO, at the hand exception next door.
+      {
+        uint16_t xt = param;
+        if(xt > REGISTER_X && xt <= (uint16_t)getStackTop()) {
+          uint8_t k = (uint8_t)(xt - REGISTER_X);
+          ppcDisplaced(k, true);
+          ppcFreeTree(ppcSlot[k] == PPC_UNKNOWN ? PPC_NIL : ppcSlot[k]);
+          ppcSlot[k] = PPC_UNKNOWN;
+        }
+        else if(xt == REGISTER_L) {
+          ppcFreeTree(ppcSlotL == PPC_UNKNOWN ? PPC_NIL : ppcSlotL);
+          ppcSlotL = PPC_UNKNOWN;
+        }
+      }
       break;
     case PPC_BIGOPSUM: {
       // Z=from, Y=to, X=step consumed by VALUE (fnToReal + copy), never
@@ -974,12 +990,27 @@ void prettyNoteFunctionDone(void) {
       // undo-enabled, so without it the default rule would have been
       // safe. A stack target degrades that slot to UNKNOWN, which
       // re-materialises truthfully from the register on next use.
+      // AUDIT R3-2, R3-3, R3-4 — three corrections to R1-8.
+      //  * STO X writes X with what X already holds, so it changes no
+      //    value and must not disturb the shadow at all.
+      //  * The tree being dropped may be a FINISHED formula. Every other
+      //    wipe site in this file displaces it (emits it with the
+      //    register that still holds its value) before freeing; this one
+      //    freed it, so the owner's formula vanished from the history
+      //    instead of being filed.
+      //  * REGISTER_L is a shadow slot too — ppcSlotL caches the LASTx
+      //    tree — and STO L left it describing the overwritten value.
       uint16_t t = ppcStage.param;
-      if(t >= REGISTER_X && t <= (uint16_t)getStackTop()) {
+      if(t > REGISTER_X && t <= (uint16_t)getStackTop()) {
         uint8_t k = (uint8_t)(t - REGISTER_X);
+        ppcDisplaced(k, true);          // file it before it is lost
         ppcFreeTree(ppcSlot[k] == PPC_UNKNOWN ? PPC_NIL : ppcSlot[k]);
         ppcSlot[k] = PPC_UNKNOWN;
         ppcCurrentRevalidate();
+      }
+      else if(t == REGISTER_L) {
+        ppcFreeTree(ppcSlotL == PPC_UNKNOWN ? PPC_NIL : ppcSlotL);
+        ppcSlotL = PPC_UNKNOWN;
       }
       break;
     }
