@@ -1014,10 +1014,11 @@
 #define FLAG_PINTG                            0x806C
 #define FLAG_PDIFF                            0x806D
 #define FLAG_PRETTYP                          0x8071 //50 natural-display master toggle (pretty-print package; count reserved by the claims registry)
+#define FLAG_PTLINE                           0x8072 //51 live formula on the T line (pretty-print package; DEFAULT OFF, so a reset's flag wipe already gives the default)
 #define FLAG_PSHADE                           0x806E //47
 #define FLAG_SBadm                            0x806F //48
 
-#define NUMBER_OF_SYSTEM_FLAGS                 64+50 // We can have a maximum of 128 system flags; 50 = one reserved for pretty-print's FLAG_PRETTYP (claims registry) — pretty-print's defines.h carries the IDENTICAL count edit so the 3-way merge unifies
+#define NUMBER_OF_SYSTEM_FLAGS                 64+51 // We can have a maximum of 128 system flags; 51 = two reserved for pretty-print's FLAG_PRETTYP and FLAG_PTLINE (claims registry) — both packages' defines.h carry the IDENTICAL count edit so the 3-way merge unifies
 
                                                      // only used as bit count for setting change detection
 #define SETTING_AMODE                         0x0080 // current angle mode

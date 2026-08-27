@@ -435,6 +435,21 @@ appended block in the same file):
   appended as a subscript-style suffix. Malformed constructs decline
   the whole strip/EQSHW render (strict; the linear line remains).
 
+### Flag scope (RULED, PP15)
+
+`FLAG_PRETTYP` governs only what the calculator draws **on its own
+initiative** — the inline register lines. The explicit view commands
+`PSHOW` and `EQSHW` ignore it: asking to see something should show it.
+`FLAG_PTLINE` is a second, independent opt-in for the T-line live
+formula, default OFF.
+
+Init and factory-reset are SEPARATE (PP15, after a latent PP11 bug):
+`ppcInit()` prepares the package's own data and is what the lazy
+first-use path calls; `prettyReset()` does that AND restores both flag
+defaults, and only `doFnReset` may call it. A lazy path that restores
+defaults overwrites the user's saved preferences, which is exactly what
+persisting them was meant to prevent.
+
 ## §7 Composition claims (BINDING for other packages)
 
 Verified against the tree at branch point (undo-history/stage-u2 tip,
@@ -444,7 +459,10 @@ Verified against the tree at branch point (undo-history/stage-u2 tip,
 |---|---|---|
 | item rows | **459 `PSHOW`, 460 `PPON`, 461 `PCLR`, 462 `PHIST`** | spare `itemToBeCoded` rows at items.c:2290-2293 — ~30 lines below undo-history's 427-429 hunk (ends :2260); items.h defines at :484-487, ~30 lines below its hunk (:446-454) |
 | calcMode | **20 reserved** (not wired) | PP4 shipped the history view as a manual-paint PAGER instead of a browser mode (see §6), avoiding ~20 keyboard.c sites in the one file where forth-core rewrites the determineItem chain undo-history already squeezed into. If a full browser lands later, its `#define` must NOT be adjacent to undo-history's `CM_HIST_BROWSER 19` insertion (after defines.h:1721) — anchor ≥4 context lines away |
-| system flag | **none in v1** | undo-history's patch edits the single `NUMBER_OF_SYSTEM_FLAGS` line; two packages editing the same line cannot compose. Toggle = package BSS bool + `PPON` item. Flag persistence is deferred to an explicitly coordinated change. |
+| system flag | **50 `FLAG_PRETTYP` (0x8071)**, **51 `FLAG_PTLINE` (0x8072)** | superseded the v1 "none" ruling. The single `NUMBER_OF_SYSTEM_FLAGS` line cannot be edited by two packages independently, so BOTH packages carry the byte-identical `64+51` line and 3-way unifies them (identical-edit claim). Undo-history owns 49; 50 and 51 are ours. Both SYSFL catalog rows (`PPRTY`, `PTLINE`) live in UNDO-HISTORY's items.c beside its own row-2299 edit — the touching-line rule, same reason as PP11. |
+| menu id | **item 217 = `MNU_PP`** (CAT_MENU) | a `CAT_FREE` "0217" row adjacent to our own 215/216 claims, so the items.c hunk stays contiguous and nowhere near either sibling. forth-core's precedent: it turned free row 213 into `CAT_MENU` "FWRD". |
+| softmenu slots | `menu_DISP` row 5 slot 3 → `-MNU_PP`; `menu_EQN` row 2 slot 2 → `ITM_EQSHW` | DISP and EQN are untouched by BOTH siblings (verified by diff), so neither edit can collide. The stack menu is deliberately AVOIDED: undo-history put `UHIST`/`REDO`/`HCLR` in its free slots and edited that exact line, leaving one slot and a guaranteed touching-line conflict. |
+| softmenu table | new entry inserted immediately BEFORE the `/* 186 */` sentinel | the table's own instruction ("do not add menus here, add them at the end"). forth-core inserted mid-table at `/* 022 */`; anchoring at the tail keeps us ~160 lines clear of it. |
 | resident pool | **zero** | all pretty-print state is BSS (~2.8 KiB end-state); the ~1.6 KiB pool slack remaining after undo-history's 4 KiB ring stays untouched |
 
 Upstream files hooked, with verified adjacency to sibling packages' hunks:

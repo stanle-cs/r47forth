@@ -222,6 +222,9 @@ after restore.
 | MUT-54 | vinculum weight regressed to 1 px (standard) | P6 (row-2 probe at the vinculum's RIGHT end — near the sign, the glyph's own hook masked it) |
 | MUT-55 | stack allowance zeroed (parity) | EQ18/EQ26/EQ27 (all nested evaluation refuses) |
 | MUT-56 | MVAR scan hides only the construct NAME again (Bug 1) | EQ29 (the commit rejects the typed equation, error 45) |
+| MUT-57 | prettyReset stops restoring the T-line default (PP15) | FV14 |
+| MUT-58 | cold start restores factory defaults again (the PP11 persistence bug) | FV16 (both flags clobbered) |
+| MUT-59 | the `-MNU_PP` slot in menu_DISP reverted to ITM_NULL (PP15) | FV15 |
 
 Two lessons from the first mutation run, kept for honesty: (a) the original
 MUT-4 ("drop the dtReal34 type gate") stays GREEN — a non-real register's
@@ -274,6 +277,27 @@ fixed — the forth-core 2026-07-21 rule applies unchanged.
   TINY (the operator convention; tinyF only governs the strip's
   fraction shrink, and the '/' deep-refont is skipped when the
   caller's fonts are equal so it cannot flatten them).
+
+### PP15 additions (both toggles are flags; the menus are wired)
+
+- **FV14** — the T line is a real flag: `prettySetTline` and the toggle
+  item both move `FLAG_PTLINE`, and a reset leaves it OFF. Note the
+  ASYMMETRY with FV13: the two defaults are reached by opposite routes,
+  because a reset's flag wipe already IS the T line's default while the
+  master toggle's default-ON must be re-established.
+- **FV15** — the softmenu claims are wired, checked by LOOKING at the
+  live `softmenu[]` table rather than trusting the patch: `-MNU_PP`
+  resolves, holds exactly its six items in order, and both parent slots
+  (`menu_DISP`, `menu_EQN`) contain what §7 says they contain.
+- **FV16** — the cold-start path initialises package data WITHOUT
+  touching the user's flags. This pins a latent PP11 bug that FV14
+  surfaced: `prettyReset()` was called from five lazy-init sites as well
+  as from `doFnReset`, so the first dispatch after a cold start
+  force-set the master flag and silently overwrote a saved preference —
+  the persistence PP11 claimed to deliver. Init and factory-reset are
+  now separate functions (`ppcInit` vs `prettyReset`), and
+  `ppcTestDeinit` (package-internal, test only) re-arms the cold-start
+  path so the contract is testable at all.
 
 ### Keyboard-journey addition (Stan's challenge: can it even be typed?)
 

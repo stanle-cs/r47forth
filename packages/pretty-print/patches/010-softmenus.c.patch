@@ -1,0 +1,36 @@
+diff --git a/src/c47/softmenus.c b/src/c47/softmenus.c
+index 6d036d9a0c49cf030d1e1b82d0deb5b32cc02183..f4f381c489238975efddf663dbed3c1392fbe92e 100644
+--- a/src/c47/softmenus.c
++++ b/src/c47/softmenus.c
+@@ -60,7 +60,7 @@ TO_QSPI const int16_t menu_DISP[]        = { ITM_FIX,                       ITM_
+                                              ITM_GAP_L,                     ITM_GAP_RX,                 ITM_GAP_R,                ITM_SETFDIGS,          ITM_FRCYC,                   ITM_TDISP,
+ 
+                                              ITM_LARGELI,                   ITM_DREAL,                  ITM_DSTACK,               ITM_SHOIREP,           ITM_BASENR,                  ITM_CLKp2,
+-                                             ITM_CPXI,                      ITM_CPXJ,                   ITM_NULL,                 ITM_CPXMULT,           ITM_MULTCR,                  ITM_MULTDOT,
++                                             ITM_CPXI,                      ITM_CPXJ,                  -MNU_PP,                   ITM_CPXMULT,           ITM_MULTCR,                  ITM_MULTDOT,
+                                              ITM_SCIOVR,                    ITM_ENGOVR,                 ITM_SIGZEROS,             ITM_NULL,              ITM_RNG,                     ITM_HIDE,
+ 
+                                              ITM_SETCHN,                    ITM_SETEUR,                 ITM_SETIND,               ITM_SETJPN,            ITM_SETUK,                   ITM_SETUSA,
+@@ -723,8 +723,13 @@ TO_QSPI const int16_t menu_alphaMisc[]    ={ ITM_CR,                        ITM_
+                                              ITM_LF_PIC,                    ITM_SMALL_SQUARE,             ITM_NULL,                     ITM_NULL,                     ITM_NULL,                     ITM_NULL                  };
+ 
+ 
++/* pretty-print package: the natural-display softmenu (claims registry
++ * §7). One row: the three view commands, the equation view, then the
++ * two persisted toggles. */
++TO_QSPI const int16_t menu_PP[]          = { ITM_PSHOW,                     ITM_PHIST,                  ITM_PCLR,                 ITM_EQSHW,             ITM_PPON,                    ITM_PTLIN                     };
++
+ TO_QSPI const int16_t menu_EQN[]         = { ITM_EQ_NEW,                    ITM_EQ_EDI,                  -MNU_2NDDERIV,                -MNU_1STDERIV,                -MNU_Sf,                      -MNU_Solver,
+-                                             ITM_EQ_DEL,                    ITM_NULL,                     ITM_NULL,                     ITM_NULL,                     ITM_NULL,                    -MNU_Grapher               };
++                                             ITM_EQ_DEL,                    ITM_EQSHW,                    ITM_NULL,                     ITM_NULL,                     ITM_NULL,                    -MNU_Grapher               };
+ 
+ TO_QSPI const int16_t menu_ADV[]         = { ITM_SIGMAn,                    ITM_PIn,                       ITM_PLTf,                   -MNU_Sfdx,                     ITM_SOLVE,                    ITM_F1DRV,
+                                              ITM_iSIGMAn,                   ITM_iPIn,                      ITM_PGMPLT,                  ITM_PGMINT,                   ITM_PGMSLV,                   ITM_PGMDRV,
+@@ -1222,6 +1227,7 @@ TO_QSPI const softmenu_t softmenu[] = {
+ /* 184 */  {.menuItem = -MNU_CONV_P_LOAD,   .numItems = sizeof(menu_CONV_PLoad    )/sizeof(int16_t), .softkeyItem = menu_CONV_PLoad     },       // NOTE !! do not add menus here, add them at the end. The menu numbers are fixed for the Wiki references. 2024-02-21 jm
+ /* 185 */  {.menuItem = -MNU_TAMLOCALLABEL, .numItems = sizeof(menu_TamLocalLabel )/sizeof(int16_t), .softkeyItem = menu_TamLocalLabel  },       // NOTE !! do not add menus here, add them at the end. The menu numbers are fixed for the Wiki references. 2024-02-21 jm
+ 
++/* 185b*/  {.menuItem = -MNU_PP,            .numItems = sizeof(menu_PP            )/sizeof(int16_t), .softkeyItem = menu_PP             },       // pretty-print package: added at the TAIL per this table's own instruction; forth-core inserts at /* 022 */, ~160 lines clear
+ /* 186 */  {.menuItem =  0,                 .numItems = 0,                                           .softkeyItem = NULL                }
+ 
+ 

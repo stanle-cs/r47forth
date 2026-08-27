@@ -1,21 +1,22 @@
 diff --git a/src/c47/defines.h b/src/c47/defines.h
-index 63b9c1a7692f24da093a882ffa1f3be1625bb7a8..29533da08a643215071eeeb15d05a91a42d6141e 100644
+index 63b9c1a7692f24da093a882ffa1f3be1625bb7a8..c9a57ab3cdf8856e4fb2d69bcc772c476ce92400 100644
 --- a/src/c47/defines.h
 +++ b/src/c47/defines.h
-@@ -1013,10 +1013,11 @@
+@@ -1013,10 +1013,12 @@
  #define FLAG_PRMS                             0x806B
  #define FLAG_PINTG                            0x806C
  #define FLAG_PDIFF                            0x806D
 +#define FLAG_PRETTYP                          0x8071 //50 natural-display master toggle (pretty-print package; count reserved by the claims registry)
++#define FLAG_PTLINE                           0x8072 //51 live formula on the T line (pretty-print package; DEFAULT OFF, so a reset's flag wipe already gives the default)
  #define FLAG_PSHADE                           0x806E //47
  #define FLAG_SBadm                            0x806F //48
  
 -#define NUMBER_OF_SYSTEM_FLAGS                 64+48 // We can have a maximum of 128 system flags
-+#define NUMBER_OF_SYSTEM_FLAGS                 64+50 // We can have a maximum of 128 system flags; 50 = one reserved for pretty-print's FLAG_PRETTYP (claims registry) — pretty-print's defines.h carries the IDENTICAL count edit so the 3-way merge unifies
++#define NUMBER_OF_SYSTEM_FLAGS                 64+51 // We can have a maximum of 128 system flags; 51 = two reserved for pretty-print's FLAG_PRETTYP and FLAG_PTLINE (claims registry) — both packages' defines.h carry the IDENTICAL count edit so the 3-way merge unifies
  
                                                       // only used as bit count for setting change detection
  #define SETTING_AMODE                         0x0080 // current angle mode
-@@ -1711,6 +1712,7 @@ static inline uint8_t regCtoKS(const int16_t regC) {
+@@ -1711,6 +1713,7 @@ static inline uint8_t regCtoKS(const int16_t regC) {
  #define CM_PLOT_STAT                               8 // Plot stats mode
  #define CM_ERROR_MESSAGE                           9 // Error message in one of the register lines
  #define CM_BUG_ON_SCREEN                          10 // Bug message on screen

@@ -2,6 +2,52 @@
 
 Non-normative amendment trail. DESIGN.md is authoritative.
 
+## 2026-08-26 — PP15: both toggles are flags, and the menus exist
+
+Stan ruled that PPON and PTLIN should both be flags, asked for a home
+for PSHOW/PHIST/PCLR, and asked whether EQSHW was in the EQN menu (it
+was not — the package had never touched a menu).
+
+Built as one stage because all three touch the same files:
+
+- **FLAG_PTLINE (51, 0x8072)** replaces the `ppTlineActive` bool. The
+  count line goes to `64+51` byte-identically in BOTH packages (the
+  identical-edit claim), and the `PTLINE` SYSFL catalog row lands at
+  free row 2301 in UNDO-HISTORY's items.c beside `PPRTY` — the
+  touching-line rule, same as PP11.
+- **MNU_PP** claims free item row 217, adjacent to our own 215/216, as
+  a `CAT_MENU` row (forth-core's precedent at row 213). Its six-key
+  menu is `PSHOW PHIST PCLR EQSHW PPON PTLIN`, hung off the earliest
+  free slot in `menu_DISP` (row 5) and registered at the softmenu
+  table's TAIL per that table's own instruction — ~160 lines clear of
+  forth-core's mid-table insertion. `EQSHW` also goes into `menu_EQN`'s
+  first free slot. Both parent menus are untouched by both siblings
+  (verified by diff); the STACK menu was deliberately avoided because
+  undo-history took three of its four free slots and edited that exact
+  line.
+- **The stage found a real latent bug in PP11.** FV14 failed on its
+  first run — a reset was not leaving the T line off — and the cause
+  generalised: `prettyReset()` was wired to five LAZY-INIT sites as
+  well as to `doFnReset`, so it conflated "initialise my data" with
+  "restore factory defaults". The first dispatch after a cold start
+  therefore force-set FLAG_PRETTYP, silently overwriting a preference
+  the user had saved — destroying the persistence PP11 was built to
+  provide. Split into `ppcInit()` (data only) and `prettyReset()`
+  (data + both flag defaults); FV16 and MUT-58 pin it.
+- Deliberately NOT done, with the mechanism recorded so it is cheap
+  later: the PPON/PTLIN softkeys do not show their flag state the way
+  their DISP neighbours do. The checkbox render reads
+  `getSystemFlag(indexOfItems[item].param)` but only for items whose
+  func is `fnGetSystemFlag` AND only inside `-MNU_TAMFLAG`
+  (softmenus.c:3471). Wiring it would mean carrying the flag number as
+  our toggle items' param and widening that condition — real surgery
+  in a shared file for a cosmetic gain, so it waits for a ruling.
+
+Also ruled and now documented: EQSHW and PSHOW deliberately IGNORE
+FLAG_PRETTYP. The flag governs what the calculator does by itself; an
+explicit "show me this" should work regardless. That was implicit
+before and is now written down.
+
 ## 2026-08-26 — the separator, challenged and verified (round 8)
 
 Stan challenged the `;` separator: had I checked it was right, why not

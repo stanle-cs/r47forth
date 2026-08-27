@@ -75,7 +75,13 @@ static uint8_t ppcTopSlot(void) {
   return (uint8_t)(getStackTop() - REGISTER_X);
 }
 
-void prettyReset(void) {
+/* Initialising our own data and restoring the user's factory defaults
+ * are DIFFERENT operations, and conflating them was a persistence bug
+ * (found by PP15's FV14 while adding the second flag): ppcInit runs
+ * lazily on the first dispatch after a cold start, and if it also set
+ * the flags it would silently overwrite a preference the user had
+ * saved. Only doFnReset restores defaults. */
+static void ppcInit(void) {
   for(uint8_t i = 0; i < PPC_NODES; i++) {
     ppcArena[i].kind = PPN_FREE;
     ppcArena[i].child[0] = (uint8_t)(i + 1 < PPC_NODES ? i + 1 : PPC_NIL);
@@ -93,9 +99,21 @@ void prettyReset(void) {
   ppcHistCount = 0;
   ppcHistSeq = 0;
   ppcInited = true;
-  // the natural-display default is ON; a RESET wipes system flags before
-  // this hook runs (the config.c call sits after Sett(_Reset))
+}
+
+void ppcTestDeinit(void) {
+  ppcInited = false;   // the next dispatch takes the cold-start path
+}
+
+void prettyReset(void) {
+  ppcInit();
+  // Factory defaults. A RESET wipes the system flags before this hook
+  // runs (the config.c call sits after Sett(_Reset)), so the T line's
+  // default-OFF is already in place and is cleared here only so that
+  // prettyReset means the same thing wherever it is called from; the
+  // natural-display default-ON has to be re-established.
   setSystemFlag(FLAG_PRETTYP);
+  clearSystemFlag(FLAG_PTLINE);
 }
 
 static uint8_t ppcAlloc(uint8_t kind) {
@@ -582,7 +600,7 @@ static void ppcSupersedeCurrent(void) {
 
 void prettyNoteFunction(int16_t func, uint16_t param) {
   if(!ppcInited) {
-    prettyReset();
+    ppcInit();
   }
   if(!ppcScopeOk()) {
     // A nested dispatch (a BIGOP's label program runs every step through
@@ -980,7 +998,7 @@ void prettyNoteFunctionDone(void) {
 
 void prettyNoteNimOpen(void) {
   if(!ppcInited) {
-    prettyReset();
+    ppcInit();
   }
   if(programRunStop == PGM_RUNNING || getSystemFlag(FLAG_SOLVING) || getSystemFlag(FLAG_INTING)) {
     ppcNimTextValid = false;
@@ -995,7 +1013,7 @@ void prettyNoteNimOpen(void) {
 
 void prettyNoteNimText(const char *aim) {
   if(!ppcInited) {
-    prettyReset();
+    ppcInit();
   }
   const char *s = aim;
   if(*s == '+') {
@@ -1013,7 +1031,7 @@ void prettyNoteNimText(const char *aim) {
 
 void prettyNoteNumberCommit(void) {
   if(!ppcInited) {
-    prettyReset();
+    ppcInit();
   }
   if(calcMode == CM_NIM || lastErrorCode != 0) {
     return;   // not committed (still typing, or the close failed)
@@ -1115,7 +1133,7 @@ void ppcHistoryClear(void) {
 // wipe the shadow to UNKNOWN without touching the history ring.
 void ppcShadowInvalidate(void) {
   if(!ppcInited) {
-    prettyReset();
+    ppcInit();
     return;
   }
   ppcInvalidate(false);

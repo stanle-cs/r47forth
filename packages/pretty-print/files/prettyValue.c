@@ -21,13 +21,16 @@ static char ppScratch[200];
 static char ppSpanA[120];
 static char ppSpanB[120];
 
-// PP11: the master toggle is a REAL system flag (FLAG_PRETTYP, bit 50 —
-// count reserved via the identical-edit claim with undo-history), so it
-// persists across power cycles with the ordinary flag machinery.
-// prettyReset() restores the default-ON after a RESET wipes the flags.
-static bool_t ppTlineActive = false;   // DEFAULT OFF (ruled by Stan): the
-                                       // T line shows its value unless the
-                                       // user opts into the live formula
+// BOTH toggles are REAL system flags (PP11: FLAG_PRETTYP bit 50;
+// PP15: FLAG_PTLINE bit 51 — count reserved via the identical-edit
+// claim with undo-history), so they persist across power cycles with
+// the ordinary flag machinery and answer to SF/CF/FS? and the flag
+// browser like any other setting.
+//
+// The two defaults are reached by OPPOSITE routes, and that asymmetry
+// is deliberate: a RESET wipes every flag, which IS the T line's
+// default-OFF, so it needs no restore hook — whereas the master
+// toggle's default-ON has to be re-set by prettyReset() afterwards.
 
 void fnPrettyToggle(uint16_t unusedButMandatoryParameter) {
   (void)unusedButMandatoryParameter;
@@ -41,11 +44,21 @@ void fnPrettyToggle(uint16_t unusedButMandatoryParameter) {
 
 void fnPrettyTlineToggle(uint16_t unusedButMandatoryParameter) {
   (void)unusedButMandatoryParameter;
-  ppTlineActive = !ppTlineActive;
+  if(getSystemFlag(FLAG_PTLINE)) {
+    clearSystemFlag(FLAG_PTLINE);
+  }
+  else {
+    setSystemFlag(FLAG_PTLINE);
+  }
 }
 
 void prettySetTline(bool_t on) {
-  ppTlineActive = on;
+  if(on) {
+    setSystemFlag(FLAG_PTLINE);
+  }
+  else {
+    clearSystemFlag(FLAG_PTLINE);
+  }
 }
 
 bool_t prettyEnabled(void) {
@@ -779,7 +792,7 @@ bool_t prettyTryRegisterLine(calcRegister_t regist, int16_t baseY, int16_t *line
   // T-line live formula (PP8, opt-in): while a formula is open, the T
   // line shows it instead of T's value; no formula or no fit falls
   // through to the ordinary value rendering below.
-  if(regist == REGISTER_T && ppTlineActive) {
+  if(regist == REGISTER_T && getSystemFlag(FLAG_PTLINE)) {
     static const uint8_t tRungs[2][2] = {
       { PP_FONT_STANDARD, PP_FONT_STANDARD },
       { PP_FONT_STANDARD, PP_FONT_TINY     },

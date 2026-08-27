@@ -1676,6 +1676,100 @@ void prettyTestFormula(uint16_t unusedButMandatoryParameter) {
     }
   }
 
+  // FV14 (PP15): the T line is a REAL flag too, and its default is
+  // reached by the OPPOSITE route to the master toggle's — a reset
+  // wipes the flags, and OFF is already the T line's default, so it
+  // must NOT be re-set afterwards the way FLAG_PRETTYP is.
+  {
+    prettySetTline(false);
+    if(getSystemFlag(FLAG_PTLINE)) {
+      ppTestFail("FV14 prettySetTline(false) leaves the flag set");
+    }
+    fnPrettyTlineToggle(NOPARAM);
+    if(!getSystemFlag(FLAG_PTLINE)) {
+      ppTestFail("FV14 toggle does not set FLAG_PTLINE");
+    }
+    fnPrettyTlineToggle(NOPARAM);
+    if(getSystemFlag(FLAG_PTLINE)) {
+      ppTestFail("FV14 toggle does not clear FLAG_PTLINE");
+    }
+    setSystemFlag(FLAG_PTLINE);
+    prettyReset();
+    if(getSystemFlag(FLAG_PTLINE)) {
+      ppTestFail("FV14 reset does not leave the T line OFF");
+    }
+  }
+
+  // FV16 (PP15): the cold-start path initialises our data WITHOUT
+  // touching the user's flags. Before the ppcInit/prettyReset split the
+  // first dispatch after a cold start force-set the master flag, which
+  // silently overwrote a saved preference — the persistence PP11
+  // claimed to deliver.
+  {
+    clearSystemFlag(FLAG_PRETTYP);   // a user who turned it OFF
+    setSystemFlag(FLAG_PTLINE);      // and turned the T line ON
+    ppcTestDeinit();                 // ... then cold-starts
+    ppcTestOp(ITM_ENTER);            // first dispatch: lazy init runs
+    if(getSystemFlag(FLAG_PRETTYP)) {
+      ppTestFail("FV16 cold start overwrote the user's PPRTY setting");
+    }
+    if(!getSystemFlag(FLAG_PTLINE)) {
+      ppTestFail("FV16 cold start overwrote the user's PTLINE setting");
+    }
+    prettyReset();                   // back to defaults for later tests
+  }
+
+  // FV15 (PP15): the softmenu claims are actually wired — the package's
+  // own menu resolves with its six entries, and both parent slots hold
+  // what the claims registry says they hold. Pins the menu tables the
+  // way the pixel pins pin the renderer: by looking, not by trusting.
+  {
+    const int16_t *ppItems = NULL;
+    int16_t ppCount = 0;
+    for(int16_t m = 0; softmenu[m].menuItem != 0; m++) {
+      if(softmenu[m].menuItem == -MNU_PP) {
+        ppItems = softmenu[m].softkeyItem;
+        ppCount = softmenu[m].numItems;
+        break;
+      }
+    }
+    if(ppItems == NULL) {
+      ppTestFail("FV15 MNU_PP is not registered in the softmenu table");
+    }
+    else {
+      static const int16_t want[6] = { ITM_PSHOW, ITM_PHIST, ITM_PCLR,
+                                       ITM_EQSHW, ITM_PPON,  ITM_PTLIN };
+      if(ppCount != 6) {
+        ppTestFailInt("FV15 MNU_PP size", 6, ppCount);
+      }
+      else {
+        for(int i = 0; i < 6; i++) {
+          if(ppItems[i] != want[i]) {
+            ppTestFailInt("FV15 MNU_PP slot", want[i], ppItems[i]);
+          }
+        }
+      }
+    }
+    // the two parent slots
+    bool_t inDisp = false, inEqn = false;
+    for(int16_t m = 0; softmenu[m].menuItem != 0; m++) {
+      const int16_t *it = softmenu[m].softkeyItem;
+      if(it == NULL) {
+        continue;
+      }
+      for(int16_t k = 0; k < softmenu[m].numItems; k++) {
+        if(softmenu[m].menuItem == -MNU_DISP && it[k] == -MNU_PP)  inDisp = true;
+        if(softmenu[m].menuItem == -MNU_EQN  && it[k] == ITM_EQSHW) inEqn = true;
+      }
+    }
+    if(!inDisp) {
+      ppTestFail("FV15 MNU_PP is not in the DISP menu");
+    }
+    if(!inEqn) {
+      ppTestFail("FV15 EQSHW is not in the EQN menu");
+    }
+  }
+
   ppcTestReset();
   ppTestWriteLonI(REGISTER_X, ppTestFailures);
 }
