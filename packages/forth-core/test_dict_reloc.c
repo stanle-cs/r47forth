@@ -19,6 +19,9 @@
 
 #include "c47.h"
 
+static void normalizeCursorForRescan(void);
+
+
 #include <string.h>
 #include <signal.h>   /* SIGALRM: the fork test turns a child hang into a signal */
 #include <sys/types.h>
@@ -519,13 +522,44 @@ static void restoreTestProgram_OLD_REGION_SURGERY(void)
     }
     numberOfFreeMemoryRegions = keep;
   }
+  normalizeCursorForRescan();   /* see its comment: the rescan calls defineFirstDisplayedStep */
   scanLabelsAndPrograms();
 }
 #endif
 
+/* scanLabelsAndPrograms() FREES and rebuilds programList, recomputes
+ * numberOfPrograms — and then, before returning, calls
+ * defineFirstDisplayedStep(), which does
+ *     firstDisplayedStep = programList[currentProgramNumber - 1].instructionPointer;
+ *     for(i = 1; i < firstDisplayedLocalStepNumber; ++i) ... findNextStep(...)
+ * with NO bounds check on currentProgramNumber. When the rescan lowers the
+ * program count below the cursor these tests were holding, that indexes one
+ * past the end of the fresh programList, loads a garbage instructionPointer,
+ * and the loop dereferences it.
+ *
+ * Clamping AFTER the call cannot work: the read happens inside it. Normalise
+ * first, to values that are safe for any outcome of the rescan — the count
+ * is never less than 1, so program 1 always exists, and a first-displayed
+ * step of 1 makes the loop above run zero times.
+ *
+ * Why this hid: the crash needs BOTH a stale cursor and a
+ * firstDisplayedLocalStepNumber big enough for the loop to run. In the
+ * forth-core-only build it was 0 — garbage stored, never read, suite green.
+ * Load undo-history too and it was 106, so the identical corruption became
+ * 105 dereferences of a bad pointer and a SIGSEGV in
+ * test_fold_round8_window, thirty tests downstream of its cause. The green
+ * suite was hiding this, not disproving it. */
+static void normalizeCursorForRescan(void)
+{
+  currentProgramNumber          = 1;
+  currentLocalStepNumber        = 1;
+  firstDisplayedLocalStepNumber = 1;
+}
+
 static void restoreTestProgram(void)
 {
   if (!testProgOrigBegin) {
+    normalizeCursorForRescan();   /* see its comment: the rescan calls defineFirstDisplayedStep */
     scanLabelsAndPrograms();
     return;
   }
@@ -548,6 +582,7 @@ static void restoreTestProgram(void)
   /* Re-scan labels and programs; recomputes firstFreeProgramByte and
    * freeProgramBytes from the program bytes. */
   probeListPtrs("restoreTestProgram");
+  normalizeCursorForRescan();
   scanLabelsAndPrograms();
 }
 
@@ -603,6 +638,7 @@ static bool writeTestProgram(const uint8_t *bytes, uint16_t n)
   beginOfProgramMemory[n + 1] = 0xFF;
   firstFreeProgramByte = beginOfProgramMemory + n;
   freeProgramBytes = ((uint8_t *)(ram + RAM_SIZE_IN_BLOCKS) - firstFreeProgramByte) - 2;
+  normalizeCursorForRescan();   /* see its comment: the rescan calls defineFirstDisplayedStep */
   scanLabelsAndPrograms();
   return true;
 }
