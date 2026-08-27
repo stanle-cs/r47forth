@@ -2000,6 +2000,74 @@ void prettyTestEquation(uint16_t unusedButMandatoryParameter) {
       }
     }
 
+    // EQ22 (capacity): the ultimate nesting — an integral wrapping a
+    // second derivative of [a Σ-with-√-fraction over a multiplication,
+    // times a ∏ with a nested power fraction]. Pins the raised
+    // PP_MAX_DEPTH and the 64-node pool: it must parse, measure, use
+    // most of the pool, and fit the EQSHW band at full size.
+    {
+      uint8_t root;
+      ppReset();
+      static const char ultimate[] =
+        "INTEG(DERIV("
+          "SUM(" "\xa2\x1a" "X/(X+1);X;1;10)/(X" "\x80\xd7" "(X+1))"
+          "\x80\xd7" "PROD(1+1/(2+X" "\xa1\x62" ");X;1;5)"
+        ";X;2;2);X;0;1)";
+      ppReset();
+      if(!ppqParse(ultimate, PP_FONT_STANDARD, PP_FONT_STANDARD, &root)) {
+        ppTestFail("EQ22 ultimate parse");
+      }
+      else if(!ppMeasure(root, 0)) {
+        ppTestFail("EQ22 ultimate measure");
+      }
+      else {
+        const ppNode_t *n = ppNodeAt(root);
+        int16_t h = (int16_t)(n->ascent + n->descent);
+        if(h < 80 || h > 147) {
+          ppTestFailInt("EQ22 height out of band", 147, h);
+        }
+        if(n->width > 396) {
+          ppTestFailInt("EQ22 too wide", 396, n->width);
+        }
+        uint8_t used = 0;
+        while(used < PP_POOL_NODES && ppNodeAt(used) != NULL) {
+          used++;
+        }
+        if(used < 45) {
+          ppTestFailInt("EQ22 not the big tree", 45, used);
+        }
+      }
+    }
+
+    // EQ23-EQ25: the stored-alphabet arms EQSHW now reads (the display
+    // string truncates long equations for the strip — found by the
+    // ultimate demo declining through the real surface)
+    {
+      uint8_t root;
+      ppReset();
+      if(!ppqParse("X^2/(X+1)", PP_FONT_STANDARD, PP_FONT_TINY, &root)) {
+        ppTestFail("EQ23 stored-form parse");
+      }
+      else {
+        ppfTestExpect("EQ23 caret exponent", root, "F(S(x|2)|[x + 1])");
+      }
+      ppReset();
+      if(!ppqParse("F:1/X", PP_FONT_STANDARD, PP_FONT_TINY, &root)) {
+        ppTestFail("EQ24 labeled parse");
+      }
+      else {
+        ppfTestExpect("EQ24 label skipped", root, "F(1|x)");
+      }
+      ppReset();
+      if(!ppqParse("SUM(1+X;X;1;5)", PP_FONT_STANDARD, PP_FONT_TINY, &root)) {
+        ppTestFail("EQ25 parse");
+      }
+      else {
+        // an additive body scopes in parens or the operator misreads
+        ppfTestExpect("EQ25 additive body scoped", root, "B(P([1 + x])|[x = 1]|5)");
+      }
+    }
+
     currentSolverStatus = hadStatus;
     currentSolverVariable = hadVar;
     currentSolverProgram = hadProgram;

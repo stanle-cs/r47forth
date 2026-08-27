@@ -27,9 +27,12 @@ enum { PP_RUN = 0, PP_HBOX = 1, PP_FRAC = 2, PP_RAD = 3, PP_SUP = 4, PP_PAREN = 
 enum { PP_FONT_NUMERIC = 0, PP_FONT_STANDARD = 1, PP_FONT_TINY = 2 };
 
 #define PP_NONE        0xFF
-#define PP_POOL_NODES  48
+#define PP_POOL_NODES  72
 #define PP_TEXT_BYTES  512
-#define PP_MAX_DEPTH   6
+// 12, not 6: an integral wrapping a derivative of a big-operator
+// fraction legitimately nests 8-9 boxes deep; the node pool is the
+// real capacity bound, the depth cap only stops runaway recursion
+#define PP_MAX_DEPTH   12
 
 typedef struct {
   uint8_t  kind;         ///< PP_RUN / PP_HBOX / PP_FRAC

@@ -2,6 +2,35 @@
 
 Non-normative amendment trail. DESIGN.md is authoritative.
 
+## 2026-08-26 — ultimate nesting (Stan's stress request, round 3)
+
+- Stan asked for the full tower: Σ over a multiplication, times ∏,
+  inside d²/dx², inside ∫. Three capacity walls fell in order:
+  PP_MAX_DEPTH 6 (the tower nests 9 boxes; now 12 — the pool is the
+  real bound), PP_POOL_NODES 48 then 64 (the DERIV layer alone is 58
+  nodes; the ∫ wrapper landed exactly ON the 64 cap — now 72, +384 B
+  BSS), and construct limits typeset at full body size in EQSHW
+  (limits/scripts are now always TINY, and the '/' deep-refont is
+  guarded when the caller's fonts are equal so it cannot flatten a
+  construct's tiny limits back to body size).
+- **The demo declined through the real surface and exposed a general
+  cap: EQSHW could never show an equation longer than the strip.**
+  fnPrettyEqShow fed ppqShowRender from showEquation's display string,
+  which is built for the 400 px strip and truncates with an ellipsis —
+  the strict parser then rightly declined (the EQ4 rule doing its
+  job). EQSHW now reads the STORED text; the stored alphabet needed a
+  '^' arm (which builds a real 2D superscript, better than the
+  display's glyph run) and the NAME: label-prefix skip parseEquation
+  itself uses.
+- An additive body under a big operator misreads without parens
+  (∏ 1+x could be (∏ 1)+x): HBOX bodies carrying a +/- joiner now
+  scope in parens (EQ25, MUT-52). Fractions, powers and radicals
+  already scope visually.
+- Evaluation depth stays capped at 2 (the ruled trade-off: nested
+  delegate engines on the device stack), so the full tower RENDERS but
+  declines to evaluate below depth 2 — the render and eval limits are
+  independent by design.
+
 ## 2026-08-26 — big-operator letterforms (Stan's review, round 2)
 
 - Stan asked whether the hand-drawn operators could match the real

@@ -143,6 +143,32 @@ static uint8_t ppqRun(const char *s, uint8_t fontId) {
   return ppNewRun(s, (uint16_t)strlen(s), fontId);
 }
 
+// An additive body under a big operator misreads without parens
+// (PROD 1+x could be (PROD 1)+x): wrap when the top level carries a
+// +/- joiner. Fractions, powers and radicals scope visually already.
+static uint8_t ppqScopeBody(ppqCtx_t *c, uint8_t body, uint8_t font) {
+  const ppNode_t *b = ppNodeAt(body);
+  if(b == NULL || b->kind != PP_HBOX) {
+    return body;
+  }
+  for(uint8_t ch = b->firstChild; ch != PP_NONE; ch = ppNodeAt(ch)->nextSibling) {
+    const ppNode_t *cn = ppNodeAt(ch);
+    if(cn->kind == PP_RUN) {
+      const char *t = ppTextAt(cn->textOff);
+      if(strchr(t, '+') != NULL || strchr(t, '-') != NULL) {
+        uint8_t p = ppNewBox(PP_PAREN, font);
+        if(p == PP_NONE) {
+          c->failed = true;
+          return PP_NONE;
+        }
+        ppAppendChild(p, body);
+        return p;
+      }
+    }
+  }
+  return body;
+}
+
 // PP14: the equation-language big operators render as their 2D shapes.
 // A probe that does not match consumes nothing; a matched construct that
 // is malformed fails the whole parse (strict declines).
@@ -237,30 +263,37 @@ static uint8_t ppqBigopConstruct(ppqCtx_t *c, uint8_t font, uint8_t tinyF) {
   }
 
   c->fracSeen = true;
+  // limits and scripts always typeset TINY — the big-operator
+  // convention; tinyF only governs the strip's fraction shrink
   if(kind == 0 || kind == 1) {
     uint8_t big = ppNewBox(PP_BIGOP, font);
-    uint8_t under = ppNewBox(PP_HBOX, tinyF);
-    uint8_t eqRun = ppqRun("=", tinyF);
+    uint8_t under = ppNewBox(PP_HBOX, PP_FONT_TINY);
+    uint8_t eqRun = ppqRun("=", PP_FONT_TINY);
     if(big == PP_NONE || under == PP_NONE || eqRun == PP_NONE) {
       c->failed = true;
       return PP_NONE;
     }
     ppSetBoxTag(big, tag);
-    ppSetFontDeep(fromN, tinyF);
-    ppSetFontDeep(toN, tinyF);
+    ppSetFontDeep(varRun, PP_FONT_TINY);
+    ppSetFontDeep(fromN, PP_FONT_TINY);
+    ppSetFontDeep(toN, PP_FONT_TINY);
     ppAppendChild(under, varRun);
     ppAppendChild(under, eqRun);
     ppAppendChild(under, fromN);
     if(stepN != PP_NONE) {
       // a non-unit step is part of the range: show it
-      uint8_t dRun = ppqRun("," STD_DELTA, tinyF);
+      uint8_t dRun = ppqRun("," STD_DELTA, PP_FONT_TINY);
       if(dRun == PP_NONE) {
         c->failed = true;
         return PP_NONE;
       }
-      ppSetFontDeep(stepN, tinyF);
+      ppSetFontDeep(stepN, PP_FONT_TINY);
       ppAppendChild(under, dRun);
       ppAppendChild(under, stepN);
+    }
+    body = ppqScopeBody(c, body, font);
+    if(body == PP_NONE) {
+      return PP_NONE;
     }
     ppAppendChild(big, body);
     ppAppendChild(big, under);
@@ -277,8 +310,12 @@ static uint8_t ppqBigopConstruct(ppqCtx_t *c, uint8_t font, uint8_t tinyF) {
       return PP_NONE;
     }
     ppSetBoxTag(big, tag);
-    ppSetFontDeep(fromN, tinyF);
-    ppSetFontDeep(toN, tinyF);
+    ppSetFontDeep(fromN, PP_FONT_TINY);
+    ppSetFontDeep(toN, PP_FONT_TINY);
+    body = ppqScopeBody(c, body, font);
+    if(body == PP_NONE) {
+      return PP_NONE;
+    }
     ppAppendChild(hb, body);
     ppAppendChild(hb, dRun);
     ppAppendChild(hb, varRun2);
@@ -310,8 +347,8 @@ static uint8_t ppqBigopConstruct(ppqCtx_t *c, uint8_t font, uint8_t tinyF) {
     uint8_t varRun2 = ppqVarRun(c, varStart, varEnd, font);
     uint8_t par = ppNewBox(PP_PAREN, font);
     uint8_t sub = ppNewBox(PP_SUB, font);
-    uint8_t script = ppNewBox(PP_HBOX, tinyF);
-    uint8_t eqRun = ppqRun("=", tinyF);
+    uint8_t script = ppNewBox(PP_HBOX, PP_FONT_TINY);
+    uint8_t eqRun = ppqRun("=", PP_FONT_TINY);
     if(hb == PP_NONE || frac == PP_NONE || num == PP_NONE || denBox == PP_NONE
         || dRun == PP_NONE || varRun2 == PP_NONE || par == PP_NONE
         || sub == PP_NONE || script == PP_NONE || eqRun == PP_NONE) {
@@ -331,8 +368,8 @@ static uint8_t ppqBigopConstruct(ppqCtx_t *c, uint8_t font, uint8_t tinyF) {
     ppAppendChild(frac, num);
     ppAppendChild(frac, denBox);
     ppAppendChild(par, body);
-    ppSetFontDeep(varRun, tinyF);
-    ppSetFontDeep(fromN, tinyF);
+    ppSetFontDeep(varRun, PP_FONT_TINY);
+    ppSetFontDeep(fromN, PP_FONT_TINY);
     ppAppendChild(script, varRun);
     ppAppendChild(script, eqRun);
     ppAppendChild(script, fromN);
@@ -409,6 +446,29 @@ static uint8_t ppqFactor(ppqCtx_t *c, uint8_t font, uint8_t tinyF) {
   if(c->failed || n == PP_NONE) {
     return PP_NONE;
   }
+  // the STORED form spells exponents with '^' (the display string
+  // converts digits to sup glyphs, but EQSHW reads the stored text so
+  // long equations never truncate): build a real 2D superscript
+  {
+    int16_t nx;
+    if(ppqPeek(c, &nx) == '^') {
+      c->pos = nx;
+      uint8_t exp = ppqFactor(c, font, tinyF);
+      if(c->failed || exp == PP_NONE) {
+        c->failed = true;
+        return PP_NONE;
+      }
+      uint8_t sup = ppNewBox(PP_SUP, font);
+      if(sup == PP_NONE) {
+        c->failed = true;
+        return PP_NONE;
+      }
+      ppAppendChild(sup, n);
+      ppAppendChild(sup, ppqUnwrapParen(exp));   // the raise scopes
+      c->fracSeen = true;
+      return sup;
+    }
+  }
   // attach an already-superscript exponent run verbatim
   int16_t start = c->pos, next;
   while(c->pos < c->len && PPQ_IS_SUP(ppqPeek(c, &next))) {
@@ -447,11 +507,15 @@ static uint8_t ppqTerm(ppqCtx_t *c, uint8_t font, uint8_t tinyF) {
         return PP_NONE;
       }
       // children re-font to tiny so the stack fits the 23 px strip row;
-      // parens unwrap under the bar (it scopes, textbook style)
+      // parens unwrap under the bar (it scopes, textbook style). When
+      // the caller's fonts are equal (EQSHW) the deep re-font would
+      // only flatten a construct's tiny limits — skip it.
       uint8_t num = ppqUnwrapParen(n);
       uint8_t dn = ppqUnwrapParen(den);
-      ppSetFontDeep(num, tinyF);
-      ppSetFontDeep(dn, tinyF);
+      if(tinyF != font) {
+        ppSetFontDeep(num, tinyF);
+        ppSetFontDeep(dn, tinyF);
+      }
       ppAppendChild(frac, num);
       ppAppendChild(frac, dn);
       c->fracSeen = true;
@@ -544,6 +608,22 @@ bool_t ppqParse(const char *src, uint8_t ctxFont, uint8_t childFont, uint8_t *ro
   c.len = (int16_t)strlen(src);
   c.fracSeen = false;
   c.failed = false;
+
+  // a labeled equation ("NAME:expr") starts after the ':' — the same
+  // bounded scan parseEquation itself uses
+  {
+    int16_t p = 0;
+    for(int i = 0; i < 7 && p < c.len; i++) {
+      p += ((uint8_t)src[p] & 0x80) ? 2 : 1;
+      if(p < c.len && src[p] == ':') {
+        c.pos = (int16_t)(p + 1);
+        break;
+      }
+      if(p < c.len && src[p] == '(') {
+        break;
+      }
+    }
+  }
 
   uint8_t n = ppqExpr(&c, ctxFont, childFont);
   if(c.failed || n == PP_NONE) {
@@ -731,7 +811,14 @@ void fnPrettyEqShow(uint16_t unusedButMandatoryParameter) {
   if(numberOfFormulae == 0 || currentFormula >= numberOfFormulae) {
     return;   // nothing stored to show
   }
-  bool_t cursorShown, rightEllipsis;
-  showEquation(currentFormula, 0, EQUATION_NO_CURSOR, true, &cursorShown, &rightEllipsis);
-  ppqShowRender(tmpString);   // dryRun above filled tmpString (read-only here)
+  // The STORED text, not showEquation's display string: the display
+  // pipeline is built for the 400 px strip and TRUNCATES long
+  // equations with an ellipsis — which the strict parser then rightly
+  // declines, capping EQSHW at strip-width formulas (found by the
+  // ultimate-nesting demo). The stored alphabet differs only in '^'
+  // (a parser arm) and the label prefix (skipped in ppqParse).
+  if(allFormulae[currentFormula].pointerToFormulaData == C47_NULL) {
+    return;
+  }
+  ppqShowRender((const char *)TO_PCMEMPTR(allFormulae[currentFormula].pointerToFormulaData));
 }

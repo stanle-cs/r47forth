@@ -216,6 +216,8 @@ after restore.
 | MUT-48 | denominator bar clearance regressed (polish) | M1/M2 (descent 6), S2/EQ5 (bars move) |
 | MUT-49 | the X-to-x typeset map dropped (polish) | EQ1/EQ3/EQ10-12/EQ21 (X reappears) |
 | MUT-50 | ∫ hooks flattened to a bare bar (polish) | P5 (hook reach probes) |
+| MUT-51 | PP_MAX_DEPTH regressed to 6 (stress) | EQ22 (the ultimate nesting fails to measure) |
+| MUT-52 | additive big-operator bodies lose their parens (stress) | EQ25 (PROD 1+x misreads) |
 
 Two lessons from the first mutation run, kept for honesty: (a) the original
 MUT-4 ("drop the dtReal34 type gate") stays GREEN — a non-real register's
@@ -250,6 +252,24 @@ fixed — the forth-core 2026-07-21 rule applies unchanged.
   pretty views only; other names keep their letters — an early draft
   lowercased EVERY single letter and turned A+B into a+b, caught by
   EQ2 staying pinned to caps).
+
+### Ultimate-nesting additions (stress round, Stan's request)
+
+- **EQ22** — the full tower `INTEG(DERIV(SUM(√x/(x+1))/(x×(x+1))
+  ×PROD(1+1/(2+x²))))` parses, measures, uses ≥45 pool nodes and fits
+  the EQSHW band at full size. Capacity raised for exactly this class:
+  PP_MAX_DEPTH 6→12 (the pool is the real bound), PP_POOL_NODES
+  48→72 (+384 B BSS; the DERIV layer alone measured 58 nodes).
+- **EQ23-EQ25** — the stored-alphabet arms: '^' builds a real 2D
+  superscript, a NAME: label prefix skips, an additive construct body
+  scopes in parens. EQSHW now reads the STORED equation text —
+  showEquation's display string is built for the 400 px strip and
+  TRUNCATES long equations with an ellipsis, which the strict parser
+  then rightly declined: the ultimate demo found EQSHW silently capped
+  at strip-width formulas. Construct limits/scripts always typeset
+  TINY (the operator convention; tinyF only governs the strip's
+  fraction shrink, and the '/' deep-refont is skipped when the
+  caller's fonts are equal so it cannot flatten them).
 
 ## Blast radius and measurements
 
