@@ -1112,6 +1112,36 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
     }
   }
 
+  // T25 (AUDIT R1-10): a formula too WIDE for the screen must still be
+  // in the browser and pannable. It used to be rejected at both font
+  // rungs, so an ordinary long sum was not panned, not truncated, not
+  // marked — absent, and as the only row the band came back with zero
+  // lit pixels. Height stays a hard limit; width does not.
+  {
+    ppcTestReset();
+    ppcTestType("1234567890123456");
+    ppcTestOp(ITM_ENTER);
+    ppcTestType("2345678901234567");
+    ppcTestOp(ITM_ADD);
+    ppcTestType("3456789012345678");
+    ppcTestOp(ITM_ADD);
+    ppcTestOp(ITM_CLX);                 // file it
+    ppcTestExpectHist("T25 the wide formula was filed", 1);
+    {
+      uint8_t root;
+      int16_t asc, h;
+      if(!ppfBuildRow(0, 0, &root, &asc, &h)) {
+        ppTestFail("T25 a wide row is still dropped instead of panned");
+      }
+      else {
+        const ppNode_t *n = ppNodeAt(root);
+        if(n->width <= SCREEN_WIDTH - 8) {
+          ppTestFail("T25 fixture is not actually wide enough to exercise panning");
+        }
+      }
+    }
+  }
+
   // T16: abort while ASLIFT is set (straight after an operator result) —
   // the deferred-lift design absorbs the upstream undo() for free; a
   // shadow that lifts at NIM open strands the tree one slot up
@@ -1264,6 +1294,43 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
       }
     }
 
+    // B11 (AUDIT R1-9): the browser must be able to RECALL a formula
+    // containing a big operator. Two decoders read one token stream —
+    // the renderer knew all eight tokens, the recall decoder knew seven
+    // and bailed on the eighth, before reaching the result that follows
+    // it. So the row displayed with its "= result" and ENTER silently
+    // put nothing in X.
+    ppcTestReset();
+    ppcTestType("1");
+    ppcTestOp(ITM_ENTER);
+    ppcTestType("5");
+    ppcTestOp(ITM_ENTER);
+    ppcTestType("1");
+    ppcTestOpParam(ITM_SIGMAn, (uint16_t)bigLbl);   // X = 55
+    ppcTestType("2");
+    ppcTestOp(ITM_ENTER);
+    ppcTestType("3");
+    ppcTestOp(ITM_ADD);                             // supersede -> files the Sigma WITH its result
+    if(ppcHistoryCount() < 1) {
+      ppTestFail("B11 the sigma formula was not filed");
+    }
+    else {
+      uint16_t hadMode = calcMode;
+      reallocateRegister(REGISTER_X, dtReal34, 0, amNone);
+      int32ToReal34(-1, REGISTER_REAL34_DATA(REGISTER_X));   // a value the recall must replace
+      prettyBrowser(NOPARAM);
+      prettyBrowserDown();          // off the live row, onto the filed sigma
+      prettyBrowserEnter();
+      real34_t want55;
+      int32ToReal34(55, &want55);
+      if(getRegisterDataType(REGISTER_X) != dtReal34
+          || !real34CompareEqual(REGISTER_REAL34_DATA(REGISTER_X), &want55)) {
+        ppTestFail("B11 ENTER did not recall the big-operator result into X");
+      }
+      calcMode = hadMode;
+      lastErrorCode = 0;
+    }
+
     #if defined(OPTION_INFSUMS)
     // B9: the early-stop sum captures like any other sum — it reads the
     // same three stack levels, so its node carries the real limits the
@@ -1276,11 +1343,19 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
     ppcTestOp(ITM_ENTER);
     ppcTestType("1");
     ppcTestOpParam(ITM_SIGMAnINF, (uint16_t)bigLbl);
-    if(lastErrorCode == ERROR_NONE) {
+    // AUDIT R1-11 (fixture rule): this assertion used to sit under
+    // `if(lastErrorCode == ERROR_NONE)` and the error was then cleared,
+    // so if the dispatch ever failed the test asserted NOTHING and still
+    // passed. A fixture must prove it reached the state it claims to
+    // test. Assert the run succeeded, then assert what it produced.
+    if(lastErrorCode != ERROR_NONE) {
+      ppTestFailInt("B9 the infinite sum did not run", 0, (int32_t)lastErrorCode);
+      lastErrorCode = 0;
+    }
+    else {
       sprintf(expect, "{#,#}%s", indexOfItems[ITM_SIGMAnINF].itemCatalogName);
       ppcTestExpectSig("B9 infinite sum captured", expect);
     }
-    lastErrorCode = 0;
     #endif // OPTION_INFSUMS
 
     // B6: the dispatch that actually integrates: PGMINT preselects the

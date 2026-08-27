@@ -2045,8 +2045,8 @@ TO_QSPI const item_t indexOfItems[] = {
 /*  215 */  { fnPrettyTlineToggle,             NOPARAM,                     "PTLIN",                                       "PTLIN",                                        (0 << TAM_MAX_BITS) |     0, CAT_FNCT | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
 /*  216 */  { fnPrettyEqShow,                  NOPARAM,                     "EQSHW",                                       "EQSHW",                                        (0 << TAM_MAX_BITS) |     0, CAT_FNCT | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
 /*  217 */  { itemToBeCoded,                   NOPARAM,                     "PP",                                          "PP",                                          (0 << TAM_MAX_BITS) |     0, CAT_MENU | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
-/*  218 */  { itemToBeCoded,                   NOPARAM,                     "0218",                                        "0218",                                        (0 << TAM_MAX_BITS) |     0, CAT_FREE | SLS_ENABLED   | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
-/*  219 */  { itemToBeCoded,                   NOPARAM,                     "0219",                                        "0219",                                        (0 << TAM_MAX_BITS) |     0, CAT_FREE | SLS_ENABLED   | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
+/*  218 */  { fnGetSystemFlag,                 0x8071/*FLAG_PRETTYP*/,      "PPRTY",                                        "PPRTY",                                        (0 << TAM_MAX_BITS) |     0, CAT_SYFL | SLS_ENABLED   | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
+/*  219 */  { fnGetSystemFlag,                 0x8072/*FLAG_PTLINE*/,       "PTLINE",                                        "PTLINE",                                        (0 << TAM_MAX_BITS) |     0, CAT_SYFL | SLS_ENABLED   | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
 
 
 // Conversions

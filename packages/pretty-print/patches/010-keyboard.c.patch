@@ -1,8 +1,30 @@
 diff --git a/src/c47/keyboard.c b/src/c47/keyboard.c
-index bc44026016e94a8865b8acc886386341596641c6..6cd01d7bccc5f6c3e6c3cdc4d59eef6dd6635fa9 100644
+index bc44026016e94a8865b8acc886386341596641c6..60e4bd240d0f4f1b57dff8ff42b26fe659205e20 100644
 --- a/src/c47/keyboard.c
 +++ b/src/c47/keyboard.c
-@@ -3577,6 +3577,11 @@ void fnKeyEnter(uint16_t unusedButMandatoryParameter) {
+@@ -1688,6 +1688,21 @@ endReturnTrue:
+         }
+       }
+     }
++    // AUDIT R1-12. The browser must resolve its OWN keys. Both gates
++    // that admitted calcMode 20 lived in sibling packages (forth-core's
++    // rewritten range on the condition above, undo-history's case
++    // lists), so a solo pretty-print build fell straight through to the
++    // bug screen on every key inside PHIST — and EXIT, being a key,
++    // came back into it. This arm is deliberately placed here rather
++    // than added to the condition above: forth-core rewrites that exact
++    // line, and two packages editing one line cannot compose. In the
++    // combined build this is unreachable (the sibling's range catches
++    // 20 first) and correct either way.
++    else if(calcMode == CM_PRETTY_BROWSER) {
++      result = shiftF ? key->fShifted :
++               shiftG ? key->gShifted :
++                        key->primary;
++    }
+     else {
+       displayBugScreen(bugScreenItemNotDetermined);
+       result = 0;
+@@ -3577,6 +3592,11 @@ void fnKeyEnter(uint16_t unusedButMandatoryParameter) {
          break;
        }
  
@@ -14,7 +36,7 @@ index bc44026016e94a8865b8acc886386341596641c6..6cd01d7bccc5f6c3e6c3cdc4d59eef6d
        case CM_TIMER: {
          fnRegAddTimerApp(NOPARAM);     //ENTER
          break;
-@@ -3938,6 +3943,11 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
+@@ -3938,6 +3958,11 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
          break;
        }
  
@@ -26,7 +48,7 @@ index bc44026016e94a8865b8acc886386341596641c6..6cd01d7bccc5f6c3e6c3cdc4d59eef6d
        case CM_ASN_BROWSER: {
          if(previousCalcMode == CM_AIM || tam.alpha) {
            if(currentMenu() == -MNU_AIMCATALOG) {
-@@ -4348,6 +4358,11 @@ void fnKeyBackspace(uint16_t unusedButMandatoryParameter) {
+@@ -4348,6 +4373,11 @@ void fnKeyBackspace(uint16_t unusedButMandatoryParameter) {
          break;
        }
  
@@ -38,7 +60,7 @@ index bc44026016e94a8865b8acc886386341596641c6..6cd01d7bccc5f6c3e6c3cdc4d59eef6d
        case CM_BUG_ON_SCREEN:
        case CM_LISTXY:
        case CM_GRAPH:
-@@ -4612,6 +4627,11 @@ void fnKeyUp(uint16_t unusedButMandatoryParameter) {
+@@ -4612,6 +4642,11 @@ void fnKeyUp(uint16_t unusedButMandatoryParameter) {
          break;
        }
  
@@ -50,7 +72,7 @@ index bc44026016e94a8865b8acc886386341596641c6..6cd01d7bccc5f6c3e6c3cdc4d59eef6d
        case CM_PEM: {
          resetAlphaSelectionBuffer();
          if(getSystemFlag(FLAG_ALPHA) && alphaCase == AC_LOWER) {
-@@ -4830,6 +4850,11 @@ void fnKeyDown(uint16_t unusedButMandatoryParameter) {
+@@ -4830,6 +4865,11 @@ void fnKeyDown(uint16_t unusedButMandatoryParameter) {
          break;
        }
  
@@ -62,7 +84,7 @@ index bc44026016e94a8865b8acc886386341596641c6..6cd01d7bccc5f6c3e6c3cdc4d59eef6d
        case CM_PEM: {
          resetAlphaSelectionBuffer();
          if(getSystemFlag(FLAG_ALPHA) && alphaCase == AC_UPPER) {
-@@ -4931,6 +4956,11 @@ void fnKeyDotD(uint16_t unusedButMandatoryParameter) {
+@@ -4931,6 +4971,11 @@ void fnKeyDotD(uint16_t unusedButMandatoryParameter) {
          break;
        }
  

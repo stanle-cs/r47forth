@@ -78,10 +78,16 @@ static void pbPaint(void) {
       if(row == pbSelection) {
         lcd_fill_rect(0, (uint32_t)y, 3, (uint32_t)h, LCD_EMPTY_VALUE);
         const ppNode_t *n = ppNodeAt(root);
-        if(n->width > SCREEN_WIDTH - 12 && pbPan > 0) {
-          int16_t maxPan = (int16_t)(n->width - (SCREEN_WIDTH - 12));
+        // AUDIT R1-10. This used to be the only place a wide row was
+        // handled, but the row builder rejected everything wider than
+        // 392 px, leaving a 4 px band in which pan could engage at all —
+        // and a 60 px step wrapped it to 0 on the next paint. Rows are
+        // now accepted at any width, so this is the real arm.
+        int16_t visible = (int16_t)(SCREEN_WIDTH - 12);
+        if(n->width > visible) {
+          int16_t maxPan = (int16_t)(n->width - visible);
           if(pbPan > maxPan) {
-            pbPan = 0;   // wrap
+            pbPan = maxPan;   // clamp at the right edge rather than snapping back
           }
           x = (int16_t)(8 - pbPan);
         }
@@ -170,6 +176,16 @@ static const uint8_t *pbFindResult(const uint8_t *entry, uint8_t *dataType, uint
       case PPT_TKO1:
       case PPT_TKO2:
         off += 2;
+        break;
+      // AUDIT R1-9. Two decoders read this one stream: ppfBuildEntry
+      // knows all eight tokens and rendered the row, while this one knew
+      // seven and bailed on the eighth — BEFORE reaching the TKRES that
+      // follows it. So every history entry containing a big operator
+      // rendered with its "= result" and then silently refused to recall
+      // it: ENTER closed the browser and put nothing in X. The two
+      // decoders must agree on the token set.
+      case PPT_TKBIG:
+        off = (uint16_t)(off + 4 + 16);   // item u16, label u16, payload 16
         break;
       default:
         return NULL;

@@ -650,8 +650,19 @@ bool_t ppfBuildRow(uint8_t row, uint8_t haveCurrent, uint8_t *rootOut, int16_t *
     }
     const ppNode_t *n = ppNodeAt(root);
     int16_t h = (int16_t)(n->ascent + n->descent);
-    if(n->width > SCREEN_WIDTH - 8 || h > PPF_BAND_BOTTOM - PPF_BAND_TOP + 1) {
-      continue;   // try the tiny rung; a full-band overflow there skips the row
+    // AUDIT R1-10. HEIGHT is a hard limit — a row taller than the band
+    // cannot be shown at all. WIDTH is not: the browser can pan
+    // sideways. Rejecting on width at BOTH rungs meant an ordinary long
+    // formula (three 16-digit numbers added: 724 px standard, 550 px
+    // tiny) was not panned, not truncated, not marked — it was ABSENT,
+    // and with it the only row the band came back with no lit pixels at
+    // all. So width only sends us down a rung; at the last rung the row
+    // is accepted however wide it is, and panning carries it.
+    if(h > PPF_BAND_BOTTOM - PPF_BAND_TOP + 1) {
+      continue;   // too tall even here: try tiny, then give up
+    }
+    if(n->width > SCREEN_WIDTH - 8 && rung == 0) {
+      continue;   // too wide for this rung; the tiny one may fit
     }
     *rootOut = root;
     *ascOut = n->ascent;

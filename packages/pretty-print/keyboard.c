@@ -1688,6 +1688,21 @@ endReturnTrue:
         }
       }
     }
+    // AUDIT R1-12. The browser must resolve its OWN keys. Both gates
+    // that admitted calcMode 20 lived in sibling packages (forth-core's
+    // rewritten range on the condition above, undo-history's case
+    // lists), so a solo pretty-print build fell straight through to the
+    // bug screen on every key inside PHIST — and EXIT, being a key,
+    // came back into it. This arm is deliberately placed here rather
+    // than added to the condition above: forth-core rewrites that exact
+    // line, and two packages editing one line cannot compose. In the
+    // combined build this is unreachable (the sibling's range catches
+    // 20 first) and correct either way.
+    else if(calcMode == CM_PRETTY_BROWSER) {
+      result = shiftF ? key->fShifted :
+               shiftG ? key->gShifted :
+                        key->primary;
+    }
     else {
       displayBugScreen(bugScreenItemNotDetermined);
       result = 0;
