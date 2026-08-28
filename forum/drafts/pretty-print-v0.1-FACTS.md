@@ -52,6 +52,15 @@ The equation language gains four constructs, argument separator `;`:
     INTEG(body;var;from;to)
     DERIV(body;var;at[;order])
 
+Input syntax note, verified 2026-08-27: the square root is a FUNCTION
+ALIAS and takes brackets, so `\xa2\x1a(n)` not `\xa2\x1a n`; powers are
+`^`, because the superscript-2 glyph appears in equation.c only in
+commented-out lines and is display output, not input. Variable names may
+be lowercase, and lowercase evaluates identically. Construct indices
+shadow an outer variable of the same name correctly — the same-variable
+and distinct-variable forms of the capacity expression agree to 34
+digits.
+
 ## Numbers (all measured)
 
 Flash cost of the package, device build, measured as the difference
@@ -162,7 +171,9 @@ working set under `pretty-print-archive/` (they previously lived only in
 
 1. `pp-attach-1-stack-and-browser.png` — the everyday view and the
    browser, stacked with a rule between them. Neither frame is cropped.
-2. `pp-attach-2-nesting.png` — the capacity case, drawn by EQSHW.
+2. `pp-attach-2-nesting.png` — the capacity case, drawn by EQSHW, retaken
+   2026-08-27 in typeable lowercase form. Evaluates to
+   1.228593777031159439372254772764558 (EQ33).
 
 Provenance and the tests that pin each behaviour are recorded in
 `forum/screenshots/README.md`.

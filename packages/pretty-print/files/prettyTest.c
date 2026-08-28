@@ -2788,14 +2788,27 @@ void prettyTestEquation(uint16_t unusedButMandatoryParameter) {
     // times a ∏ with a nested power fraction]. Pins the raised
     // PP_MAX_DEPTH and the 64-node pool: it must parse, measure, use
     // most of the pool, and fit the EQSHW band at full size.
+    //
+    // The fixture is the string a user can actually TYPE, and EQ33
+    // evaluates this same expression. It used to be written in the
+    // DISPLAY alphabet — bare "\xa2\x1a" and the superscript-2 glyph —
+    // which renders identically but is not input syntax: the root is a
+    // function alias needing parentheses (functionAlias[], beside log10)
+    // and the superscript glyph appears in equation.c only in
+    // commented-out lines, where the power operator is '^'. So the old
+    // fixture drew a formula that could never be computed, and this pin
+    // said nothing about that because it never evaluated it. Indices are
+    // lowercase and DISTINCT from the outer variable: the constructs
+    // shadow correctly (same-variable and distinct-variable forms agree
+    // to 34 digits), but distinct indices let a reader see that.
     {
       uint8_t root;
       ppReset();
       static const char ultimate[] =
         "INTEG(DERIV("
-          "SUM(" "\xa2\x1a" "X/(X+1);X;1;10)/(X" "\x80\xd7" "(X+1))"
-          "\x80\xd7" "PROD(1+1/(2+X" "\xa1\x62" ");X;1;5)"
-        ";X;2;2);X;0;1)";
+          "SUM(" "\xa2\x1a" "(n)/(n+1);n;1;10)/(x" "\x80\xd7" "(x+1))"
+          "\x80\xd7" "PROD(1+1/(2+m^2);m;1;5)"
+        ";x;2;2);x;0;1)";
       ppReset();
       if(!ppqParse(ultimate, PP_FONT_STANDARD, PP_FONT_STANDARD, &root)) {
         ppTestFail("EQ22 ultimate parse");
@@ -3062,6 +3075,35 @@ void prettyTestEquation(uint16_t unusedButMandatoryParameter) {
         stringToReal34("1e-10", &tol);
         if(!real34CompareLessThan(&diff, &tol)) {
           ppTestFail("EQ26 tower != 7/24");
+        }
+      }
+    }
+    lastErrorCode = 0;
+
+    // EQ33 (2026-08-27): the capacity expression EQ22 renders must also
+    // evaluate. Hand-checked factor by factor: the sum is 3.759490707,
+    // the product 1.857588228, and the second derivative of 1/(x(x+1))
+    // at x=2 is 0.175925926; the integral of that constant over [0,1]
+    // leaves it unchanged.
+    setEquation(currentFormula,
+      "INTEG(DERIV("
+        "SUM(" "\xa2\x1a" "(n)/(n+1);n;1;10)/(x" "\x80\xd7" "(x+1))"
+        "\x80\xd7" "PROD(1+1/(2+m^2);m;1;5)"
+      ";x;2;2);x;0;1)");
+    lastErrorCode = 0;
+    fnEqCalc(NOPARAM);
+    {
+      real34_t want, diff, tol;
+      stringToReal34("1.228593777031159439372254772764558", &want);
+      if(lastErrorCode != ERROR_NONE || getRegisterDataType(REGISTER_X) != dtReal34) {
+        ppTestFail("EQ33 the capacity expression did not evaluate");
+      }
+      else {
+        real34Subtract(REGISTER_REAL34_DATA(REGISTER_X), &want, &diff);
+        real34SetPositiveSign(&diff);
+        stringToReal34("1e-30", &tol);
+        if(!real34CompareLessThan(&diff, &tol)) {
+          ppTestFail("EQ33 capacity expression value moved");
         }
       }
     }

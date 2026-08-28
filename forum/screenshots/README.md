@@ -150,10 +150,14 @@ or retouches a frame — a full 400x240 screen is always shown whole.
    bars, `log2(8)`, and a square root wrapping a stacked fraction with
    its result. The browser is driven through `prettyBrowser(NOPARAM)` in
    the suite (prettyTest.c:1309 and :1619); T29 pins a wide row panning.
-2. `pp-attach-2-nesting.png` — `pp-ultimate.png` unmodified: the capacity
-   case, an integral from 0 to 1 of a second derivative wrapping a Sigma
-   over a root-fraction divided by a product, times a Pi with a nested
-   power fraction, evaluated at x=2. EQ22 pins exactly this expression —
-   its fixture string is the same formula, and it asserts the tree
-   parses, measures, uses most of the node pool, and fits the EQSHW band
-   at full size.
+2. `pp-attach-2-nesting.png` — the capacity case: an integral from 0 to
+   1 of a second derivative wrapping a Sigma over a root-fraction divided
+   by a product, times a Pi with a nested power fraction, evaluated at
+   x=2. Retaken 2026-08-27 (so its status bar is a day newer than the
+   shot above). The expression is now the one a user can TYPE: the root
+   takes brackets, powers use `^`, and the two indices are lowercase and
+   distinct from the outer variable. EQ22 pins that it renders and EQ33
+   pins that it evaluates, to 1.228593777031159439372254772764558. The
+   earlier version of this shot was written in display glyphs, which draw
+   the same but are not input syntax, so it could never have been
+   computed.

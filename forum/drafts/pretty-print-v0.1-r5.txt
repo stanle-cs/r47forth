@@ -36,7 +36,7 @@ DERIV(body;var;at)[/code]
 SUM and PROD take an optional step. DERIV takes an optional order for the second derivative.
 [attachment=2]pp-attach-2-nesting.png[/attachment]
 
-An integral of a second derivative over a sum and a product, drawn by EQSHW. That is about as far as the renderer goes.
+An integral of a second derivative over a sum and a product, drawn by EQSHW. That is about as far as the renderer goes, and it comes out as 1.2285937770311594. The root takes brackets like any other function, and powers are ^, so the line above is INTEG(DERIV(SUM(√(n)/(n+1);n;1;10)/(x×(x+1))×PROD(1+1/(2+m^2);m;1;5);x;2;2);x;0;1) typed straight in.
 
 [b]Limits[/b]
 [list]
