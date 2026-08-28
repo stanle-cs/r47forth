@@ -74,6 +74,59 @@ r5 re-ran the full battery (every new sentence runs the loop): `aiaudit`
 10, `voicematch2` clean, no cross-document prose reuse, mean 16.4w,
 CV 0.65.
 
+**r6 — Stan's rewrite adopted, tail redrafted (2026-08-27).** Stan rejected
+r5's prose past the browser paragraph and rewrote the opening himself; his
+text is adopted byte-for-byte with the two fixes he ruled ("both errors
+should be fixed"): the PSHOW bullet now describes the value draw
+(`fnPrettyShow` builds REGISTER_X's value, prettyValue.c:856, verified
+against a live Σ capture), and 3 1/3 became 3 1/6 (the shot's formula is
+exactly 19/6). Every sentence from `[b]Refusals[/b]` on is fresh — the r5
+tail is a facts-only source per the handoff. New in this round: the
+empty-history bullet (Tier 4 owed it; "no formulas" string verified at
+prettyBrowser.c:44) and the pager gesture (PHIST inside the browser,
+verified at prettyFormula.c:708).
+
+Battery at r6: `aiaudit` 8 (his 4) — copula-avoidance 1 sits in HIS
+authoritative sentence, instead-of-pivot 1 is the licensed mechanism
+question, rule-of-three 6 are factual inventories. `voicematch2 --register
+release` clean, no MISSING, no STUFFED. `framescan` cross-document: URL
+shingles only after the licence-line reword (it shared "the licence is
+GPL-3.0-only, inherited" with his published post). Stylometry mean 17.1w,
+CV 0.85.
+
+**Cross-model r6, lane 1 (GPT-5 via codex, identity line verified).**
+Verdict "a careful reader would probably accept this as human-written."
+Four findings:
+
+| finding | disposition |
+|---|---|
+| d_d bullet reads as fix narrative | **REJECTED.** Auditor's own note says retain; it is a Tier 4 workaround instruction, not a discovery story |
+| "Why draw nothing instead of coming close?" | **REJECTED, ruled keep.** Exact shape and count of his published "Why skip instead of dropping older levels to make room?" |
+| "lowercase names are accepted" impersonal passive | **FIXED** → "lowercase names work fine" |
+| The/A/It opener runs in Limits and Install (mild) | **PARTIAL.** Two Install openers varied ("Generated against r47forth commit..."); the rest is spec density inherent to impersonal bullets, which are ruled impersonal |
+
+**Cross-model r6, lane 2 (Gemini 3.1 Pro high via agy, identity line
+verified).** Six findings and a harsher verdict ("a careful reader would
+spot this as AI-generated"). Dispositions:
+
+| finding | disposition |
+|---|---|
+| "Math hallucination": the INTEG demo differentiates at a fixed point, so the outer integral integrates a constant, "proving the author didn't write the math" | **REJECTED as a tell, premise half-true.** The expression is EQ22/EQ33's pinned capacity case, typed into the sim, evaluating to exactly the value the post quotes, and it matches the attachment. The post frames it as renderer capacity, not mathematics. The kernel — a math-literate reader may notice the integrand is constant in x — goes to Stan as an optics call, not a text change |
+| Staccato run of clipped sentences in Install | **FIXED.** Target, flash cost and memory merged into one flowing sentence in the shape of his published install paragraph |
+| Comma-splice skeleton four times in quick succession | **FIXED by redistribution.** Install keeps two; two moved into Limits bullets, where his published bullets splice the same way |
+| Parenthetical skeleton six times in the drafted half | **PARTIAL.** The two weakest became plain clauses (30-char bullet, d_d softkey); five remain across ~550 words, matching his published post's density. Gemini itself marked them all leave-alone for accuracy |
+| "the risk is yours" slogan fragment | **FIXED.** The disclaimer folded into the simulator sentence; "So back the calculator up first." keeps the fronted connector the release floor requires |
+| The mechanism question, again | **REJECTED, ruled keep.** Same disposition as lane 1, and Gemini also marked it leave-alone for accuracy |
+
+Post-fix battery: `aiaudit` 8 (unchanged, all judged), `voicematch2` clean,
+cross-document reuse URL-only, mean 18.0w, CV 0.84.
+
+**Exit-criterion state, honestly:** the ruled bar (two consecutive clean
+audits by two non-drafting models) is NOT met — both lanes produced real
+findings this round and the fixes have not been re-audited out-of-family.
+Every prior round went to Stan's read in exactly this state, and his read
+is the only gate that can say yes.
+
 ## Not done, and it matters
 
 The machines endorse this draft. That is not the same as done, and the
