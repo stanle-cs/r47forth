@@ -10,11 +10,17 @@
  * The package already had two front-ends to one renderer — the capture
  * engine (live dispatches) and the equation parser (EQN text). This is
  * the third: a symbolic RPN interpreter over stored program steps that
- * transpiles the chain into equation-language TEXT, which the existing
- * ppqShowRender() then parses and paints. Emitting text rather than
- * nodes is what makes the feature small: the renderer, the evaluator,
- * and the EXIT-dismissal protocol are all reused unchanged, and the
- * result is a string the user could have typed into EQN.
+ * builds a small expression tree, which is then laid out through the
+ * SAME node builders the capture engine uses (ppfCombine1/ppfCombine2)
+ * and the same construct assembly the equation parser uses
+ * (ppqBuildBigop). Nothing here decides where a bracket goes.
+ *
+ * PP17 shipped this as a transpiler to equation-language TEXT which was
+ * then re-parsed. That worked, but it settled precedence twice — once
+ * inserting brackets into a string, once reading them back out — and it
+ * made the text grammar a dependency of drawing. PP18 removed the round
+ * trip. The text form survives as a test back end, where it serializes
+ * the same tree so the pins can assert something readable.
  *
  * Faithfulness rests on one fact about how the engines feed a body
  * program. Upstream writes each integration node into BOTH the named
@@ -747,14 +753,150 @@ static void ppvWalk(ppvCtx_t *ctx, uint16_t labelIdx, ppvStack_t *stk) {
   ctx->callDepth--;
 }
 
-/* ==== the text back end ================================================
- * Serializes the AST to equation-language text. This is what the pins
- * assert, and (until PP18's next commit) what the drawing path parses.
+/* ==== the layout back end ==============================================
+ * AST -> 2D nodes, and the reason PP18 exists. Bracketing is decided
+ * here ONCE, by the same ppfCombine1/ppfCombine2 the capture engine has
+ * always used; the walker no longer has an opinion about parentheses.
  *
- * Precedence lives here ONLY because text has to carry it in brackets.
- * The lattice mirrors the grammar's own nesting: a left operand keeps an
- * equal precedence (the grammar is left-associative), a right operand
- * does not, so a-(b+c) never flattens into a-b+c. */
+ * Shaped after ppfFromCaptureNode: default the out-precedence to ATOM,
+ * validate, switch on kind, leaves return runs, operator arms recurse
+ * into locals and then delegate. */
+
+static uint8_t ppvAstToNodes(const ppvCtx_t *ctx, uint8_t n,
+                             uint8_t ctxFont, uint8_t childFont, int *outPrec) {
+  *outPrec = PPF_PREC_ATOM;
+  if(n == PPV_NIL || n >= PPV_AST_NODES) {
+    return PP_NONE;
+  }
+  const ppvAst_t *a = &ctx->ast[n];
+  switch(a->kind) {
+    case PPA_VAR:
+      return ppNewRun(ctx->pool + a->textOff, a->textLen, ctxFont);
+
+    case PPA_LIT:
+      if((a->flags & PPV_F_OPAQUE) != 0) {
+        return PP_NONE;   // never reaches here: the walk refuses it first
+      }
+      if(a->textLen > 0 && ctx->pool[a->textOff] == '-') {
+        *outPrec = PPF_PREC_ADD;   // a signed numeral brackets as a term
+      }
+      return ppNewRun(ctx->pool + a->textOff, a->textLen, ctxFont);
+
+    case PPA_OP1: {
+      int p;
+      uint8_t x = ppvAstToNodes(ctx, a->child[0], ctxFont, childFont, &p);
+      if(x == PP_NONE) {
+        return PP_NONE;
+      }
+      // ppfCombine has no POW level — a PP_SUP scopes itself, so it
+      // reports ATOM and a stacked power would come out unbracketed and
+      // read as a^(b^c). Bracket the base ourselves; the alternative,
+      // adding a level, would change ppfCombine's contract under the
+      // capture engine.
+      if((a->item == ITM_SQUARE || a->item == ITM_CUBE)
+          && ctx->ast[a->child[0]].kind == PPA_OP1
+          && (ctx->ast[a->child[0]].item == ITM_SQUARE
+              || ctx->ast[a->child[0]].item == ITM_CUBE)) {
+        p = PPF_PREC_MUL;
+      }
+      return ppfCombine1(a->item, x, p, ctxFont, childFont, outPrec);
+    }
+
+    case PPA_OP2: {
+      int pa, pb;
+      uint8_t x = ppvAstToNodes(ctx, a->child[0], ctxFont, childFont, &pa);
+      uint8_t y = ppvAstToNodes(ctx, a->child[1], ctxFont, childFont, &pb);
+      if(x == PP_NONE || y == PP_NONE) {
+        return PP_NONE;
+      }
+      return ppfCombine2(a->item, x, pa, y, pb, ctxFont, childFont, outPrec);
+    }
+
+    case PPA_CONSTRUCT: {
+      int pBody, pFrom, pTo, pStep;
+      uint8_t body = ppvAstToNodes(ctx, a->child[0], ctxFont, childFont, &pBody);
+      uint8_t from = ppvAstToNodes(ctx, a->child[1], childFont, childFont, &pFrom);
+      uint8_t to   = ppvAstToNodes(ctx, a->child[2], childFont, childFont, &pTo);
+      uint8_t step = (a->child[3] == PPV_NIL)
+                       ? PP_NONE
+                       : ppvAstToNodes(ctx, a->child[3], childFont, childFont, &pStep);
+      if(body == PP_NONE || from == PP_NONE || to == PP_NONE) {
+        return PP_NONE;
+      }
+      // the parser scopes an additive body by sniffing its runs for a
+      // +/- joiner, because a parse has no precedence to consult. We do,
+      // so we ask the real question.
+      body = ppfWrapIf(body, pBody, PPF_PREC_MUL, ctxFont);
+      if(body == PP_NONE) {
+        return PP_NONE;
+      }
+      bool_t isInt = (a->item == ITM_INTEGRAL_YX);
+      uint8_t varTiny = isInt ? PP_NONE
+                              : ppNewRun(ctx->pool + a->varOff, a->varLen, PP_FONT_TINY);
+      uint8_t varCtx  = isInt ? ppNewRun(ctx->pool + a->varOff, a->varLen, ctxFont)
+                              : PP_NONE;
+      uint8_t kind = isInt ? PPQ_BIG_INTEG
+                           : ((a->item == ITM_SIGMAn) ? PPQ_BIG_SUM : PPQ_BIG_PROD);
+      return ppqBuildBigop(kind, a->item, body, varTiny, varCtx,
+                           from, to, step, false, ctxFont);
+    }
+
+    default:
+      return PP_NONE;
+  }
+}
+
+
+/* Walk a program and hand back the root of the tree it built, or
+ * PPV_NIL with ctx->declineReason set. The product entry point: both the
+ * drawing path and the test seam start here. */
+static uint8_t ppvRun(ppvCtx_t *ctx, uint16_t labelIdx) {
+  ctx->poolUsed      = 0;
+  ctx->astUsed       = 0;
+  ctx->latchedInt    = 0xFFFF;
+  ctx->stepsWalked   = 0;
+  ctx->declineStep   = 0;
+  ctx->callDepth     = 0;
+  ctx->declineReason = 0;
+  ctx->failed        = false;
+  ctx->dirtyCount    = 0;
+  ctx->bindingCount  = 0;
+
+  ppvStack_t stk;
+  stk.depth        = 0;
+  stk.liftDisabled = false;
+
+  ppvWalk(ctx, labelIdx, &stk);
+  if(ctx->failed) {
+    return PPV_NIL;
+  }
+  if(stk.depth == 0) {
+    ppvDecline(ctx, PPV_D_EMPTY);
+    return PPV_NIL;
+  }
+  uint8_t root = stk.ast[stk.depth - 1];
+  if(ppvIsOpaque(ctx, root)) {
+    ppvDecline(ctx, PPV_D_OPAQUE);
+    return PPV_NIL;
+  }
+  return root;
+}
+
+/* ==== the text back end (PC_BUILD only) ================================
+ * Serializes the same tree to equation-language text. Nothing in the
+ * product reads it: XEQ computes a program, VISUAL draws it, and the
+ * drawing is built from nodes. It exists so the pins can assert
+ * something a person can read, and so one pin can hand the walker's own
+ * output to fnEqCalc and check the mathematics against a number nobody
+ * chose — which no comparison against my own expected string can do.
+ *
+ * Compiled out of the device build entirely, which is what removes the
+ * text grammar from VISUAL's dependencies.
+ *
+ * Precedence appears here, and ONLY here, because text has to carry it
+ * in brackets. The drawing path does not consult it.
+ */
+#if defined(PC_BUILD) || defined(TESTSUITE_BUILD)
 
 enum { PPV_PREC_ADD = 0, PPV_PREC_MUL = 1, PPV_PREC_POW = 2, PPV_PREC_ATOM = 3 };
 
@@ -907,36 +1049,24 @@ static void ppvSerialize(const ppvCtx_t *ctx, uint8_t n, ppvOut_t *o) {
   }
 }
 
-static uint8_t ppvRun(ppvCtx_t *ctx, uint16_t labelIdx) {
-  ctx->poolUsed      = 0;
-  ctx->astUsed       = 0;
-  ctx->latchedInt    = 0xFFFF;
-  ctx->stepsWalked   = 0;
-  ctx->declineStep   = 0;
-  ctx->callDepth     = 0;
-  ctx->declineReason = 0;
-  ctx->failed        = false;
-  ctx->dirtyCount    = 0;
-  ctx->bindingCount  = 0;
-
-  ppvStack_t stk;
-  stk.depth        = 0;
-  stk.liftDisabled = false;
-
-  ppvWalk(ctx, labelIdx, &stk);
-  if(ctx->failed) {
-    return PPV_NIL;
+/* Walk a program and lay it out, so a pin can assert the NODE TREE the
+ * product actually paints rather than an intermediate. Resets the layout
+ * pool itself, as every builder's caller must. */
+bool_t ppvTestBuildNodes(uint16_t labelIdx, uint8_t ctxFont, uint8_t childFont,
+                         uint8_t *rootOut) {
+  ppvCtx_t ctx;
+  uint8_t root = ppvRun(&ctx, labelIdx);
+  if(root == PPV_NIL) {
+    return false;
   }
-  if(stk.depth == 0) {
-    ppvDecline(ctx, PPV_D_EMPTY);
-    return PPV_NIL;
+  int prec;
+  ppReset();
+  uint8_t node = ppvAstToNodes(&ctx, root, ctxFont, childFont, &prec);
+  if(node == PP_NONE) {
+    return false;
   }
-  uint8_t root = stk.ast[stk.depth - 1];
-  if(ppvIsOpaque(ctx, root)) {
-    ppvDecline(ctx, PPV_D_OPAQUE);
-    return PPV_NIL;
-  }
-  return root;
+  *rootOut = node;
+  return true;
 }
 
 bool_t ppvTranspile(uint16_t labelIdx, char *out, uint16_t cap,
@@ -963,6 +1093,8 @@ bool_t ppvTranspile(uint16_t labelIdx, char *out, uint16_t cap,
   }
   return !ctx.failed;
 }
+
+#endif // PC_BUILD || TESTSUITE_BUILD
 
 
 /* ==== the Z/T window ====================================================
@@ -993,46 +1125,72 @@ static void ppvClearBand(void) {
   lcd_fill_rect(0, PPV_BAND_TOP, SCREEN_WIDTH, PPV_BAND_ROWS, LCD_SET_VALUE);
 }
 
-static bool_t ppvPaintStackWindow(const char *text) {
+static bool_t ppvPaintStackWindow(const ppvCtx_t *ctx, uint8_t root) {
   // the T-line ladder: full size first, then a whole-tree shrink
   for(int rung = 0; rung < 2; rung++) {
-    uint8_t root;
+    int prec;
     ppReset();
-    if(!ppqParse(text, PP_FONT_STANDARD, PP_FONT_STANDARD, &root)) {
-      break;   // not the height that failed — try the linear form below
+    uint8_t node = ppvAstToNodes(ctx, root, PP_FONT_STANDARD,
+                                 (rung == 0) ? PP_FONT_STANDARD : PP_FONT_TINY, &prec);
+    if(node == PP_NONE) {
+      return false;   // the layout pool ran out; the tree itself is sound
     }
     if(rung == 1) {
-      ppSetFontDeep(root, PP_FONT_TINY);
+      ppSetFontDeep(node, PP_FONT_TINY);
     }
-    if(!ppMeasure(root, 0)) {
+    if(!ppMeasure(node, 0)) {
       continue;
     }
-    const ppNode_t *n = ppNodeAt(root);
-    if(n->width > SCREEN_WIDTH - 4 || n->ascent + n->descent > PPV_BAND_ROWS) {
+    const ppNode_t *m = ppNodeAt(node);
+    if(m->width > SCREEN_WIDTH - 4 || m->ascent + m->descent > PPV_BAND_ROWS) {
       continue;
     }
     ppvClearBand();
     int16_t base = (int16_t)(PPV_BAND_TOP
-                             + (PPV_BAND_ROWS - (n->ascent + n->descent)) / 2
-                             + n->ascent);
-    ppPaintAt(root, (int16_t)(SCREEN_WIDTH - 2 - n->width), base);
+                             + (PPV_BAND_ROWS - (m->ascent + m->descent)) / 2
+                             + m->ascent);
+    ppPaintAt(node, (int16_t)(SCREEN_WIDTH - 2 - m->width), base);
     return true;
   }
-  // linear, on the Z line, right-aligned as a stack value is
-  {
-    int16_t w = stringWidth(text, &standardFont, false, true);
-    int16_t h = STANDARD_FONT_HEIGHT;
-    if(w > 0 && w <= SCREEN_WIDTH - 4 && h <= PPV_BAND_ROWS) {
-      ppvClearBand();
-      // centred in the band, not pinned to the Z line: the placement has
-      // to follow the band it claims, or a wrong band still looks right
-      showString(text, &standardFont, (int16_t)(SCREEN_WIDTH - 2 - w),
-                 (int16_t)(PPV_BAND_TOP + (PPV_BAND_ROWS - h) / 2),
-                 vmNormal, false, true);
-      return true;
-    }
-  }
   return false;
+}
+
+
+/* Taller than the two stack rows: the full band, 21..167. Same shape as
+ * the stack window, only a bigger box and a centred x — and no linear
+ * fallback beneath it, because a tree that failed to lay out here failed
+ * on SIZE, and there is nothing smaller left to try. */
+static void ppvPaintFullScreen(const ppvCtx_t *ctx, uint8_t root) {
+  lcd_fill_rect(0, 16, SCREEN_WIDTH, SCREEN_HEIGHT - 16, LCD_SET_VALUE);
+  drawSinglePixelFullWidthLine(20);
+  drawSinglePixelFullWidthLine(168);
+
+  for(int rung = 0; rung < 2; rung++) {
+    int prec;
+    ppReset();
+    uint8_t node = ppvAstToNodes(ctx, root, PP_FONT_STANDARD,
+                                 (rung == 0) ? PP_FONT_STANDARD : PP_FONT_TINY, &prec);
+    if(node == PP_NONE) {
+      break;
+    }
+    if(rung == 1) {
+      ppSetFontDeep(node, PP_FONT_TINY);
+    }
+    if(!ppMeasure(node, 0)) {
+      continue;
+    }
+    const ppNode_t *m = ppNodeAt(node);
+    if(m->width > SCREEN_WIDTH - 4 || m->ascent + m->descent > 167 - 21 + 1) {
+      continue;
+    }
+    int16_t base = (int16_t)((21 + 167 - (m->ascent + m->descent)) / 2 + m->ascent);
+    ppPaintAt(node, (int16_t)((SCREEN_WIDTH - m->width) / 2), base);
+    break;
+  }
+  screenUpdatingMode |= SCRUPD_MANUAL_STACK | SCRUPD_MANUAL_MENU | SCRUPD_MANUAL_SHIFT_STATUS;
+  screenHoldsDrawnPixels = true;
+  // a self-painted screen declares itself one, or EXIT cannot dismiss it
+  temporaryInformation = TI_SHOWNOTHING;
 }
 
 
@@ -1077,10 +1235,11 @@ void fnPrettyVisual(uint16_t label) {
     return;
   }
 
-  char text[PPV_FRAG_MAX + 1];
-  uint8_t reason = 0;
-  uint16_t atStep = 0;
-  if(!ppvTranspile(idx, text, sizeof(text), &reason, &atStep)) {
+  ppvCtx_t ctx;
+  uint8_t root = ppvRun(&ctx, idx);
+  if(root == PPV_NIL) {
+    uint8_t reason = ctx.declineReason;
+    uint16_t atStep = ctx.declineStep;
     // nothing has been painted: the whole text is composed before any
     // pixel is touched, so a decline leaves the screen alone
     displayCalcErrorMessage(ERROR_INVALID_DATA_TYPE_FOR_OP, ERR_REGISTER_LINE, REGISTER_X);
@@ -1091,13 +1250,14 @@ void fnPrettyVisual(uint16_t label) {
     return;
   }
 
-  // ppqShowRender frames its result from the live solver session, and a
-  // STALE integrate or derivative bit would wrap a program's drawing in
-  // an integral sign it never asked for. This text is the whole picture;
-  // clear the framing for the call and put the session back.
+  // Nothing downstream reads the solver session any more — the drawing
+  // is built from the tree, not framed by ppqShowRender — but the save
+  // and restore stay: PP17 shipped with them, V19 pins them, and a
+  // surface that leaves session state alone is the contract regardless
+  // of who happens to read it today.
   uint16_t saved = currentSolverStatus;
   currentSolverStatus &= (uint16_t)~(SOLVER_STATUS_EQUATION_MODE | SOLVER_STATUS_INTERACTIVE);
-  if(ppvPaintStackWindow(text)) {
+  if(ppvPaintStackWindow(&ctx, root)) {
     // only the stack refresh is suspended: the menu and the status bar
     // keep working, and X keeps whatever the program left there
     screenUpdatingMode |= SCRUPD_MANUAL_STACK;
@@ -1107,7 +1267,11 @@ void fnPrettyVisual(uint16_t label) {
     temporaryInformation = TI_SHOWNOTHING;
   }
   else {
-    ppqShowRender(text);   // taller than the two rows: the full screen has 147
+    // taller than the two rows, or the layout pool gave out. There is no
+    // linear fallback to try: AST->nodes cannot decline for want of a
+    // grammar, so a failure here is a size failure and the full-screen
+    // band is the only thing left that might hold it.
+    ppvPaintFullScreen(&ctx, root);
   }
   currentSolverStatus = saved;
 }

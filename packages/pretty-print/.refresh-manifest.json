@@ -6,12 +6,12 @@
     "prettyCapture.c": "31aa44e982b9db708be471fca947922276ef3d1656ddd552c1d34547a200f9e0",
     "prettyEquation.c": "f3783bc1f2440a3bb699d8f00a0b6fa2860f8fb4f8373c1e1d3318dfcabdca82",
     "prettyFormula.c": "bcbdabc8723b87f99146056698c960bbf838616e3bb2d49ba902ca2cc06e75df",
-    "prettyInternal.h": "1548006b468fd047b54f201f770a2251c3ba0fc32a6a48fd7178656d04e702ff",
+    "prettyInternal.h": "7f5f6ec82450850be02652dc2d17618a0a932fa78fc6781f8b80f09bfa375040",
     "prettyLayout.c": "71bdf05f29e9adbc1eb0f24457601022d49c13a767769e2d106ddcc1976528c6",
     "prettyPrint.h": "53077dfc121ba99e71a864b19e3cf37ea1ddaca1c0f953e497bffd3482f1a2cd",
-    "prettyTest.c": "aacd3960dc2645956a353d2a06b87e620a53a46a612f690130a9c14798303972",
+    "prettyTest.c": "c45ff073eaa993f6cedd3f284f5ebb1a4e8f670bdde407897f929d7f9a623431",
     "prettyValue.c": "aaf9674a2e3a41e31679a3d3a694006523f79150123bc231b9c828eaa107e481",
-    "prettyVisual.c": "7d7827a70259c9799da2df7962df61d6c44a55ce86c8a33fba4492feaed40f02",
+    "prettyVisual.c": "ea6dd0aec56206b6b83873dfb5d4228866d003d840ed80f72ddf445fb1da0d4c",
     "testSuite/tests/pretty_print.txt": "68f9b9ee8096f9b48f95b1a24465aff4b69fdbac4a9dc1206dde8e5d6a543be4"
   },
   "patches": {

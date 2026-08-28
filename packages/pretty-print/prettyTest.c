@@ -3953,7 +3953,15 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
       PPV2(ITM_END),
     };
     ppcTestWriteAndLoadPgm(pgmISN, sizeof(pgmISN));
+    static const uint8_t pgmPOW[] = {         // (a^2)^2 — the stacked power
+      ITM_LBL, STRING_LABEL_VARIABLE, 4, 'V','P','O','W',
+      ITM_RCL, STRING_LABEL_VARIABLE, 1, 'a',
+      ITM_SQUARE,
+      ITM_SQUARE,
+      PPV2(ITM_END),
+    };
     ppcTestWriteAndLoadPgm(pgmCUB, sizeof(pgmCUB));
+    ppcTestWriteAndLoadPgm(pgmPOW, sizeof(pgmPOW));
   }
   {
     char want[96];
@@ -4080,7 +4088,22 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
     calcMode = CM_NORMAL;
     aimBuffer[0] = 0;
     nimNumberPart = NP_EMPTY;
-    setEquation(currentFormula, "INTEG(INTEG(t;t;0;x);x;0;2)");
+    // the walker's OWN output, not a string typed here: a hand-written
+    // expectation and a hand-written pin agree with each other whether
+    // or not either is right. 4/3 is a number nobody in this file chose.
+    {
+      calcRegister_t id = findNamedLabel("VDBL", GLOBAL_LABELS);
+      char produced[256];
+      uint8_t reason = 0;
+      uint16_t atStep = 0;
+      if(id == INVALID_VARIABLE
+          || !ppvTranspile((uint16_t)(id - FIRST_LABEL), produced, sizeof(produced),
+                           &reason, &atStep)) {
+        ppTestFail("V18 the walker produced nothing to evaluate");
+        strcpy(produced, "0");
+      }
+      setEquation(currentFormula, produced);
+    }
     lastErrorCode = 0;
     fnEqCalc(NOPARAM);
     if(lastErrorCode != ERROR_NONE || getRegisterDataType(REGISTER_X) != dtReal34) {
@@ -4339,6 +4362,46 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
     calcMode = savedCalcMode3;
     if(savedAlpha) { setSystemFlag(FLAG_ALPHA); } else { clearSystemFlag(FLAG_ALPHA); }
     aimBuffer[0] = 0;
+  }
+
+  /* ---- PP18: the tree the product actually paints ------------------ */
+  // V46-V51 assert the NODE shape, not the serialized text. The text
+  // back end is a test seam; these are the product. Two of them show the
+  // node form is not merely equivalent to the text form:
+  //   V49 — a fraction bar SCOPES, so a/(b+c) draws with no parentheses
+  //         at all where the text needed them
+  //   V51 — a stacked power DOES need its base bracketed, and gets it
+  //         here rather than from the text grammar's associativity
+  {
+    struct { const char *what; const char *label; const char *sig; } cases[6];
+    char sMul[64], sSum[64];
+    sprintf(sMul, "[[[x %s x] - [x %s p]] - 2]", STD_DOT, STD_DOT);
+    sprintf(sSum, "B([n %s n]|[n = 1]|5)", STD_DOT);
+    cases[0].what = "V46 nested integral";      cases[0].label = "VDBL";
+    cases[0].sig  = "B([B([t d t]|0|x) d x]|0|2)";
+    cases[1].what = "V47 binary chain";         cases[1].label = "VFX";
+    cases[1].sig  = sMul;
+    cases[2].what = "V48 function call";        cases[2].label = "VSIN";
+    cases[2].sig  = "[SIN P(x)]";
+    cases[3].what = "V49 the bar scopes";       cases[3].label = "VPRC";
+    cases[3].sig  = "F(a|[b + c])";
+    cases[4].what = "V50 sum with limits";      cases[4].label = "VS1";
+    cases[4].sig  = sSum;
+    cases[5].what = "V51 stacked power brackets its base";
+    cases[5].label = "VPOW";                    cases[5].sig = "S(P(S(a|2))|2)";
+
+    for(unsigned c = 0; c < 6; c++) {
+      calcRegister_t id = findNamedLabel(cases[c].label, GLOBAL_LABELS);
+      uint8_t root;
+      if(id == INVALID_VARIABLE
+          || !ppvTestBuildNodes((uint16_t)(id - FIRST_LABEL), PP_FONT_STANDARD,
+                                PP_FONT_STANDARD, &root)) {
+        ppTestFailures++;
+        printf("prettyPrint test FAIL: %s (did not lay out)\n", cases[c].what);
+        continue;
+      }
+      ppfTestExpect(cases[c].what, root, cases[c].sig);
+    }
   }
 
   currentSolverStatus    = hadStatus;

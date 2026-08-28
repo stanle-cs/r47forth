@@ -138,10 +138,16 @@ uint8_t ppqBuildBigop (uint8_t kind, uint16_t tag, uint8_t body,
                        bool_t secondOrder, uint8_t ctxFont);
 uint8_t ppqBuildCall  (const char *name, uint16_t len, uint8_t arg, uint8_t font);
 
-// prettyVisual.c — RPN program -> equation-language text (the test seam:
-// pins assert the STRING, independently of what the renderer makes of it)
+// prettyVisual.c — the walker's TEST seam: serializes the expression
+// tree it built to equation-language text, so a pin can assert something
+// readable and one pin can evaluate it. Not in the device build — the
+// drawing path builds nodes and never makes text.
+#if defined(PC_BUILD) || defined(TESTSUITE_BUILD)
 bool_t ppvTranspile(uint16_t labelIdx, char *out, uint16_t cap,
                     uint8_t *reasonOut, uint16_t *stepOut);
+bool_t ppvTestBuildNodes(uint16_t labelIdx, uint8_t ctxFont, uint8_t childFont,
+                         uint8_t *rootOut);   ///< the tree the product paints
+#endif // PC_BUILD || TESTSUITE_BUILD
 
 // prettyFormula.c — display-time name decodes (best-effort, fall back)
 void ppfVariableName(uint16_t varId, char *out);         ///< out cap >= 17; falls back to "x"
