@@ -15,7 +15,9 @@ Natural display is on when you install it. The formula line above the stack is o
 [/list]
 [attachment=1]pp-attach-1-stack-and-browser.png[/attachment]
 
-Top half is the ordinary stack screen after 2 ENTER 3 + 4 x, with PTLIN set. The T line has the formula, X has its answer. Press another operator and the formula grows (the package works out where one calculation ends and the next begins, you don't have to tell it). Underneath is the browser after a few more calculations. Every row is one finished formula with its result, newest on top, and the bar on the left is the selection. A cube root keeps its index and absolute value gets real bars. Log base 2 puts the base where a book puts it.
+Top half is the stack with the formula line turned on. T carries the working and X carries what it came to, 3 and a sixth. Press another operator and the formula grows, you don't have to tell it where one calculation stops and the next starts. Two levels of stacking is as deep as that line goes (a third level doesn't fit the row, so it drops back to showing T's own value).
+
+Underneath is the browser. Every row is one finished formula with its result, newest on top. The bar on the left marks the selection. The bottom row is a sum over a program called P with n running 1 to 10, sitting on a root.
 
 [b]Refusals[/b]
 

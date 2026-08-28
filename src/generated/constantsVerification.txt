@@ -1,6 +1,6 @@
 ** AUDIT CERTIFICATE of the C47/R47 conversion constants comprising INDEPENDENT sources and calculations.             **
-** Generated:   2026-08-04 (UTC date; the input hashes below pin the exact audited state)                             **
-** Commit:      3de5b4be07fc22660aeec58ac7bf07f3f3eec098 (working tree had uncommitted changes)                       **
+** Generated:   2026-08-28 (UTC date; the input hashes below pin the exact audited state)                             **
+** Commit:      1722741ba355ede57b91b6b37a9175ec919a4d77                                                              **
 ** Note:        Regenerated at every testSuite run; re-written only when the parts between the ruled lines change.    **
 **              For a clean Commit line above: make test, commit, then make test again and re-commit the certificate. **
 ========================================================================================================================

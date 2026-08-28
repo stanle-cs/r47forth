@@ -140,16 +140,35 @@ collated. Both are built from captures in the archive, and neither crops
 or retouches a frame — a full 400x240 screen is always shown whole.
 
 1. `pp-attach-1-stack-and-browser.png` — two screens stacked with a rule
-   between them, built from `pp8-tline.png` above and `pp6-browser.png`
-   below. The top screen is the ordinary stack after `2 ENTER 3 + 4 x`
-   with the formula line on: `(2+3)x4` on the T line, 20 in X. The T
-   line's default is OFF; FV11 pins that default and FV13 pins that
-   turning it on makes the T band differ from the plain value render.
-   The bottom screen is the formula browser, selection marker on the
-   `|-5| = 5` row, showing a cube root with its index, absolute-value
-   bars, `log2(8)`, and a square root wrapping a stacked fraction with
-   its result. The browser is driven through `prettyBrowser(NOPARAM)` in
-   the suite (prettyTest.c:1309 and :1619); T29 pins a wide row panning.
+   between them, both retaken 2026-08-27, neither cropped.
+
+   The top screen is the stack with the formula line on, and it sits at
+   that line's measured ceiling. The T line carries
+   `root(4/9) + (1/2 + 3/4) x 2`: a radical wrapping a stacked fraction,
+   two more stacked fractions, synthesized tall parentheses and the
+   raised dot. TWO levels of stacking is the limit — measured by
+   rendering candidates and checking whether the line drew the formula or
+   fell back to T's value, a triple-nested fraction, a fraction over a
+   fraction, and a radical over a radical all fall back. The operands are
+   chosen so the intermediates stay pretty: root(4/9) is exactly 2/3, so
+   Y and Z read as fractions and the answer is 3 1/6. An earlier take
+   used root(2/3) and buried the stack in 20-digit decimals.
+
+   The bottom screen is the browser with three different shapes: a plain
+   chain `7 x 8 = 56` (selected), `root(2/3)` wrapping a stacked
+   fraction, and a captured SIGMA over n = 1 to 10 of a program P,
+   divided by `root(4)`. A Sigma does NOT fit the T line — it is taller
+   than two levels, so it falls back there, which is why it is shown on
+   this surface. PSHOW is no use for it either: that draws the X VALUE,
+   not the formula.
+
+   Every frame here was driven through the real key paths, so the shadow
+   stack stayed truthful; no register was set behind the capture engine's
+   back to make a nicer picture. The T-line default is OFF (FV11 pins the
+   default, FV13 pins that turning it on changes the band). The browser
+   is driven through `prettyBrowser(NOPARAM)` in the suite; T29 pins a
+   wide row panning.
+
 2. `pp-attach-2-nesting.png` — the capacity case: an integral from 0 to
    1 of a second derivative wrapping a Sigma over a root-fraction divided
    by a product, times a Pi with a nested power fraction, evaluated at

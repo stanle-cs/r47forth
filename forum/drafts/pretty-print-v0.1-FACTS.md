@@ -169,8 +169,16 @@ Captures are now tracked in `forum/screenshots/`, with the full 21-shot
 working set under `pretty-print-archive/` (they previously lived only in
 `/tmp`). The forum allows three; this post uses two.
 
-1. `pp-attach-1-stack-and-browser.png` — the everyday view and the
-   browser, stacked with a rule between them. Neither frame is cropped.
+1. `pp-attach-1-stack-and-browser.png` — the stack with the formula line
+   at its measured ceiling, above the browser showing a captured Sigma.
+   Neither frame is cropped.
+
+   **T-line depth, measured 2026-08-27:** the live formula line takes TWO
+   levels of stacking. A radical over a fraction fits, an exponent on a
+   fraction fits, `root(4/9) + (1/2 + 3/4) x 2` fits. A triple-nested
+   fraction, a fraction over a fraction, and a radical over a radical all
+   exceed it and fall back to T's plain value. A captured Sigma is taller
+   still and also falls back, so Sigma formulas belong on the browser.
 2. `pp-attach-2-nesting.png` — the capacity case, drawn by EQSHW, retaken
    2026-08-27 in typeable lowercase form. Evaluates to
    1.228593777031159439372254772764558 (EQ33).
