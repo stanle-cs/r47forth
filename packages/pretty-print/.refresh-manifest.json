@@ -4,13 +4,13 @@
     "browsers/prettyBrowser.c": "2713e702221371f8ae88a5573ca4da6b6cb373cb4f69e0276ba37bbcfc9a5b54",
     "browsers/prettyBrowser.h": "258582eb5e57612171171e6a4e2113a011acfbf6e431a292645e1dae5f186802",
     "prettyCapture.c": "31aa44e982b9db708be471fca947922276ef3d1656ddd552c1d34547a200f9e0",
-    "prettyEquation.c": "3a2f5fc5a720e0b35278f631005559619dc29ff5a3ccf9b983763ba3814c207b",
+    "prettyEquation.c": "9195dd26a11dee7b18981a5b9cedfa442b9b50b4e98f208ab7677f0d45d71fb5",
     "prettyFormula.c": "f5c7e4babf01a553e5caeecb56bd97456414471a647b15011e91407df4f6f7aa",
     "prettyInternal.h": "ef846339479d7dead7c89a1b46661a11d4c10b39f555dca0c2e99e77c8dbaab8",
     "prettyLayout.c": "71bdf05f29e9adbc1eb0f24457601022d49c13a767769e2d106ddcc1976528c6",
-    "prettyPrint.h": "a0fcf21c428a9047562f3bc6469845a1293378db4b7b549fd05306afb9d4e655",
-    "prettyTest.c": "24690f98f0df06d2c56bc45341c373cc341107c5ec71bdfeae1acd67b6613463",
-    "prettyValue.c": "33d5af1b521a858c7761f6610edd02783bf2be97285d184b63a189652718d455",
+    "prettyPrint.h": "ffadbf7241de0c79d9121b76a2074b7a3319ab2f5a00a6966ebee6d00a88e079",
+    "prettyTest.c": "737568a63cfc93d56a0d3474ca51ae18d36fba9d87b34a034ba96b98039a0809",
+    "prettyValue.c": "aaf9674a2e3a41e31679a3d3a694006523f79150123bc231b9c828eaa107e481",
     "testSuite/tests/pretty_print.txt": "778b71cee0339ec87dc971217dc9efcaf0e83609660ebc9b7b9de295bf3c9b4e"
   },
   "patches": {
@@ -24,7 +24,7 @@
     "010-keyboard.c.patch": "221905425d559b60738fa307ac5b0c3c9fb564cf72ef89cb436a9dcaaa3b93f6",
     "010-screen.c.patch": "1fc56a5066fdaddde713de1c3b8283ed6e8e27656cad4058fa1d7de8a5ac57d9",
     "010-softmenus.c.patch": "528b588450396251b05d4858bfd2c52c415119b4c622c6ccb686202f678e761a",
-    "010-solver__equation.c.patch": "5e0ea20b92d25b78d6fb14af81d5423bac795e4feb5af5ed8cd86a1bb93468f7",
+    "010-solver__equation.c.patch": "14c363b6af670753c4b2e52f4bcb7aed75d23eb52e9090fee44090cddb9fbda4",
     "010-testSuite__testSuite.c.patch": "5be374ae3f7fbe10998dcb0cf81abc1526f62b94551da35335e0e53e57b37049",
     "010-testSuite__tests__testSuiteList.txt.patch": "7602270613b0807bd2f56e6a3bba266176226695f6f2ba3de0fbe99cf53bf666"
   }

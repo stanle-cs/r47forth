@@ -2,6 +2,79 @@
 
 Non-normative amendment trail. DESIGN.md is authoritative.
 
+## 2026-08-27 — two owner-reported bugs: EXIT, and lowercase constructs
+
+Stan, using the build: "in eqshw pressing exit did not exit correctly,
+had to press <- key for it" and "lowercase integ/deriv etc. does not
+work." Both real, both fixed red-first, gate green solo and combined.
+Flash 1,146,336 → 1,146,432 (+96 bytes); BSS unchanged, device RAM
+12,908 of 16,384.
+
+**EXIT.** The full-screen surfaces paint their own pixels with the
+fnPixel protocol (`screenHoldsDrawnPixels` + the SCRUPD manual bits) and
+left `temporaryInformation` alone. Upstream's EXIT arm
+(keyboard.c:2533) dismisses a held screen only when
+`temporaryInformation != TI_NO_INFO || showScreenDismissed`, and
+`showScreenDismissed` is latched at btnPressed (keyboard.c:1808) from
+SHOWMODE, which is itself a temporaryInformation test. Both terms were
+false, so EXIT fell through to the menu arm and the picture stayed up.
+BACKSPACE worked only because its own arm refreshes unconditionally,
+which is exactly why the defect presented as EQSHW-specific.
+
+The remedy is upstream's own: its matrix SHOW paints its screen and then
+sets `TI_SHOWNOTHING` — "then tell the system it is in show nothing
+mode" (display.c:3952). One assignment at each surface. It also settles
+the dismissal semantics for free, because the whole machine already
+agrees on what a show screen is: any key dismisses (processKeyAction's
+TI clear), EXIT dismisses without popping the menu underneath, and
+`clearTamBuffer` leaves a self-painted screen alone (screen.c:5579).
+
+PSHOW carried the SAME defect and nobody reported it, because its
+fallback arm calls the real `fnC47Show`, which sets temporaryInformation
+properly — so PSHOW dismissed correctly on exactly the inputs it could
+not pretty, and stuck on the ones it could. S4 had pinned the fallback
+half since PP2 (`"S4 fallback did not reach SHOW"`), which is the pin
+that should have made the asymmetry visible and did not, because it only
+ever asserted the fallback.
+
+**Lowercase.** Two defects, not one. Both name matchers used a
+case-sensitive `strncmp`, and the renderer had a SECOND gate — it
+attempted a construct only when the first character was `A`-`Z`
+(`ppqPrimary`), so fixing the comparison alone left the renderer
+declining input the evaluator computed. Verified by the gate: the eval
+pins went green while `EQ34 lowercase construct does not render` stayed
+red.
+
+Upstream convention decides the spelling rule. `functionAlias[]` carries
+both spellings of any name a user types — "sinh" beside "SINH", "asinh"
+beside "ASINH" (solver/equation.c:41-44) — because CMP_NAME folds
+superscript, subscript and struck forms but never case (sort.c:137).
+So the constructs answer to their all-upper and all-lower spellings and
+nothing else; mixed case is upstream's own no, and EQ34 pins that
+`Sum(` is declined so the rule stays a ruling rather than an artefact of
+how the comparison happens to be written. The test extends to
+`ppEqConstructIs` in prettyPrint.h, one function both parsers call, so
+the two cannot drift again.
+
+Both classes are in the audit catalog: "a self-painted screen that never
+declared itself one" and "one grammar, two matchers, drifted".
+
+**What the process missed, and why.** Five audit rounds, a screenshot
+review and two out-of-family readers never asked how a screen ENDS —
+every question was whether it drew correctly, and a capture cannot show
+that a key does nothing. The lowercase pair is worse: FACTS.md recorded
+"variable names may be lowercase, and lowercase evaluates identically"
+from a verification that only ever exercised variables, and that
+sentence then read as coverage of a case rule nobody had tested. A pin
+covering the neighbouring half is how both survived.
+
+FV20 is deliberately a CONTRACT pin. Upstream's EXIT arm lives in
+keyboard.c's static `processKeyAction`, reached only from GTK button
+events the testSuite binary cannot raise, so the pin asserts the state
+the surface must leave behind for that arm to fire, which is the exact
+term that was missing. The keypress itself remains unexercised by any
+automated test.
+
 ## 2026-08-26 — PP16: the three deferred items, closed
 
 Stan asked why anything was still deferred and told me to finish them.

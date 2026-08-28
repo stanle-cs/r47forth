@@ -874,6 +874,15 @@ void fnPrettyShow(uint16_t unusedButMandatoryParameter) {
 
     screenUpdatingMode |= SCRUPD_MANUAL_STACK | SCRUPD_MANUAL_MENU | SCRUPD_MANUAL_SHIFT_STATUS;
     screenHoldsDrawnPixels = true;
+    // Upstream's matrix SHOW paints its own screen and then declares it
+    // one (display.c: temporaryInformation = TI_SHOWNOTHING, "then tell
+    // the system it is in show nothing mode"). That declaration is what
+    // EXIT dismisses on: its arm needs temporaryInformation != TI_NO_INFO
+    // or the showScreenDismissed latch, and SHOWMODE feeds the latch.
+    // Without it EXIT fell through to the menu arm and left the pixels up
+    // (owner report 2026-08-27, reported against EQSHW; PSHOW had it too,
+    // masked because the fallback arm below reaches the real SHOW).
+    temporaryInformation = TI_SHOWNOTHING;
     return;
   }
 

@@ -177,7 +177,10 @@ static bool_t ppqMatchName(ppqCtx_t *c, const char *name, int16_t *after) {
   if(c->pos + l >= c->len) {
     return false;
   }
-  if(strncmp(c->s + c->pos, name, (size_t)l) != 0 || c->s[c->pos + l] != '(') {
+  // both spellings, per ppEqConstructIs — the renderer has to accept
+  // exactly what the evaluator accepts or a typed equation draws and
+  // refuses to compute, or the reverse
+  if(!ppEqConstructIs(c->s + c->pos, name, (uint8_t)l)) {
     return false;
   }
   *after = (int16_t)(c->pos + l + 1);
@@ -386,7 +389,10 @@ static uint8_t ppqPrimary(ppqCtx_t *c, uint8_t font, uint8_t tinyF) {
   ppqSkipSpace(c);
   uint16_t code = ppqPeek(c, &next);
 
-  if(code >= 'A' && code <= 'Z') {
+  // either spelling reaches the probe, which consumes nothing unless it
+  // matches; gating on uppercase alone was the second half of the
+  // lowercase defect — the evaluator ran sum(...) that this declined
+  if((code >= 'A' && code <= 'Z') || (code >= 'a' && code <= 'z')) {
     uint8_t big = ppqBigopConstruct(c, font, tinyF);
     if(c->failed) {
       return PP_NONE;
@@ -803,6 +809,9 @@ bool_t ppqShowRender(const char *src) {
 
   screenUpdatingMode |= SCRUPD_MANUAL_STACK | SCRUPD_MANUAL_MENU | SCRUPD_MANUAL_SHIFT_STATUS;
   screenHoldsDrawnPixels = true;
+  // a self-painted screen declares itself one, so EXIT can dismiss it —
+  // see the note at the same assignment in fnPrettyShow
+  temporaryInformation = TI_SHOWNOTHING;
   return pretty;
 }
 

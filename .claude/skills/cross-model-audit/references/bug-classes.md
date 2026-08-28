@@ -484,3 +484,57 @@ check rather than discount.
 Hunt it at: every modal state. Enumerate the DISTINCT entry paths into
 dispatch — not the keys, the paths — and prove containment on each. Then
 ask which of those proofs depends on code you do not own.
+
+## a self-painted screen that never declared itself one (pretty-print, owner report 2026-08-27)
+
+A surface paints its own pixels and sets the manual-update bits, and it
+LOOKS finished: the picture is right, the pixels survive refresh, the
+next keypress restores the stack. What it never did is tell the rest of
+the machine that a screen is up. Upstream's dismissal arms do not test
+"are pixels held?" — they test a state variable the painter is expected
+to set. So the screen is up and nothing knows.
+
+Found: PSHOW and EQSHW set `screenHoldsDrawnPixels` plus the SCRUPD
+manual bits but left `temporaryInformation` at TI_NO_INFO. Upstream's
+EXIT arm fires on `temporaryInformation != TI_NO_INFO ||
+showScreenDismissed` (keyboard.c), and `showScreenDismissed` is itself
+latched from SHOWMODE, which is a temporaryInformation test. Both terms
+false, so EXIT fell through to the menu arm and the picture stayed. The
+convention was one line away in upstream's own matrix SHOW, which paints
+its own screen and then sets TI_SHOWNOTHING — its comment literally says
+"then tell the system it is in show nothing mode".
+
+**Why it survived five audit rounds and a screenshot review.** Every
+verification asked whether the screen was DRAWN correctly. Nothing asked
+how it ENDS. A capture proves the picture; it cannot show that a key
+does nothing. And the one surface with a fallback arm (PSHOW → the real
+SHOW) dismissed correctly whenever it fell back, so the defect looked
+like it belonged to the other surface.
+
+Hunt it at: every screen the package paints itself. Ask what upstream
+tests to decide the screen is up, and prove the package sets it — not
+that the pixels are correct. The owner's report is the shape to expect:
+"X did not exit, I had to press Y."
+
+## one grammar, two matchers, drifted (pretty-print, owner report 2026-08-27)
+
+A construct that both renders and evaluates has two independent parsers,
+and each matches the name with its own hand-written comparison. They
+drift, and the failure is asymmetric: input the evaluator computes, the
+renderer silently declines (or the reverse), so a user gets a number with
+no picture and no error explaining why.
+
+Found: lowercase `sum(...)`/`integ(...)` reached neither, because both
+sites used a case-sensitive `strncmp` where upstream carries BOTH
+spellings of any name typed into an equation (`functionAlias[]` lists
+"sinh" beside "SINH"; CMP_NAME folds superscripts and struck forms but
+never case). The two sites were not even wrong in the same way — the
+renderer had a SECOND gate, attempting a construct only when the first
+character was A-Z, so fixing the comparison alone left it still
+declining. The one-line fix at the obvious site tested green on the
+evaluator and the renderer stayed broken.
+
+Hunt it at: any grammar with a render path and an eval path. Extract the
+name test into ONE function both call, and pin the same spelling through
+both surfaces in the same test — a pin that only evaluates will not see
+the renderer's extra gate.

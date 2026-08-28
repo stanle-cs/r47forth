@@ -2424,6 +2424,78 @@ void prettyTestFormula(uint16_t unusedButMandatoryParameter) {
     }
   }
 
+  // FV20 (owner report 2026-08-27): EXIT would not dismiss the EQSHW
+  // screen; only BACKSPACE did. Both full-screen surfaces hold their
+  // pixels with the fnPixel protocol, but upstream's EXIT arm
+  // (keyboard.c:2533) only dismisses a held screen when
+  //   temporaryInformation != TI_NO_INFO || showScreenDismissed
+  // and showScreenDismissed is itself latched from SHOWMODE at
+  // btnPressed (keyboard.c:1808). Painting without a temporaryInformation
+  // left BOTH terms false, so EXIT fell through to the menu arm and the
+  // pixels stayed. BACKSPACE worked only because its own arm refreshes
+  // unconditionally, which is why the defect looked EQSHW-specific.
+  //
+  // The pin is a CONTRACT pin, and deliberately so: the EXIT arm lives in
+  // keyboard.c's static executeFunction, reachable only from GTK button
+  // events that the testSuite binary has no path to raise. So this
+  // asserts the state the surface must LEAVE BEHIND for that arm to fire
+  // — the exact term that was missing — rather than the keypress itself.
+  {
+    ppcTestReset();
+    calcMode = CM_NORMAL;
+    bool_t hadFract = getSystemFlag(FLAG_FRACT);
+    setSystemFlag(FLAG_FRACT);
+    prettySetEnabled(true);
+    ppTestSetRealX("0.75");     // a LonI never pretties, so it would
+                                // fall back to SHOW and prove nothing
+
+    temporaryInformation = TI_NO_INFO;
+    screenHoldsDrawnPixels = false;
+    fnPrettyShow(NOPARAM);
+    if(!screenHoldsDrawnPixels) {
+      ppTestFail("FV20 PSHOW did not reach the held-pixel surface");
+    }
+    else if(temporaryInformation == TI_NO_INFO) {
+      ppTestFail("FV20 PSHOW leaves no temporaryInformation — EXIT cannot dismiss it");
+    }
+    else if(!SHOWMODE) {
+      ppTestFail("FV20 PSHOW screen is not a SHOWMODE screen — no showScreenDismissed latch");
+    }
+
+    // setEquation dereferences allFormulae, which is NULL until a slot
+    // exists — the covDerivEq idiom, and the same NULL that has bitten
+    // a probe placed before any equation was created.
+    uint16_t hadMode = calcMode;
+    if(numberOfFormulae == 0) {
+      fnEqNew(NOPARAM);
+    }
+    calcMode = CM_NORMAL;
+    aimBuffer[0] = 0;
+    nimNumberPart = NP_EMPTY;
+    setEquation(currentFormula, "1/(X+2)");
+    temporaryInformation = TI_NO_INFO;
+    screenHoldsDrawnPixels = false;
+    fnPrettyEqShow(NOPARAM);
+    if(!screenHoldsDrawnPixels) {
+      ppTestFail("FV20 EQSHW did not reach the held-pixel surface");
+    }
+    else if(temporaryInformation == TI_NO_INFO) {
+      ppTestFail("FV20 EQSHW leaves no temporaryInformation — EXIT cannot dismiss it");
+    }
+    else if(!SHOWMODE) {
+      ppTestFail("FV20 EQSHW screen is not a SHOWMODE screen — no showScreenDismissed latch");
+    }
+
+    temporaryInformation = TI_NO_INFO;
+    screenHoldsDrawnPixels = false;
+    screenUpdatingMode = SCRUPD_AUTO;
+    calcMode = hadMode;
+    if(!hadFract) {
+      clearSystemFlag(FLAG_FRACT);
+    }
+    lastErrorCode = ERROR_NONE;
+  }
+
   ppcTestReset();
   ppTestWriteLonI(REGISTER_X, ppTestFailures);
 }
@@ -3108,6 +3180,72 @@ void prettyTestEquation(uint16_t unusedButMandatoryParameter) {
       }
     }
     lastErrorCode = 0;
+
+    // EQ34 (owner report 2026-08-27): the construct names must accept
+    // lowercase. Upstream's own convention for a name a user types into
+    // an equation is to carry BOTH spellings in the alias table —
+    // functionAlias[] holds "sinh" beside "SINH" and "asinh" beside
+    // "ASINH" (equation.c:41-44) — because CMP_NAME folds superscripts
+    // and struck forms but NOT case. The package matched with a
+    // case-sensitive strncmp on one spelling, so sum(...) and integ(...)
+    // reached _parseWord as unknown words and raised FUNCTION_NOT_FOUND.
+    // Variables were never affected, which is why lowercase indices in
+    // the capacity expression (EQ33) always worked.
+    {
+      static const char * const eq34[] = {
+        "sum(X;X;1;3)", "SUM(X;X;1;3)",
+      };
+      for(unsigned i = 0; i < sizeof(eq34) / sizeof(eq34[0]); i++) {
+        setEquation(currentFormula, eq34[i]);
+        lastErrorCode = 0;
+        fnEqCalc(NOPARAM);
+        real34_t want;
+        int32ToReal34(6, &want);
+        if(lastErrorCode != ERROR_NONE || getRegisterDataType(REGISTER_X) != dtReal34
+            || !real34CompareEqual(REGISTER_REAL34_DATA(REGISTER_X), &want)) {
+          ppTestFail("EQ34 a construct spelling did not evaluate to 6");
+        }
+        lastErrorCode = 0;
+      }
+      // and the same name mixed-case inside a nest, with a lowercase
+      // index, so the whole intercept path is exercised
+      setEquation(currentFormula, "integ(deriv(sum(X;X;1;3)/(X+2);X;X;2);X;1;2)");
+      lastErrorCode = 0;
+      fnEqCalc(NOPARAM);
+      {
+        real34_t want, diff, tol;
+        stringToReal34("0.2916666666666666666666666666666667", &want);
+        if(lastErrorCode != ERROR_NONE || getRegisterDataType(REGISTER_X) != dtReal34) {
+          ppTestFail("EQ34 the lowercase tower did not evaluate");
+        }
+        else {
+          real34Subtract(REGISTER_REAL34_DATA(REGISTER_X), &want, &diff);
+          real34SetPositiveSign(&diff);
+          stringToReal34("1e-10", &tol);
+          if(!real34CompareLessThan(&diff, &tol)) {
+            ppTestFail("EQ34 lowercase tower != 7/24");
+          }
+        }
+      }
+      lastErrorCode = 0;
+      // the renderer must agree with the evaluator: same text, drawn
+      ppReset();
+      if(!ppqParse("sum(X;X;1;3)", PP_FONT_STANDARD, PP_FONT_TINY, &root)) {
+        ppTestFail("EQ34 lowercase construct does not render");
+      }
+      // a variable ENDING in a construct name still must not match
+      ppReset();
+      if(ppqParse("mysum(X;X;1;3)", PP_FONT_STANDARD, PP_FONT_TINY, &root)) {
+        ppTestFail("EQ34 a name ending in a construct name matched");
+      }
+      // MIXED case is upstream's own no: functionAlias[] carries SINH
+      // and sinh, never Sinh. Pinned so the two spellings stay a ruling
+      // rather than an accident of how the comparison was written.
+      ppReset();
+      if(ppqParse("Sum(X;X;1;3)", PP_FONT_STANDARD, PP_FONT_TINY, &root)) {
+        ppTestFail("EQ34 mixed case matched, which upstream's aliases do not");
+      }
+    }
 
     // EQ27: an integral nests inside an integral — the new
     // double-exponential path never increments the engine counter, so

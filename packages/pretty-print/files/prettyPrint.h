@@ -70,6 +70,33 @@ void prettyNoteNimText     (const char *aim);
 void prettyNoteNumberCommit(void);
 void prettyReset           (void);
 
+// Construct-name spelling, shared by the two parsers that must agree on
+// it: the renderer (ppqBigopConstruct) and the evaluator
+// (ppEqBigopIntercept). Upstream carries BOTH spellings of any name a
+// user types into an equation — functionAlias[] lists "sinh" beside
+// "SINH" and "asinh" beside "ASINH" (solver/equation.c) — because
+// CMP_NAME folds superscript, subscript and struck forms but never
+// case. So a construct answers to its all-upper and all-lower spellings
+// and to nothing else, exactly as SINH/sinh do; mixed case is upstream's
+// own no. `name` is the uppercase spelling, ASCII by construction.
+// Returns false unless the very next character is '(' , which is what
+// keeps a variable merely ENDING in a construct name from matching.
+static inline bool_t ppEqConstructIs(const char *s, const char *name, uint8_t len) {
+  if(s[len] != '(') {
+    return false;
+  }
+  const bool_t lower = (s[0] == (char)(name[0] + 32));
+  if(!lower && s[0] != name[0]) {
+    return false;
+  }
+  for(uint8_t i = 1; i < len; i++) {
+    if(s[i] != (lower ? (char)(name[i] + 32) : name[i])) {
+      return false;
+    }
+  }
+  return true;
+}
+
 // testSuite coverage drivers (prettyTest.c, PC_BUILD only; registered in
 // funcTestNoParam with coverageDriver = 1).
 void prettyTestMeasure (uint16_t unusedButMandatoryParameter);

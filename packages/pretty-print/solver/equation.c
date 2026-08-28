@@ -1945,10 +1945,10 @@ static int16_t ppEqBigopIntercept(const char *strPtr, uint16_t parseMode, char *
   if(!wordEmpty) {
     return 0;
   }
-  if(strncmp(strPtr, "SUM(", 4) == 0)        { kind = 0; nameLen = 3; }
-  else if(strncmp(strPtr, "PROD(", 5) == 0)  { kind = 1; nameLen = 4; }
-  else if(strncmp(strPtr, "DERIV(", 6) == 0) { kind = 2; nameLen = 5; }
-  else if(strncmp(strPtr, "INTEG(", 6) == 0) { kind = 3; nameLen = 5; }
+  if(ppEqConstructIs(strPtr, "SUM", 3))        { kind = 0; nameLen = 3; }
+  else if(ppEqConstructIs(strPtr, "PROD", 4))  { kind = 1; nameLen = 4; }
+  else if(ppEqConstructIs(strPtr, "DERIV", 5)) { kind = 2; nameLen = 5; }
+  else if(ppEqConstructIs(strPtr, "INTEG", 5)) { kind = 3; nameLen = 5; }
   else {
     return 0;
   }

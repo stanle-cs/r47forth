@@ -312,6 +312,29 @@ access), `ppHistoryCount()` / `ppHistoryEntry(idx, &len, &seq)`,
   releases them. Zero keyboard.c churn, zero screen.c hunks, status-bar rows
   0..15 untouched so the clock keeps ticking. Builder failure falls back to
   `fnC47Show(NOPARAM)` — the user always gets a SHOW.
+
+  BINDING (2026-08-27, owner-reported): a surface that paints its own
+  screen also **declares** it one, by setting `temporaryInformation =
+  TI_SHOWNOTHING` beside `screenHoldsDrawnPixels = true`. Holding pixels
+  is not what upstream dismisses on — its EXIT arm tests
+  `temporaryInformation != TI_NO_INFO || showScreenDismissed`
+  (keyboard.c), and `showScreenDismissed` latches from SHOWMODE, itself a
+  temporaryInformation test. A surface that omits it draws correctly and
+  then cannot be closed with EXIT. The convention is upstream's own
+  matrix SHOW, which paints its screen and then sets TI_SHOWNOTHING
+  ("then tell the system it is in show nothing mode", display.c).
+
+  Scope, stated because the obvious generalisation is wrong: this binds
+  the surfaces upstream dismisses, which is every self-painted screen
+  raised in CM_NORMAL — today PSHOW and EQSHW. The PHIST pager also
+  holds pixels but is raised INSIDE `CM_PRETTY_BROWSER`, where the
+  package's own containment routes every key and `prettyBrowserLeave`
+  does the dismissing; upstream's EXIT arm never sees it. It deliberately
+  does NOT declare itself, and declaring it would break its paging, which
+  reads `screenHoldsDrawnPixels` to tell a repeat press from a fresh one
+  — a SHOWMODE screen has that cleared for it on the next press. A
+  self-painted surface therefore follows the dismissal contract of the
+  mode it is raised in, and a new one must say which that is.
 - **Formula view** (PP4, RULED 2026-08-26): a PAGER, not a browser mode.
   `PHIST` (row 462) renders the current formula plus the finished-formula
   history as 2D infix — division stacked, powers raised, roots under
@@ -433,6 +456,19 @@ Syntax (parse-level, package-side): `SUM(body;var;from;to[;step])`,
 error, so the syntax space is free, and unlike `,` it can never collide
 with a radix mark. The constructs nest (a SUM body may hold another);
 depth caps at 2 and errors beyond.
+
+BINDING, spelling (2026-08-27, owner-reported): a construct answers to
+its **all-upper and all-lower spellings and nothing else** — `SUM(` and
+`sum(`, never `Sum(`. This is upstream's convention, not a choice:
+`functionAlias[]` carries both spellings of every name a user types into
+an equation ("sinh" beside "SINH", "asinh" beside "ASINH",
+solver/equation.c) because `compareString`'s CMP_NAME folds superscript,
+subscript and struck forms but never case (sort.c:137). The test lives
+in exactly one place, `ppEqConstructIs` (prettyPrint.h), and BOTH the
+renderer and the evaluator call it. They must: a spelling one accepts
+and the other declines gives the user a number with no picture, or a
+picture that will not compute, with no error either way. Whoever adds a
+construct adds it to both and pins the same spelling through both.
 
 Machinery (one hook line at the top of parseEquation's scan loop + an
 appended block in the same file):

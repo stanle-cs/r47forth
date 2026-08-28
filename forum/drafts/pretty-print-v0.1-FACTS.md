@@ -56,7 +56,15 @@ Input syntax note, verified 2026-08-27: the square root is a FUNCTION
 ALIAS and takes brackets, so `\xa2\x1a(n)` not `\xa2\x1a n`; powers are
 `^`, because the superscript-2 glyph appears in equation.c only in
 commented-out lines and is display output, not input. Variable names may
-be lowercase, and lowercase evaluates identically. Construct indices
+be lowercase, and lowercase evaluates identically.
+
+CORRECTED 2026-08-27 (Stan reported it from the build): the sentence
+above covered VARIABLES only, and was read as covering the construct
+names too. It did not — `sum(`/`integ(` were rejected until this date,
+by both the evaluator and the renderer. Fixed; a construct now answers to
+its all-upper and all-lower spellings (`SUM(`, `sum(`) and not to mixed
+case (`Sum(`), which is upstream's own rule for the names it accepts in
+an equation. Construct indices
 shadow an outer variable of the same name correctly — the same-variable
 and distinct-variable forms of the capacity expression agree to 34
 digits.

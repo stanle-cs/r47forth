@@ -1,5 +1,5 @@
 diff --git a/src/c47/solver/equation.c b/src/c47/solver/equation.c
-index ca3da3341ccc17998627221684ba14c7f7559138..3e5d91d5a77f7414e23dcb9cfd45af4aa2d49e68 100644
+index ca3da3341ccc17998627221684ba14c7f7559138..30e921fb178837d499f1e2bb9f07da9602e33c8b 100644
 --- a/src/c47/solver/equation.c
 +++ b/src/c47/solver/equation.c
 @@ -657,7 +657,11 @@ void showEquation(uint16_t equationId, uint16_t startAt, uint16_t cursorAt, bool
@@ -320,10 +320,10 @@ index ca3da3341ccc17998627221684ba14c7f7559138..3e5d91d5a77f7414e23dcb9cfd45af4a
 +  if(!wordEmpty) {
 +    return 0;
 +  }
-+  if(strncmp(strPtr, "SUM(", 4) == 0)        { kind = 0; nameLen = 3; }
-+  else if(strncmp(strPtr, "PROD(", 5) == 0)  { kind = 1; nameLen = 4; }
-+  else if(strncmp(strPtr, "DERIV(", 6) == 0) { kind = 2; nameLen = 5; }
-+  else if(strncmp(strPtr, "INTEG(", 6) == 0) { kind = 3; nameLen = 5; }
++  if(ppEqConstructIs(strPtr, "SUM", 3))        { kind = 0; nameLen = 3; }
++  else if(ppEqConstructIs(strPtr, "PROD", 4))  { kind = 1; nameLen = 4; }
++  else if(ppEqConstructIs(strPtr, "DERIV", 5)) { kind = 2; nameLen = 5; }
++  else if(ppEqConstructIs(strPtr, "INTEG", 5)) { kind = 3; nameLen = 5; }
 +  else {
 +    return 0;
 +  }
