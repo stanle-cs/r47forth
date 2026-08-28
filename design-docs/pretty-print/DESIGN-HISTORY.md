@@ -2,6 +2,113 @@
 
 Non-normative amendment trail. DESIGN.md is authoritative.
 
+## 2026-08-28 — PP17: VISUAL, an RPN program drawn as its mathematics
+
+Jaymos, replying to the v0.1 announcement, asked for the one thing the
+package could not do: draw what R47 itself computes — a chained RPN
+program from appnote 22, `VISUAL 'DBLINT'` beside `XEQ 'DBLINT'`. It
+lands as a third front-end to the existing renderer (DESIGN.md §6,
+PP17), a static walker that transpiles program steps into
+equation-language text.
+
+- The design decision that made it small: **emit TEXT, not nodes**. The
+  renderer, the evaluator and the dismissal protocol are all reused
+  unchanged, and the output is a string the user could have typed into
+  EQN — so V18 can assert that a transpiled double integral EVALUATES to
+  4/3, which no string comparison could have caught.
+- 18 mutations (MUT-77..MUT-94), all red-verified.
+
+**A reported bug that did not exist, and the pin that proved it.** This
+stage was planned with a rider: "PSHOW/PHIST render a recalled named
+variable as `R256`", read out of `prettyFormula.c`'s two `R%02u` arms.
+The pin written to red-first it came back
+`expected '2 q ×', actual '2 # ×'` — a VALUE leaf, not a mis-named RCL
+leaf. `ppcRclLeaf` (prettyCapture.c:234) only builds a `PPN_RCL` leaf for
+`param <= 99`; everything else, named variables included, degrades to a
+value snapshot by the PP9 ruling ("their display names are not item
+ids"). So the `R%02u` arms only ever see numbered registers and are
+correct as written, and the "fix" was unreachable code. Reverted.
+
+What survives is a smaller, real observation for whoever wants it: PP9's
+stated REASON has expired — `ppfVariableName` now exists and does exactly
+that decode for the big operators' d-variable. Whether a named recall
+should show `q` or its value at capture time is a design question (the
+value is truthful too), not a bug, and it is left open rather than
+decided in passing. This is the same shape as R5-1, where a binding
+rule's justification was invalidated without the rule itself becoming
+wrong.
+
+**Two harness false-greens in one session**, both written up in
+TESTING.md: the suite's failure banner is `1 TEST  FAILED` in the
+singular, and only package-OWN files are symlinked into the build shadow
+— mutations in patched upstream files need
+`meson setup --reconfigure` or they test yesterday's code. MUT-87
+"survived" against a stale `softmenus.c`. Both were caught by disbelieving
+a green, which is the only way this class ever is.
+
+**Scope widened, and the renderer with it.** The first cut emitted only
+the four monadics with a 2D spelling, on the reasoning that `ppqPrimary`
+had no function-application arm so `sin(x)` could not be drawn. Right
+about `sin(x)`, wrong about everything around it: the strict parser
+failed on the trailing `(`, so one unrecognised name cost the whole
+formula its 2D form — `sin(x)/2` lost its stacked fraction. The renderer
+gained an f(x) arm for the CONTEXT, not the function, and deliberately
+does not set `fracSeen` for it, since a drawn `SIN(x)` is the same shape
+as a linear one.
+
+The emitter needed a name source that cannot drift from the evaluator,
+and got one without a hand table: `ppEqFunctionItem` mirrors
+`_parseWord`'s own resolution, and an item is emitted only if its
+catalog spelling ROUND-TRIPS back to that item. Admitted: LN, LOG, SIN,
+COS, TAN, ARCSIN, ARCCOS, ARCTAN. Refused, correctly and without being
+listed anywhere: `e^x`, `10ˣ`, `LN(1+x)`, `>ABS<`, `|x|`. The scope had
+been narrow partly for a real reason and partly because a decision made
+before the linear fallback existed was never revisited — the same shape
+as the placement miss below.
+
+**Coverage went from "fixtures I wrote" to "input the unit produces."**
+Asked for more test functions and for driving through the keyboard, the
+battery gained nine fixtures (a constructed function under an integral,
+a serial XEQ chain, the PROD arm, a computed limit, the lift latch, the
+stack motions) and two axes it had not had at all. V36/V37 drive VISUAL
+through the transient-alpha path its `TM_LBLONLY` parameter exists for —
+the command, ALPHA, the label typed a letter at a time, ENTER — which
+every other pin skipped, and which is the axis R5-3 was found on. V39
+goes further and KEYS THE PROGRAM IN through PEM rather than loading a
+byte array, which answered a question the suite had been assuming: PEM's
+literal encoding came out `72 08 01 32`, byte-for-byte what the
+hand-encoded fixtures spell. The guess was right; it is now verified.
+
+Two harness facts fell out. `getNumberOfSteps()` is the CURRENT
+PROGRAM's count, so keying from there splices new steps into whatever
+program is current — the first attempt built its program inside another
+one, and the walk correctly ran on into that program's `XEQ 09` and
+declined. And `fnGotoDot` does not clamp: a step number past the end
+walks `currentStep` to NULL and cores the suite. Both are in TESTING.md.
+
+**The placement was in the request and I nearly shipped without it.**
+Jaymos wrote "draw the integrals in the Z/T window". The first
+implementation used the existing full-screen surface instead, because it
+was already there — and the earlier analysis had even flagged Z/T as an
+open question to measure, then let the design quietly resolve it by
+convenience. Asked to re-read the request, the gap was obvious.
+Measuring settled it in one run: one stack line is 36 px and the
+transpiled forms need 38/58/78 (31/51/71 shrunk), so a single line
+cannot hold the double integral he named — but the T and Z bands
+TOGETHER are 72 px and hold every chain in appnote 22. "Z/T window" was
+a region, not a line, and reading it as a line was what made it look
+impossible. The lesson is not about integrals: when a request names a
+place, the place is part of the requirement, and substituting a
+different one needs saying out loud, not deciding silently.
+
+**MUT-79 is the one worth remembering for coverage.** Dropping the
+right-operand parenthesization rule survived V16 (`a/(b+c)`), because a
+LOWER-precedence operand parenthesizes under either rule. Only the
+EQUAL-precedence case distinguishes them — `a-(b+c)` becoming `a-b+c` —
+and V21/V22 had to be written for it. A precedence pin that does not
+include a same-level right operand is not testing the rule it looks like
+it is testing.
+
 ## 2026-08-27 — two owner-reported bugs: EXIT, and lowercase constructs
 
 Stan, using the build: "in eqshw pressing exit did not exit correctly,

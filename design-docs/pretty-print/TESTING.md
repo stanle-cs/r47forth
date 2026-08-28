@@ -246,6 +246,37 @@ after restore.
 | MUT-56 | MVAR scan hides only the construct NAME again (Bug 1) | EQ29 (the commit rejects the typed equation, error 45) |
 | MUT-75 | negative paint x left unclipped (r3) | T29 (the fill-drawn rule is dropped instead of clipped) |
 | MUT-76 | the `.d` exemption removed from the containment guard (r3) | **UNFALSIFIABLE from the harness — documented gap, not a coverage hole.** The guard lives in `executeFunction`, which is `static` and whose only entry point hard-codes its item argument, so no test can drive a chosen key through it. Verified by trace instead: UP/DOWN are matched earlier in the same chain (`item == ITM_DOWN_ARROW \|\| item == ITM_UP_ARROW`), ENTER/EXIT/BACKSPACE have their own `case ITM_...` upstream, and `.d` has neither — which is why it needs the exemption. |
+| MUT-77 | SUB/DIV operand order swapped (X emitted as the left operand) | V3, V16 |
+| MUT-78 | ENTER stops duplicating | V3 |
+| MUT-79 | right-operand parenthesization dropped (`prec < level` for both sides) | V21, V22 |
+| MUT-80 | opaque taint dropped — a string literal's text reaches an operator | V10 |
+| MUT-81 | the PGMINT latch cleared when a construct returns | V17 |
+| MUT-82 | unit-step omission inverted (the step is always emitted) | V4 |
+| MUT-83 | the invented sum counter's collision guard dropped | V6 |
+| MUT-84 | the dirty-name guard dropped (a recall after STO reads the old meaning) | V11 |
+| MUT-85 | solver-status neutralization removed around `ppqShowRender` | V19 |
+| MUT-86 | a declined program painted anyway | V20 |
+| MUT-87 | VISUAL removed from `menu_PP` | FV15 |
+| MUT-88 | the construct body frame left unseeded | V4, V5 |
+| MUT-89 | stack underflow yields an empty fragment instead of declining | V13 |
+| MUT-90 | the shadowed-d-variable guard dropped | V23 |
+| MUT-91 | an integral with no PGMINT latched allowed through | V14 |
+| MUT-92 | unknown opcodes silently ignored instead of declining | V7, V15, V20 |
+| MUT-93 | register reads spelled `Rnn` instead of declining | V12 |
+| MUT-94 | local and indirect label parameters guessed at instead of declining | V8, V9 |
+| MUT-95 | the radical takes precedence brackets on top of its own parentheses | V24 |
+| MUT-96 | `1/x` loosens its argument level (ADD instead of MUL) | V26 |
+| MUT-97 | the drawing painted full-screen instead of into the Z/T window | V27 |
+| MUT-98 | the window narrowed to a single stack line | V27 (needed strengthening first — see below) |
+| MUT-99 | the whole screen cleared instead of just the two rows | V27 |
+| MUT-100 | item 984's parameter changed from `TM_LBLONLY` to `NOPARAM` | V36, V37 |
+| MUT-101 | the ENTER lift latch ignored (a lifting read pushes instead of replacing) | V38 — V33 could NOT see it, see below |
+| MUT-102 | `DROPY` drops the top instead of the second level | V35 |
+| MUT-103 | `x<>y` does not swap | V34 |
+| MUT-104 | `PROD` emits `SUM(` | V31 |
+| MUT-105 | the renderer's f(x) arm removed | V41 |
+| MUT-106 | the emitter's round-trip and drawability checks dropped | V42 |
+| MUT-107 | `x³` emitted as a name instead of a superscript | V45 |
 | MUT-57 | prettyReset stops restoring the T-line default (PP15) | FV14 |
 | MUT-58 | cold start restores factory defaults again (the PP11 persistence bug) | FV16 (both flags clobbered) |
 | MUT-59 | the `-MNU_PP` slot in menu_DISP reverted to ITM_NULL (PP15) | FV15 |
@@ -461,3 +492,126 @@ disposition MUT-76 got, not a green light.
 
 P13 is therefore an UPSTREAM-DRIFT pin, in the same family as P1's exact
 bar rows: our own code cannot break it, and that is the point.
+
+
+## The V family — VISUAL, the RPN-program walker (PP17)
+
+`prettyTestVisual` (tests/pretty_print.txt) pins the **transpiled
+string**, not the picture. That is deliberate: the string is the walker's
+whole product, and every rendering question about it was already settled
+by the equation battery, so a pin that checked pixels would be testing
+`ppqParse` a second time and the walker not at all. `ppvTranspile` exists
+as a seam for exactly this.
+
+Fixtures are appnote 22's own chain (`docs/appnotes/sources/AN0022`) with
+package-local label names, loaded through `ppcTestWriteAndLoadPgm` — the
+official program loader, so the pins walk real program memory rather than
+a hand-built array the walker might read differently from the calculator.
+
+| pin | what it holds |
+|---|---|
+| V1 | `DBLINT` → `INTEG(INTEG(t;t;0;x);x;0;2)` — the ask itself: latch, recursion, seeding, rollback, and the plot-title idiom passing through, in one string |
+| V2 | `TRPINT` → three coupled levels, plus an exponent literal and a STO'd name riding through without reaching the mathematics |
+| V3 | `FX` → `x×x-x×p-2`: SUB operand order (Y−X), ENTER dup, MVAR skipped |
+| V4/V5 | programmed sums; a unit step omitted, a step of 2 kept |
+| V6 | the invented counter name refuses to shadow a real variable |
+| V7-V15 | the decline catalog: SOLVE, local label, indirect, opaque-in-maths, dirty name, register read, underflow, unlatched integral, flow control — each asserting its own D-number, so a decline for the WRONG reason is a failure |
+| V16, V21, V22 | precedence. V16 is a lower-precedence right operand; **V21/V22 are the equal-precedence case, and they are the ones that matter** — the left/right asymmetry exists only for them, and MUT-79 survived until they were written |
+| V17 | the PGMINT latch persists across a construct |
+| V18 | **the loop closed**: a transpiled string EVALUATES to 4/3 through `fnEqCalc`. A picture that cannot compute would be a transpilation that only looks right, and no string pin can catch that |
+| V19/V20 | the surface: a stale solver session must not reframe the drawing and must come back bit-exact; a decline paints nothing |
+| V23 | an inner d-variable spelled like an outer one declines |
+| V27 | the drawing lands in the Z/T rows, spans BOTH of them, does not reach the Y line, leaves the X line byte-identical, and declares its pixels so EXIT dismisses it |
+| V28 | the six measured heights the placement rests on, plus the two inequalities they support: one line does NOT hold a full-size integral, the pair DOES hold the double |
+| V29-V32 | shapes appnote 22's own set never reaches: a constructed function UNDER an integral (its PLTINTG integrand), a SERIAL XEQ chain (the other half of "nested or serial"), the `PROD` arm, and an integration limit that is an expression rather than a literal or a bare name |
+| V33, V38 | the ENTER lift latch. V33 is the readable case (`5 ENTER 3 +`); **V38 is the one with teeth** — see below |
+| V34, V35 | `x<>y` and `DROPY`, whose whole content is which stack level they touch |
+| V36, V37 | **driven through the real keys**: the command, ALPHA, the label typed a letter at a time, ENTER — the transient-alpha path `TM_LBLONLY` exists for, which every other pin skips. V37 pins that an unknown name is refused by TAM and never reaches the walker |
+| V39 | **a program KEYED IN through PEM**, not hand-encoded — see below |
+| V40, V43, V45 | named functions: emitted from the item's own catalog spelling, composing under an integral, and `x³` staying a superscript rather than becoming a name |
+| V41 | **why the renderer gained an f(x) arm**: `SIN(x)/2` must still build a FRACTION. There is no 2D gain in the function itself — the gain is that one unrecognised name no longer costs the whole formula its 2D form |
+| V42 | a monadic whose catalog spelling is glyphs (`e^x`) declines rather than emitting text that would neither draw nor compute |
+| V44 | an emitted name COMPUTES (`LN(1)+2` = 2) — the round-trip through the evaluator's own resolution, checked end to end |
+| V24-V26 | the four monadics with a grammar spelling. **V24 and V26 were both written after a mutation survived**: `√` bracketed its argument twice (its `pre` already emits a parenthesis), and `1/x`'s argument level is only distinguishable from a looser one by a SAME-level operand — `1/a×b` is not `1/(a×b)` |
+
+**V38 and the invisible half of a stack rule.** MUT-101 (ignore the ENTER
+lift latch) survived V33 (`5 ENTER 3 +` → `5+3`). It had to: with the
+latch, ENTER-dup-then-replace leaves `[5, 3]`; without it,
+ENTER-dup-then-push leaves `[5, 5, 3]`. **The top two values are
+identical either way** — the latch's entire effect is on stack DEPTH, and
+nothing visible differs until something reaches PAST the top two. V38
+therefore consumes one more value than the correct trace provides: it
+declines (D10 underflow), while a walker carrying the phantom copy finds
+something waiting and prints an expression. Same family as the
+same-level lesson below.
+
+**V39, and what keying a program in actually proved.** Every other
+fixture hand-encodes its bytes (`ITM_LITERAL, STRING_LONG_INTEGER, 1,
+'0'`), which is a GUESS at what the calculator writes when a user types
+the same thing. V39 keys `LBL 'VKEY' / RCL 'a' / ENTER / x / 2 / - / RTN`
+through PEM — `runFunction()` in `CM_PEM`, parameterised steps through
+the same transient-alpha machinery a user drives — and transpiles the
+result. PEM's literal came out `72 08 01 32`, byte-for-byte what the
+hand-encoded fixtures spell, so **the guess was right and is now
+verified rather than assumed**. Its standing value is as a tripwire: if
+upstream changes how PEM encodes a step, V39 reds while every
+hand-encoded pin stays green. **No mutation of package code can red it**
+— like P13 it is an upstream-drift pin, and that is its disposition, not
+a coverage hole.
+
+Two traps paid on the way in. `getNumberOfSteps()` is the CURRENT
+PROGRAM's step count, so keying from there splices the new steps into
+the middle of whatever program is current — the first attempt built its
+program inside another one and the walk correctly ran on into that
+program's `XEQ 09`. And `fnGotoDot` does **not** clamp: a step number
+past the end walks `currentStep` to NULL and cores the suite. The append
+point is derived by walking to `.END.`, the same "never hand-count a
+step number" rule the run-sim skill states for captures.
+
+**MUT-98 and the fallback that made a wrong band look right.** Narrowing
+the window to one stack line first survived V27. The 2D form correctly
+failed to fit — but the LINEAR fallback beneath it painted on the Z line
+regardless of the band, so ink still appeared inside the region V27
+checked. Two things were wrong, and both got fixed: the fallback now
+centres itself in the band it claims (a placement that ignores its own
+band cannot verify one), and V27 now requires ink in the T half AND the
+Z half, which is what actually distinguishes "drawn across the Z/T
+window" from "a one-line form that happens to sit inside it". A
+fallback path that lands in the same region as the path under test will
+mask its failure.
+
+**The same-level lesson, three times over.** MUT-79, MUT-90 and MUT-96
+all survived their first battery, and all three for one reason: the pin
+exercised a case where the correct rule and the broken rule agree. A
+lower-precedence operand brackets under either rule; only an equal one
+tells them apart. Whenever a rule reads `<` on one side and `<=` on the
+other, the pin has to hit the boundary, or it is testing the `<` twice.
+
+**Harness lessons, three in one session (2026-08-28).** A fast mutation
+loop over the reduced `pretty_print` case list produced three different
+false readings before it could be trusted:
+
+1. **The banner is not one string.** The suite prints `1 TEST  FAILED`
+   (singular, two spaces) for one failure and `2 TESTS FAILED` for more.
+   A runner grepping `TESTS FAILED` scores every single-failure mutation
+   as survived. The fix is to compare the PASSED count against
+   `NUMBER OF TESTS` and to refuse to report at all when neither number
+   is present — a run that did not happen must never read as green.
+2. **A mutation runner must restore the SHADOW, not just the source.**
+   The runner reconfigured with the mutation applied, then reverted the
+   source — leaving `build.sim/custom_pkg_shadow/items.c` still carrying
+   MUT-100. Every build afterwards ran a VISUAL whose parameter was
+   `NOPARAM`, and two later pins failed for a reason that had nothing to
+   do with them. Revert must be followed by refresh AND reconfigure.
+3. **Only package-OWN files are symlinked into the shadow tree.**
+   `prettyVisual.c` and `prettyTest.c` are symlinks, so
+   refresh + `ninja` rebuilds them. `softmenus.c`, `items.c` and every
+   other PATCHED UPSTREAM file is materialized by the resolver, and
+   `ninja` alone rebuilds yesterday's copy — MUT-87 "survived" against
+   stale code. Mutations in patched files need
+   `meson setup --reconfigure`, which is why `build-test.sh` does it
+   every pass and why nothing but that script is the gate.
+
+This is the same shape as the PP12-era stale-binary trap (`pp-iter.sh`'s
+`|| true`), found again from the other end. The reduced-list loop is a
+development convenience only; the gate is `build-test.sh`.

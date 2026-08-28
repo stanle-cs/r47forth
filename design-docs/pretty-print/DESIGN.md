@@ -534,6 +534,177 @@ defaults, and only `doFnReset` may call it. A lazy path that restores
 defaults overwrites the user's saved preferences, which is exactly what
 persisting them was meant to prevent.
 
+### VISUAL — a program as its mathematics (PP17)
+
+`VISUAL 'DBLINT'` (item 984, `TM_LBLONLY`) draws a stored RPN program as
+the mathematics it computes, without running it, **into the Z/T window**
+— so the answer the program just left in X stays visible underneath.
+Requested on the forum by Jaymos against appnote 22's `func.txt`, whose
+chains are the design's reference input, and whose placement request
+("draw the integrals in the Z/T window") is part of the specification,
+not a detail: the point is seeing the formula and its result together.
+Captured 2026-08-28: `XEQ 'DBLINT'` gives 1.333333..., and `VISUAL
+'DBLINT'` then draws the nested integral above it.
+
+**Shape: a third front-end, not a third renderer.** The package already
+had two producers of one node tree — the capture engine (live dispatches)
+and the equation parser (EQN text). `prettyVisual.c` adds a static walker
+that produces **equation-language TEXT**, which `ppqShowRender()` then
+parses and paints. Emitting text rather than nodes is what keeps the
+feature small: renderer, evaluator and the EXIT-dismissal protocol are
+all reused unchanged, and the product is a string the user could have
+typed into EQN — so it computes as well as draws (pinned, V18).
+
+**Why a symbolic stack seeded with the variable NAME is faithful.**
+Upstream feeds a body program through two channels: the integrator writes
+each node into the named d-variable AND fills every stack level with it
+(`integrate.c`, `DEI_xeq_user` + `fnFillStack`), while a programmed sum
+delivers its counter through the filled stack ALONE (`sumprod.c` — no
+named variable). An equation body, by contrast, reads its variable by
+NAME (`solver/equation.c`, the XEQ-mode RCL arm). Seeding a body frame
+with the variable name on all eight levels reproduces both channels at
+once, which is why the transpiled text computes what the RPN computed.
+
+**BINDING — the emitted alphabet.** Text this walker produces must
+satisfy the renderer AND the evaluator, which are different parsers.
+Multiplication is `STD_CROSS` (`\x80\xd7`): `'*'` is accepted by
+NEITHER. Constructs are all-upper (`INTEG(`, `SUM(`, `PROD(`) per the
+construct-spelling rule above — an emitter is now a third caller bound by
+it. Numerals carry digits, `.` and a leading `-` only; `ppqNumber` has no
+exponent arm, so `1e-8` cannot be spelled.
+
+**BINDING — fail closed.** An opcode the dispatch table does not name
+declines. There is no inferred "harmless item" rule, because the item
+table carries no stack-effect metadata to infer from: `TICKS` is the
+counterexample that would break one, looking inert and pushing a value no
+drawing can predict. The skip list is explicit (`LBL`, `MVAR`, `REM`,
+`PAUSE`, `SNAP`).
+
+**The opaque-taint rule.** A value the text cannot spell — a string
+literal, an exponent numeral — becomes an OPAQUE placeholder rather than
+a decline. Movers (`ENTER`, `x<>y`, the drops, `FILL`, `STO`) carry it
+freely; embedders (any operator, a construct's limits or body, the final
+result) decline on it. This is what lets appnote 22's own idioms pass
+through untouched — `'INT(INT) = 4/3' STO A DROPX` for a plot title,
+`1e-8 STO 'ACC' DROP` to set integrator accuracy — while guaranteeing
+neither can reach the printed mathematics.
+
+**Decline catalog** (D-numbers reach the user through
+`moreInfoOnError`): D1 unsupported opcode · D2 indirect parameter · D3
+local label · D4 unresolved label · D5 recall of a name a `STO` changed ·
+D6 integral with no `PGMINT` latched during the walk · D7 register read
+(the language reads names only) · D8 depth · D9 step budget · D10 stack
+underflow · D11 opaque reaching the mathematics · D12 variable collision ·
+D13 malformed program memory · D14 unreadable numeral · D15 fragment cap ·
+D16 pool exhausted · D17 nothing to show · D18 name the grammar cannot
+spell.
+
+**Rulings.**
+
+- **The `PGMINT` latch is NOT restored when a construct returns.**
+  `currentSolverProgram` is a persistent global upstream, so a callee's
+  relatch is exactly what a second integral would run (V17).
+- **Only a latch set DURING the walk counts.** The runtime global's
+  leftover value is not something a drawing may quietly assume (D6).
+- **Local labels are rejected**, as `fnPgmInt` rejects them: a raw local
+  number means nothing without a running program's context, which is the
+  one thing a static walk does not have. `XEQ`'s acceptance of locals is
+  an execution feature, not a resolution one.
+- **A sum's counter name is invented** (first free of `n`, `m`, `k`, `j`)
+  because RPN has none, and a body that recalls a real variable spelled
+  the same way DECLINES rather than let the invented name shadow it
+  (V6). An inner d-variable spelled like an outer one declines for the
+  mirror reason (V23).
+- **A unit step is omitted** from `SUM`/`PROD`: it is the evaluator's
+  default and the renderer draws the `,Δstep` tail only when a fifth
+  argument was parsed, so omitting it is both identical arithmetic and
+  the cleaner picture (V4/V5).
+- **`ENTER ×` transpiles to `x×x`, not `x²`.** The walker transpiles
+  structure, never intent.
+- **The solver session is cleared around the paint and restored after.**
+  `ppqShowRender` frames its result from `currentSolverStatus`, and a
+  stale integrate or derivative bit would wrap a program's drawing in an
+  integral sign it never asked for (V19). VISUAL is raised in
+  `CM_NORMAL` and inherits that mode's dismissal contract via
+  `TI_SHOWNOTHING`, as §6 requires a new self-painted surface to state.
+- **Nothing is painted on a decline**: the whole text is composed before
+  a pixel is touched (V20).
+- **The drawing goes in the Z/T rows, and the measurement decides that.**
+  One stack line is 36 px; the transpiled forms measure (standard/tiny
+  through `ppMeasure`): single integral 38/31, the double 58/51, the
+  coupled triple 78/71. So ONE line holds only a single integral and only
+  once shrunk — his own double-integral example does not fit it. The T
+  and Z bands together are rows 20..91, **72 px**, which holds every
+  chain in appnote 22. Only the stack refresh is suspended
+  (`SCRUPD_MANUAL_STACK`), so the menu and status bar keep working and X
+  keeps its value. V28 pins the six heights and the two inequalities the
+  placement rests on, so a font or metric change that invalidates the
+  choice fails loudly instead of silently overflowing into the Y line.
+- **Taller than the pair falls through to the full-screen view** (147 px),
+  and a formula the 2D grammar declines — plain arithmetic gains nothing
+  from stacking — still shows in the window, linear and centred in it.
+  Dropping to a full screen for `x·x-p·x-2` would be a worse answer than
+  the stack rows already give.
+
+**Named functions, and why the renderer grew an f(x) arm (widened
+2026-08-28).** The first cut emitted only the four monadics with a 2D
+spelling — `x²`, `√`, `1/x`, unary `−` — because `ppqPrimary` had no
+function-application arm and `sin(x)` therefore could not be drawn. That
+reasoning was right about `sin(x)` and wrong about everything around it:
+the strict parser failed on the trailing `(`, so ONE unrecognised name
+cost the WHOLE formula its 2D form — `sin(x)/2` lost its stacked
+fraction, an integral over a sine lost its integral sign. The arm exists
+for the context, not the function; a drawn `SIN(x)` is the same shape as
+a linear one, which is why it deliberately does NOT set `fracSeen`.
+
+The name test is shared, for the same reason the construct spelling is:
+`ppEqFunctionItem` (solver/equation.c, beside the alias table) mirrors
+`_parseWord`'s own resolution — alias table, then catalog and softmenu
+names gated on `EIM_ENABLED` and a parameterless item — and the
+renderer's arm, the walker's emitter and the evaluator all call it.
+
+The walker emits a function only when BOTH hold: the item is in the
+capture engine's `PPC_MO` monadic set (upstream has no usable arity
+metadata — `EIM_DY` shares its bit with `RESULT_IN_X` and is vestigial),
+and the item's own catalog spelling **round-trips** back through
+`ppEqFunctionItem` to that same item. The round-trip is what removes the
+need for a hand table to drift: a name the evaluator would not parse
+back is never emitted, so this arm cannot produce text that draws and
+will not compute. Admitted in practice: `LN`, `LOG`, `SIN`, `COS`,
+`TAN`, `ARCSIN`, `ARCCOS`, `ARCTAN`. Correctly refused: `e^x`, `10ˣ`,
+`LN(1+x)`, `>ABS<`, `|x|` — catalog spellings carrying glyphs or
+punctuation the grammar has no room for. `x³` joins `x²` as a real
+superscript rather than a name.
+
+**Documented gap:** `ABS` resolves but its catalog spelling is `>ABS<`,
+so it declines even though `abs` is in the alias table. Emitting an
+ALIAS rather than the catalog name would admit it, at the cost of a
+second table to keep honest; not done.
+
+**Not in v1, deliberately.** `SOLVE`/`PGMSLV` chains — the equation
+language has no root-of construct, and inventing a notation is a design
+question, not an implementation one; they decline honestly. `F1DRV`/
+`F2DRV` → `DERIV(` — the shape is parallel but the point-delivery channel
+(X, the solver variable, or both at each probe) needs its own
+verification pass before a seeding rule can be stated with the confidence
+the rest of this section has. `CLX` (lift interplay under eRPN
+unverified), `BINARY_REAL34` literals (they would need a plain-ASCII
+conversion free of display glyphs), and dyadic functions — the emitter's
+arity source is a monadic list, and a two-argument form would need both
+an arity answer and a `f(a;b)` grammar arm.
+
+**Budget (measured 2026-08-28).** Flash 1,146,432 -> 1,151,016
+(**+4,584 B**); device RAM **12,908/16,384, unchanged** — which is the
+design claim as an executable fact, not an intention. No BSS: the
+walker's whole state is one ~1.5 KiB stack frame
+in `fnPrettyVisual` (1 KiB fragment pool + a 256 B compose buffer),
+plus ~50 B per recursion level, capped at depth 5. Fragments are
+descriptors into one linear pool, not a buffer per stack slot — eight
+256-byte slots per frame would cost kilobytes at depth. Reclamation is by
+construct-boundary rollback: every descriptor alive when a body walk
+starts points below the mark taken at that moment.
+
+
 ## §7 Composition claims (BINDING for other packages)
 
 Verified against the tree at branch point (undo-history/stage-u2 tip,
@@ -544,7 +715,9 @@ Verified against the tree at branch point (undo-history/stage-u2 tip,
 | item rows | **459 `PSHOW`, 460 `PPON`, 461 `PCLR`, 462 `PHIST`** | spare `itemToBeCoded` rows at items.c:2290-2293 — ~30 lines below undo-history's 427-429 hunk (ends :2260); items.h defines at :484-487, ~30 lines below its hunk (:446-454) |
 | calcMode | **20 `CM_PRETTY_BROWSER`, WIRED since PP10** | PP4 shipped the history view as a manual-paint PAGER instead of a browser mode (see §6), avoiding ~20 keyboard.c sites in the one file where forth-core rewrites the determineItem chain undo-history already squeezed into. If a full browser lands later, its `#define` must NOT be adjacent to undo-history's `CM_HIST_BROWSER 19` insertion (after defines.h:1721) — anchor ≥4 context lines away |
 | system flag | **50 `FLAG_PRETTYP` (0x8071)**, **51 `FLAG_PTLINE` (0x8072)** | superseded the v1 "none" ruling. The single `NUMBER_OF_SYSTEM_FLAGS` line cannot be edited by two packages independently, so BOTH packages carry the byte-identical `64+51` line and 3-way unifies them (identical-edit claim). Undo-history owns 49; 50 and 51 are ours. **AMENDED (audit r1, A8):** both SYSFL catalog rows (`PPRTY`, `PTLINE`) now live in THIS package's items.c at rows **218/219**, NOT in undo-history's. They were exiled there by the touching-line rule when they sat at 2300/2301 next to a sibling edit; at 218/219 they are inside our own existing 215-217 hunk and touch nothing of anyone else's. The move was forced: with the count here and the rows there, a SOLO pretty-print build declared 115 flags and supplied 112 rows, and the (un-overridden) flag browser indexed three entries past the end of `menu_SYSFL` into the alpha catalog. **KNOWN, NOT OURS TO FIX ALONE:** a single hardcoded count cannot be right for every package combination — upstream is balanced at 112/112, and every package that adds a flag over-declares in its own solo build. Ours is now exact (115/115) and combined over-SUPPLIES (116 ≥ 115, safe); undo-history's solo build over-declares, which is a property of the shared-count agreement and needs its owner. |
+| item row | **984 `VISUAL`** (PP17) | a `CAT_FREE` "0984" row at items.c:2830, ~400 lines clear of every sibling hunk. Row 214 was rejected despite being contiguous with our own 215-219 block: it abuts forth-core's edited row 213, and the touching-line rule makes adjacency a conflict. **`PTP_LABEL`, not `PTP_DISABLED`** — copying a sibling PP row's status verbatim would have left the command un-programmable |
 | menu id | **item 217 = `MNU_PP`** (CAT_MENU) | a `CAT_FREE` "0217" row adjacent to our own 215/216 claims, so the items.c hunk stays contiguous and nowhere near either sibling. forth-core's precedent: it turned free row 213 into `CAT_MENU` "FWRD". |
+| softmenu slot | `menu_PP` slot 6 → `ITM_VISUAL` (PP17) | a softmenu's slots 6-11 ARE its f-shifted row, so VISUAL joins without displacing an announced key; the array pads to 12 with `ITM_NULL`, as every upstream menu is a multiple of six. `menu_PP` is our own array — no sibling can collide |
 | softmenu slots | `menu_DISP` row 5 slot 3 → `-MNU_PP`; `menu_EQN` row 2 slot 2 → `ITM_EQSHW` | DISP and EQN are untouched by BOTH siblings (verified by diff), so neither edit can collide. The stack menu is deliberately AVOIDED: undo-history put `UHIST`/`REDO`/`HCLR` in its free slots and edited that exact line, leaving one slot and a guaranteed touching-line conflict. |
 | softmenu table | new entry inserted immediately BEFORE the `/* 186 */` sentinel | the table's own instruction ("do not add menus here, add them at the end"). forth-core inserted mid-table at `/* 022 */`; anchoring at the tail keeps us ~160 lines clear of it. |
 | resident pool | **zero** | all pretty-print state is BSS (~2.8 KiB end-state); the ~1.6 KiB pool slack remaining after undo-history's 4 KiB ring stays untouched |
