@@ -146,7 +146,7 @@ uint8_t ppqBuildCall  (const char *name, uint16_t len, uint8_t arg, uint8_t font
 bool_t ppvTranspile(uint16_t labelIdx, char *out, uint16_t cap,
                     uint8_t *reasonOut, uint16_t *stepOut);
 bool_t ppvTestBuildNodes(uint16_t labelIdx, uint8_t ctxFont, uint8_t childFont,
-                         uint8_t *rootOut);   ///< the tree the product paints
+                         uint8_t *rootOut, uint32_t *visitsOut);   ///< the tree the product paints
 #endif // PC_BUILD || TESTSUITE_BUILD
 
 // prettyFormula.c — display-time name decodes (best-effort, fall back)

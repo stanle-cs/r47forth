@@ -4002,7 +4002,74 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
     ppcTestWriteAndLoadPgm(pgmDRV, sizeof(pgmDRV));
     ppcTestWriteAndLoadPgm(pgmDR2, sizeof(pgmDR2));
     ppcTestWriteAndLoadPgm(pgmDNL, sizeof(pgmDNL));
+    // AUDIT PP18-1 class fixtures: bodies differing only in their MVAR
+    // declarations, driven by an f' that does or does not name them
+    static const uint8_t pgmB1[] = {          // MVAR 'x'; body reads x
+      ITM_LBL, STRING_LABEL_VARIABLE, 3, 'V','B','1',
+      PPV2(ITM_MVAR), STRING_LABEL_VARIABLE, 1, 'x',
+      ITM_RCL, STRING_LABEL_VARIABLE, 1, 'x',
+      ITM_ENTER, ITM_MULT, PPV2(ITM_END),
+    };
+    static const uint8_t pgmB2[] = {          // MVAR 'y','x'; body reads y
+      ITM_LBL, STRING_LABEL_VARIABLE, 3, 'V','B','2',
+      PPV2(ITM_MVAR), STRING_LABEL_VARIABLE, 1, 'y',
+      PPV2(ITM_MVAR), STRING_LABEL_VARIABLE, 1, 'x',
+      ITM_RCL, STRING_LABEL_VARIABLE, 1, 'y',
+      ITM_ENTER, ITM_MULT, PPV2(ITM_END),
+    };
+    static const uint8_t pgmB3[] = {          // no MVAR at all
+      ITM_LBL, STRING_LABEL_VARIABLE, 3, 'V','B','3',
+      ITM_RCL, STRING_LABEL_VARIABLE, 1, 'v',
+      ITM_ENTER, ITM_MULT, PPV2(ITM_END),
+    };
+    static const uint8_t pgmB4[] = {          // MVAR 'y','x'; consumes the STACK
+      ITM_LBL, STRING_LABEL_VARIABLE, 3, 'V','B','4',
+      PPV2(ITM_MVAR), STRING_LABEL_VARIABLE, 1, 'y',
+      PPV2(ITM_MVAR), STRING_LABEL_VARIABLE, 1, 'x',
+      ITM_ENTER, ITM_MULT, PPV2(ITM_END),
+    };
+    #define PPVDRV(nm, body, param) \
+      ITM_LBL, STRING_LABEL_VARIABLE, 3, nm[0], nm[1], nm[2], \
+      PPV2(ITM_PGMDRV), STRING_LABEL_VARIABLE, 3, body[0], body[1], body[2], \
+      ITM_LITERAL, STRING_LONG_INTEGER, 1, '3', \
+      PPV2(ITM_F1DRV), STRING_LABEL_VARIABLE, 1, param, \
+      PPV2(ITM_END)
+    static const uint8_t pgmD1[] = { PPVDRV("VD1", "VB1", 'x') };
+    static const uint8_t pgmD2[] = { PPVDRV("VD2", "VB1", 'v') };
+    static const uint8_t pgmD3[] = { PPVDRV("VD3", "VB2", 'x') };
+    static const uint8_t pgmD4[] = { PPVDRV("VD4", "VB4", 'v') };
+    static const uint8_t pgmD5[] = { PPVDRV("VD5", "VB3", 'v') };
+    #undef PPVDRV
     ppcTestWriteAndLoadPgm(pgmDIN, sizeof(pgmDIN));
+    ppcTestWriteAndLoadPgm(pgmB1, sizeof(pgmB1));
+    ppcTestWriteAndLoadPgm(pgmB2, sizeof(pgmB2));
+    ppcTestWriteAndLoadPgm(pgmB3, sizeof(pgmB3));
+    ppcTestWriteAndLoadPgm(pgmB4, sizeof(pgmB4));
+    ppcTestWriteAndLoadPgm(pgmD1, sizeof(pgmD1));
+    ppcTestWriteAndLoadPgm(pgmD2, sizeof(pgmD2));
+    ppcTestWriteAndLoadPgm(pgmD3, sizeof(pgmD3));
+    ppcTestWriteAndLoadPgm(pgmD4, sizeof(pgmD4));
+    // AUDIT PP18-3 / PP18-2 fixtures
+    #define PPV_DUP4 ITM_ENTER, ITM_MULT, ITM_ENTER, ITM_MULT, \
+                     ITM_ENTER, ITM_MULT, ITM_ENTER, ITM_MULT
+    #define PPV_REC4 ITM_1ONX, ITM_1ONX, ITM_1ONX, ITM_1ONX
+    static const uint8_t pgmXP[] = {          // 20 ENTER-x pairs: a DAG
+      ITM_LBL, STRING_LABEL_VARIABLE, 3, 'V','X','P',
+      ITM_LITERAL, STRING_LONG_INTEGER, 1, '2',
+      PPV_DUP4, PPV_DUP4, PPV_DUP4, PPV_DUP4, PPV_DUP4,
+      PPV2(ITM_END),
+    };
+    static const uint8_t pgmBIG[] = {         // 20 nested reciprocals
+      ITM_LBL, STRING_LABEL_VARIABLE, 4, 'V','B','I','G',
+      ITM_RCL, STRING_LABEL_VARIABLE, 1, 'a',
+      PPV_REC4, PPV_REC4, PPV_REC4, PPV_REC4, PPV_REC4,
+      PPV2(ITM_END),
+    };
+    #undef PPV_DUP4
+    #undef PPV_REC4
+    ppcTestWriteAndLoadPgm(pgmD5, sizeof(pgmD5));
+    ppcTestWriteAndLoadPgm(pgmXP, sizeof(pgmXP));
+    ppcTestWriteAndLoadPgm(pgmBIG, sizeof(pgmBIG));
   }
   {
     char want[96];
@@ -4069,6 +4136,100 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
     sprintf(want, "DERIV(x%sx;x;3;2)", STD_CROSS);
     ppvTestExpect("V53 second derivative", "VDR2", want);
   }
+  // V59-V63 (AUDIT PP18-1): the CLASS. Upstream does not differentiate
+  // with respect to the f' parameter — calcDeriv asks
+  // deriv_pgm_variable(label), which walks the BODY's own MVAR
+  // declarations and returns the one matching the parameter, else the
+  // first declared, else nothing. The old fixture declared MVAR 'x' and
+  // was driven by f' 'x', the single configuration where the two agree,
+  // so every DERIV pin passed a rule that held only for it.
+  {
+    char want[64];
+    // CONTROL: parameter matches the declaration
+    sprintf(want, "DERIV(x%sx;x;3)", STD_CROSS);
+    ppvTestExpect("V59 matching MVAR", "VD1", want);
+    // no match -> upstream falls back to the FIRST declared, x. The
+    // subscript must say x, not the parameter v.
+    sprintf(want, "DERIV(x%sx;x;3)", STD_CROSS);
+    ppvTestExpect("V60 parameter differs, body declares one", "VD2", want);
+    // CONTROL: the body RCLs y explicitly while upstream varies x, so
+    // the derivative really is 0 and d/dx(y*y) is the honest picture.
+    // This one was already right and must stay right — a fix that made
+    // every subscript follow the body would break it.
+    sprintf(want, "DERIV(y%sy;x;3)", STD_CROSS);
+    ppvTestExpect("V61 body that does not read the sampled variable", "VD3", want);
+    // none match, and the body consumes the STACK: seeding must follow
+    // upstream's choice, so BOTH the body and the subscript become y
+    sprintf(want, "DERIV(y%sy;y;3)", STD_CROSS);
+    ppvTestExpect("V62 first when none match, stack-consuming body", "VD4", want);
+    // no MVAR at all -> upstream varies nothing and returns 0 for any
+    // body. There is no picture for that; decline.
+    ppvTestDecline("V63 body declares no MVAR", "VD5", 19);
+  }
+
+  // V66 (AUDIT PP18-3): ENTER shares its operand node, so the tree is a
+  // DAG and the layout pass would visit a shared child once per PATH —
+  // 2^(k+1)-1 visits for k dups, measured. Exhausting the 72-node layout
+  // pool did not stop it, because a PP_NONE return is a per-call value
+  // and not a latch, so the walk kept doubling through failures that
+  // cost nothing. 20 dups is 2,097,151 visits unlatched; on an 80 MHz
+  // DM42n the reachable cases do not return at all.
+  //
+  // The bound is asserted, not a wall-clock time: a timing pin would
+  // pass on a fast desktop for a program that hangs the calculator.
+  {
+    calcRegister_t id = findNamedLabel("VXP", GLOBAL_LABELS);
+    uint8_t root;
+    uint32_t visits = 0;
+    if(id == INVALID_VARIABLE) {
+      ppTestFail("V66 fixture absent");
+    }
+    else {
+      ppvTestBuildNodes((uint16_t)(id - FIRST_LABEL), PP_FONT_STANDARD,
+                        PP_FONT_STANDARD, &root, &visits);
+      // it may or may not fit; what must hold is that trying was cheap
+      if(visits == 0) {
+        ppTestFail("V66 the layout pass never ran");
+      }
+      else if(visits > 500) {
+        ppTestFailInt("V66 layout visits (exponential re-expansion)", 500, (int)visits);
+      }
+    }
+  }
+  // V67 (AUDIT PP18-2): when NO surface can hold the drawing, the owner
+  // gets an error and keeps the answer. The full-screen path used to
+  // clear the screen BEFORE it knew it could draw, so a failure left a
+  // framed blank with X erased, no error and no D-number, held until
+  // EXIT. PP17 always showed something; the honest replacement for that
+  // is a decline, not a blank.
+  {
+    calcRegister_t id = findNamedLabel("VBIG", GLOBAL_LABELS);
+    calcMode = CM_NORMAL;
+    temporaryInformation = TI_NO_INFO;
+    lastErrorCode = ERROR_NONE;
+    currentSolverStatus = 0;
+    screenHoldsDrawnPixels = false;
+    lcd_fill_rect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, LCD_SET_VALUE);
+    lcd_fill_rect(100, Y_POSITION_OF_REGISTER_X_LINE, 40, 12, LCD_EMPTY_VALUE);
+    uint32_t xBefore = ppvSumRows(Y_POSITION_OF_REGISTER_X_LINE,
+                                  Y_POSITION_OF_REGISTER_X_LINE + 20);
+    fnPrettyVisual((uint16_t)id);
+    if(lastErrorCode != ERROR_INVALID_DATA_TYPE_FOR_OP) {
+      ppTestFailInt("V67 undrawable program error", ERROR_INVALID_DATA_TYPE_FOR_OP,
+                    lastErrorCode);
+    }
+    if(screenHoldsDrawnPixels) {
+      ppTestFail("V67 an undrawable program held a screen");
+    }
+    if(ppvSumRows(21, 167) != xBefore) {
+      ppTestFail("V67 the screen was cleared for a drawing that never came");
+    }
+    lastErrorCode = ERROR_NONE;
+    temporaryInformation = TI_NO_INFO;
+    screenHoldsDrawnPixels = false;
+    screenUpdatingMode &= ~SCRUPD_MANUAL_STACK;
+  }
+
   // V54: only a latch set during the walk counts
   ppvTestDecline("V54 derivative with no PGMDRV", "VDNL", 6);
   // V55: PGMDRV is a slot of its OWN upstream — a derivative must not
@@ -4468,7 +4629,7 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
       uint8_t root;
       if(id == INVALID_VARIABLE
           || !ppvTestBuildNodes((uint16_t)(id - FIRST_LABEL), PP_FONT_STANDARD,
-                                PP_FONT_STANDARD, &root)) {
+                                PP_FONT_STANDARD, &root, NULL)) {
         ppTestFailures++;
         printf("prettyPrint test FAIL: %s (did not lay out)\n", cases[c].what);
         continue;

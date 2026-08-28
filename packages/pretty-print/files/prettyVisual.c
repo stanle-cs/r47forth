@@ -63,7 +63,8 @@ enum { PPA_FREE = 0, PPA_LIT, PPA_VAR, PPA_OP1, PPA_OP2, PPA_CONSTRUCT };
 enum { PPV_D_OPCODE = 1, PPV_D_INDIRECT, PPV_D_LOCALLABEL, PPV_D_UNRESOLVED,
        PPV_D_DIRTY, PPV_D_NOLATCH, PPV_D_REGISTER, PPV_D_DEPTH, PPV_D_BUDGET,
        PPV_D_UNDERFLOW, PPV_D_OPAQUE, PPV_D_COLLISION, PPV_D_MEMORY,
-       PPV_D_NUMERAL, PPV_D_FRAGMENT, PPV_D_ARENA, PPV_D_EMPTY, PPV_D_NAME };
+       PPV_D_NUMERAL, PPV_D_FRAGMENT, PPV_D_ARENA, PPV_D_EMPTY, PPV_D_NAME,
+       PPV_D_DERIVVAR, PPV_D_TOOBIG };
 
 typedef struct {
   uint8_t  kind;        ///< PPA_*
@@ -101,6 +102,15 @@ typedef struct {
   char     binding[PPV_MAX_DEPTH][PPV_NAME_MAX];    ///< construct variables in scope
   bool_t   bindingSynth[PPV_MAX_DEPTH];             ///< true = an invented sum counter
   uint8_t  bindingCount;
+  /* AUDIT PP18-3. ENTER pushes the SAME node twice, so the tree is a DAG
+   * and the layout pass would visit a shared child once per path: 2^k
+   * for k dups. Exhausting the 72-node layout pool does not stop it,
+   * because ppNewBox returning PP_NONE is a per-call value and not a
+   * latch — so the walk keeps doubling through failures that cost
+   * nothing. This IS the latch. Visits are counted so a pin can assert
+   * the bound rather than a wall-clock time. */
+  bool_t   layoutFull;
+  uint32_t layoutVisits;
 } ppvCtx_t;
 
 static void ppvDecline(ppvCtx_t *ctx, uint8_t reason) {
@@ -485,16 +495,85 @@ static bool_t ppvIntegral(ppvCtx_t *ctx, ppvStack_t *stk, const uint8_t *pa) {
                       PPV_NIL, false);
 }
 
+/* Which variable does the derivative actually vary?
+ *
+ * NOT the f' parameter — that was AUDIT PP18-1, and the picture it drew
+ * meant something the program did not compute. `calcDeriv` asks
+ * `deriv_pgm_variable(label)` (differentiate.c), which walks the BODY
+ * program's own leading MVAR declarations and returns the one matching
+ * the f' parameter, else the FIRST declared, else INVALID_VARIABLE. This
+ * mirrors that walk, including REM transparency.
+ *
+ * When upstream returns INVALID_VARIABLE it varies nothing: every sample
+ * is the same point and the derivative is 0 whatever the body says.
+ * There is no honest picture for that, so the walk declines rather than
+ * draw a slope nobody computed.
+ *
+ * The REM arm is NOT pinned: a REM step's tail is sized through
+ * literalTailBytes, and a hand-built fixture byte cannot reach the shape
+ * without reproducing that encoding. It mirrors upstream by
+ * construction; recorded as a gap rather than claimed as tested. */
+static bool_t ppvDerivVariable(ppvCtx_t *ctx, uint16_t bodyIdx,
+                               const char *param, char *out) {
+  if(bodyIdx >= numberOfLabels) {
+    ppvDecline(ctx, PPV_D_UNRESOLVED);
+    return false;
+  }
+  uint8_t *step = labelList[bodyIdx].instructionPointer;
+  char first[PPV_NAME_MAX];
+  first[0] = 0;
+  for(uint16_t d = 0; d < MAX_MVAR_DECLARATIONS && step != NULL; d++) {
+    while(step != NULL && checkOpCodeOfStep(step, ITM_REM)) {
+      step = findNextStep(step);
+    }
+    if(step == NULL || !checkOpCodeOfStep(step, ITM_MVAR)
+        || *(step + 2) != STRING_LABEL_VARIABLE) {
+      break;
+    }
+    uint8_t len = boundProgramNameLength(step + 4, *(step + 3));
+    if(len == 0 || len >= PPV_NAME_MAX) {
+      break;
+    }
+    char nm[PPV_NAME_MAX];
+    xcopy(nm, step + 4, len);
+    nm[len] = 0;
+    if(!ppvNameIsDrawable(nm)) {
+      ppvDecline(ctx, PPV_D_NAME);
+      return false;
+    }
+    if(strcmp(nm, param) == 0) {
+      strcpy(out, nm);      // the match wins over the first, as upstream
+      return true;
+    }
+    if(first[0] == 0) {
+      strcpy(first, nm);
+    }
+    step = findNextStep(step);
+  }
+  if(first[0] != 0) {
+    strcpy(out, first);
+    return true;
+  }
+  ppvDecline(ctx, PPV_D_DERIVVAR);
+  return false;
+}
+
 /* DERIV: the point comes off the stack, the program from PGMDRV.
  *
- * The seeding rule is the integrator's, and that is a measured claim,
- * not an analogy: _differentiatorIteration fills every stack level with
- * the sample point AND stores it into the named variable
- * (differentiate.c, "feed both channels: the stack for a program that
- * consumes X, the variable for one that recalls its MVAR"). Identical to
- * DEI_xeq_user. So a body frame seeded with the variable name on all
- * levels reproduces what the engine actually offers a program, exactly
- * as it does for an integral.
+ * _differentiatorIteration fills every stack level with the sample point
+ * AND stores it into `variable` — but `variable` is NOT the f'
+ * parameter. It comes from deriv_pgm_variable(label), which reads the
+ * BODY's own MVAR declarations. That is where PP18 first got this wrong:
+ * the claim was checked at _differentiatorIteration and assumed at its
+ * caller, so the drawn subscript named the parameter while upstream
+ * varied something else, and the picture meant a different number from
+ * the one XEQ returns. ppvDerivVariable now answers the question
+ * upstream answers, and the body is seeded with THAT name.
+ *
+ * The integral is genuinely different and genuinely simpler:
+ * DEI_xeq_user writes into `regist`, and _fnIntegrate sets
+ * regist = labelOrVariable — the integral's own parameter. So INTEG's
+ * seeding by parameter name is exact, and DERIV's cannot be.
  *
  * PGMDRV is a slot of its own upstream, so a derivative does not
  * repoint what INT would run; the walker keeps the two latches apart
@@ -511,6 +590,10 @@ static bool_t ppvDerivative(ppvCtx_t *ctx, ppvStack_t *stk, const uint8_t *pa,
     return false;
   }
   uint16_t bodyIdx = ctx->latchedDrv;
+  char sampled[PPV_NAME_MAX];
+  if(!ppvDerivVariable(ctx, bodyIdx, v, sampled)) {
+    return false;
+  }
   uint8_t at;
   if(!ppvPop(ctx, stk, &at)) {
     return false;
@@ -519,15 +602,15 @@ static bool_t ppvDerivative(ppvCtx_t *ctx, ppvStack_t *stk, const uint8_t *pa,
     ppvDecline(ctx, PPV_D_OPAQUE);
     return false;
   }
-  if(ppvNameInList(ctx->binding, ctx->bindingCount, v)) {
+  if(ppvNameInList(ctx->binding, ctx->bindingCount, sampled)) {
     ppvDecline(ctx, PPV_D_COLLISION);
     return false;
   }
   uint8_t body;
-  if(!ppvBody(ctx, bodyIdx, v, false, &body)) {
+  if(!ppvBody(ctx, bodyIdx, sampled, false, &body)) {
     return false;
   }
-  return ppvConstruct(ctx, stk, ITM_F1DRV, v, body, at, PPV_NIL, PPV_NIL, second);
+  return ppvConstruct(ctx, stk, ITM_F1DRV, sampled, body, at, PPV_NIL, PPV_NIL, second);
 }
 
 // SUM/PROD: X = step, Y = to, Z = from (_programmableSumProd). The
@@ -820,12 +903,13 @@ static void ppvWalk(ppvCtx_t *ctx, uint16_t labelIdx, ppvStack_t *stk) {
  * validate, switch on kind, leaves return runs, operator arms recurse
  * into locals and then delegate. */
 
-static uint8_t ppvAstToNodes(const ppvCtx_t *ctx, uint8_t n,
+static uint8_t ppvAstToNodes(ppvCtx_t *ctx, uint8_t n,
                              uint8_t ctxFont, uint8_t childFont, int *outPrec) {
   *outPrec = PPF_PREC_ATOM;
-  if(n == PPV_NIL || n >= PPV_AST_NODES) {
-    return PP_NONE;
+  if(n == PPV_NIL || n >= PPV_AST_NODES || ctx->layoutFull) {
+    return PP_NONE;   // once the pool is spent, every path returns at once
   }
+  ctx->layoutVisits++;
   const ppvAst_t *a = &ctx->ast[n];
   switch(a->kind) {
     case PPA_VAR:
@@ -844,6 +928,7 @@ static uint8_t ppvAstToNodes(const ppvCtx_t *ctx, uint8_t n,
       int p;
       uint8_t x = ppvAstToNodes(ctx, a->child[0], ctxFont, childFont, &p);
       if(x == PP_NONE) {
+        ctx->layoutFull = true;
         return PP_NONE;
       }
       // ppfCombine has no POW level — a PP_SUP scopes itself, so it
@@ -863,8 +948,13 @@ static uint8_t ppvAstToNodes(const ppvCtx_t *ctx, uint8_t n,
     case PPA_OP2: {
       int pa, pb;
       uint8_t x = ppvAstToNodes(ctx, a->child[0], ctxFont, childFont, &pa);
+      if(x == PP_NONE) {
+        ctx->layoutFull = true;   // check BEFORE the second recursion, or
+        return PP_NONE;           // the doubling survives the latch
+      }
       uint8_t y = ppvAstToNodes(ctx, a->child[1], ctxFont, childFont, &pb);
-      if(x == PP_NONE || y == PP_NONE) {
+      if(y == PP_NONE) {
+        ctx->layoutFull = true;
         return PP_NONE;
       }
       return ppfCombine2(a->item, x, pa, y, pb, ctxFont, childFont, outPrec);
@@ -879,8 +969,10 @@ static uint8_t ppvAstToNodes(const ppvCtx_t *ctx, uint8_t n,
                        ? PP_NONE
                        : ppvAstToNodes(ctx, a->child[3], childFont, childFont, &pStep);
       if(body == PP_NONE || from == PP_NONE
-          || (to == PP_NONE && a->item != ITM_F1DRV)) {
-        return PP_NONE;   // DERIV has a point, not a range
+          || (to == PP_NONE && a->item != ITM_F1DRV)
+          || (a->child[3] != PPV_NIL && step == PP_NONE)) {
+        ctx->layoutFull = true;   // AUDIT PP18-10: `step` was the one
+        return PP_NONE;           // operand not checked
       }
       // the parser scopes an additive body by sniffing its runs for a
       // +/- joiner, because a parse has no precedence to consult. We do,
@@ -927,6 +1019,8 @@ static uint8_t ppvRun(ppvCtx_t *ctx, uint16_t labelIdx) {
   ctx->failed        = false;
   ctx->dirtyCount    = 0;
   ctx->bindingCount  = 0;
+  ctx->layoutFull    = false;
+  ctx->layoutVisits  = 0;
 
   ppvStack_t stk;
   stk.depth        = 0;
@@ -1129,15 +1223,21 @@ static void ppvSerialize(const ppvCtx_t *ctx, uint8_t n, ppvOut_t *o) {
  * product actually paints rather than an intermediate. Resets the layout
  * pool itself, as every builder's caller must. */
 bool_t ppvTestBuildNodes(uint16_t labelIdx, uint8_t ctxFont, uint8_t childFont,
-                         uint8_t *rootOut) {
+                         uint8_t *rootOut, uint32_t *visitsOut) {
   ppvCtx_t ctx;
   uint8_t root = ppvRun(&ctx, labelIdx);
+  if(visitsOut != NULL) {
+    *visitsOut = 0;
+  }
   if(root == PPV_NIL) {
     return false;
   }
   int prec;
   ppReset();
   uint8_t node = ppvAstToNodes(&ctx, root, ctxFont, childFont, &prec);
+  if(visitsOut != NULL) {
+    *visitsOut = ctx.layoutVisits;   // so a pin can assert the BOUND
+  }
   if(node == PP_NONE) {
     return false;
   }
@@ -1201,11 +1301,12 @@ static void ppvClearBand(void) {
   lcd_fill_rect(0, PPV_BAND_TOP, SCREEN_WIDTH, PPV_BAND_ROWS, LCD_SET_VALUE);
 }
 
-static bool_t ppvPaintStackWindow(const ppvCtx_t *ctx, uint8_t root) {
+static bool_t ppvPaintStackWindow(ppvCtx_t *ctx, uint8_t root) {
   // the T-line ladder: full size first, then a whole-tree shrink
   for(int rung = 0; rung < 2; rung++) {
     int prec;
     ppReset();
+    ctx->layoutFull = false;   // a fresh pool deserves a fresh verdict
     uint8_t node = ppvAstToNodes(ctx, root, PP_FONT_STANDARD,
                                  (rung == 0) ? PP_FONT_STANDARD : PP_FONT_TINY, &prec);
     if(node == PP_NONE) {
@@ -1236,18 +1337,15 @@ static bool_t ppvPaintStackWindow(const ppvCtx_t *ctx, uint8_t root) {
  * the stack window, only a bigger box and a centred x — and no linear
  * fallback beneath it, because a tree that failed to lay out here failed
  * on SIZE, and there is nothing smaller left to try. */
-static void ppvPaintFullScreen(const ppvCtx_t *ctx, uint8_t root) {
-  lcd_fill_rect(0, 16, SCREEN_WIDTH, SCREEN_HEIGHT - 16, LCD_SET_VALUE);
-  drawSinglePixelFullWidthLine(20);
-  drawSinglePixelFullWidthLine(168);
-
+static bool_t ppvPaintFullScreen(ppvCtx_t *ctx, uint8_t root) {
   for(int rung = 0; rung < 2; rung++) {
     int prec;
     ppReset();
+    ctx->layoutFull = false;
     uint8_t node = ppvAstToNodes(ctx, root, PP_FONT_STANDARD,
                                  (rung == 0) ? PP_FONT_STANDARD : PP_FONT_TINY, &prec);
     if(node == PP_NONE) {
-      break;
+      return false;
     }
     if(rung == 1) {
       ppSetFontDeep(node, PP_FONT_TINY);
@@ -1259,14 +1357,23 @@ static void ppvPaintFullScreen(const ppvCtx_t *ctx, uint8_t root) {
     if(m->width > SCREEN_WIDTH - 4 || m->ascent + m->descent > 167 - 21 + 1) {
       continue;
     }
+    // AUDIT PP18-2: the clear happens HERE, once the fit is known. It
+    // used to run first, so a layout that did not fit left the owner a
+    // framed blank screen with X's answer erased, no error and no
+    // D-number — held until EXIT. Nothing is erased until there is
+    // something to put in its place.
+    lcd_fill_rect(0, 16, SCREEN_WIDTH, SCREEN_HEIGHT - 16, LCD_SET_VALUE);
+    drawSinglePixelFullWidthLine(20);
+    drawSinglePixelFullWidthLine(168);
     int16_t base = (int16_t)((21 + 167 - (m->ascent + m->descent)) / 2 + m->ascent);
     ppPaintAt(node, (int16_t)((SCREEN_WIDTH - m->width) / 2), base);
-    break;
+    screenUpdatingMode |= SCRUPD_MANUAL_STACK | SCRUPD_MANUAL_MENU | SCRUPD_MANUAL_SHIFT_STATUS;
+    screenHoldsDrawnPixels = true;
+    // a self-painted screen declares itself one, or EXIT cannot dismiss it
+    temporaryInformation = TI_SHOWNOTHING;
+    return true;
   }
-  screenUpdatingMode |= SCRUPD_MANUAL_STACK | SCRUPD_MANUAL_MENU | SCRUPD_MANUAL_SHIFT_STATUS;
-  screenHoldsDrawnPixels = true;
-  // a self-painted screen declares itself one, or EXIT cannot dismiss it
-  temporaryInformation = TI_SHOWNOTHING;
+  return false;
 }
 
 
@@ -1341,12 +1448,16 @@ void fnPrettyVisual(uint16_t label) {
     // it (DESIGN.md §6, the binding rule)
     temporaryInformation = TI_SHOWNOTHING;
   }
-  else {
-    // taller than the two rows, or the layout pool gave out. There is no
-    // linear fallback to try: AST->nodes cannot decline for want of a
-    // grammar, so a failure here is a size failure and the full-screen
-    // band is the only thing left that might hold it.
-    ppvPaintFullScreen(&ctx, root);
+  else if(!ppvPaintFullScreen(&ctx, root)) {
+    // Neither surface can hold it. PP17 had a linear line of last resort
+    // here and PP18 deleted it with the text; the honest replacement is
+    // an error, not a blank held screen (AUDIT PP18-2). Nothing has been
+    // painted, so X still shows what the program returned.
+    displayCalcErrorMessage(ERROR_INVALID_DATA_TYPE_FOR_OP, ERR_REGISTER_LINE, REGISTER_X);
+    #if (EXTRA_INFO_ON_CALC_ERROR == 1)
+      sprintf(errorMessage, "too large to draw (D%u)", (unsigned)PPV_D_TOOBIG);
+      moreInfoOnError("In function fnPrettyVisual:", errorMessage, NULL, NULL);
+    #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
   }
   currentSolverStatus = saved;
 }
