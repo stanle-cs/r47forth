@@ -4491,4 +4491,83 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
 
 
 
+/* ==== the REAL appnote-22 file (its own driver, and it runs LAST) =======
+ * Every fixture in prettyTestVisual is one I wrote and hand-encoded,
+ * which makes them a statement about my own encoding as much as about
+ * the walker. This loads docs/appnotes/sources/AN0022/func.p47 —
+ * Jaymos's actual file, the one his forum message pointed at — through
+ * the official loader and transpiles the labels he named.
+ *
+ * It lives in its own driver, registered at the TAIL of
+ * testSuiteList.txt, because it CLEARS PROGRAM MEMORY. Run from inside
+ * prettyTestVisual it wiped the programs a later file (programs.txt)
+ * expects, and six upstream cases failed 300 lines away from the cause.
+ * Clearing is unavoidable here — our own fixtures have nearly filled
+ * program memory, and func.p47's labels (DBLINT, HT, IT, ...) collide
+ * by design with upstream's own nested_cov programs. Running last makes
+ * both harmless.
+ *
+ * A missing file FAILS rather than skips: the suite runs from the repo
+ * root, so absence means something a silent skip would hide. */
+void prettyTestReal(uint16_t unusedButMandatoryParameter) {
+  (void)unusedButMandatoryParameter;
+  ppTestFailures = 0;
+  /* ---- the REAL appnote-22 file ------------------------------------ */
+  /* V58: every other fixture in this driver is one I wrote and
+   * hand-encoded, which makes them a statement about my own encoding as
+   * much as about the walker. This loads docs/appnotes/sources/AN0022/
+   * func.p47 — Jaymos's actual file, the one his forum message pointed
+   * at — through the official loader, and transpiles the labels he
+   * named. It runs LAST and clears program memory both before and
+   * after: the fixtures above have nearly filled it, and a later driver
+   * should find a clean slate rather than somebody else's programs.
+   *
+   * A missing file FAILS rather than skips. The suite runs from the
+   * repo root (meson test -C build.sim), so absence means something is
+   * wrong that a silent skip would hide. */
+  {
+    extern void fnClPAll(uint16_t confirmation);
+    FILE *in = fopen("docs/appnotes/sources/AN0022/func.p47", "rb");
+    if(in == NULL) {
+      ppTestFail("V58 cannot open the appnote-22 program file");
+    }
+    else {
+      FILE *outF = fopen("c47programTest.bin", "wb");
+      int ch;
+      while((ch = fgetc(in)) != EOF) {
+        fputc(ch, outF);
+      }
+      fclose(in);
+      fclose(outF);
+      fnClPAll(CONFIRMED);
+      lastErrorCode = ERROR_NONE;
+      fnLoadProgram(NOPARAM);
+      if(lastErrorCode != ERROR_NONE) {
+        ppTestFailInt("V58 loading func.p47", ERROR_NONE, lastErrorCode);
+        lastErrorCode = ERROR_NONE;
+      }
+      {
+        char want[128];
+        // the two he named in the forum message, plus the appnote's own
+        // integrand-under-integral and its pi
+        ppvTestExpect("V58 real DBLINT", "DBLINT", "INTEG(INTEG(t;t;0;x);x;0;2)");
+        ppvTestExpect("V58 real TRPINT", "TRPINT",
+                      "INTEG(INTEG(INTEG(t;t;0;x);x;0;y);y;0;2)");
+        sprintf(want, "INTEG(x%sx-x%sp-2;x;0;8)", STD_CROSS, STD_CROSS);
+        ppvTestExpect("V58 real IG", "IG", want);
+        sprintf(want, "INTEG(4/(x%sx+1);x;0;1)", STD_CROSS);
+        ppvTestExpect("V58 real INTPI", "INTPI", want);
+        // and the halves that decline: SOLVE has no construct, PLOT none
+        ppvTestDecline("V58 real SLVINT declines", "SLVINT", 1);
+        ppvTestDecline("V58 real PLTROOT declines", "PLTROOT", 1);
+      }
+      fnClPAll(CONFIRMED);
+      lastErrorCode = ERROR_NONE;
+    }
+  }
+
+  ppTestWriteLonI(REGISTER_X, ppTestFailures);
+}
+
+
 #endif // PC_BUILD

@@ -540,6 +540,7 @@ a hand-built array the walker might read differently from the calculator.
 | V42 | a monadic whose catalog spelling is glyphs (`e^x`) declines rather than emitting text that would neither draw nor compute |
 | V46-V51, V56, V57 | **the node tree the product paints** (`ppfTestExpect`), not the serialized text. V49 and V51 are the two places the node form differs from the text form: a fraction bar SCOPES so `a/(b+c)` needs no parentheses, and a stacked power DOES need its base bracketed. V57 pins that an additive construct body is still scoped — the parser sniffs runs for a `+`/`-`, the tree asks the precedence, and they must agree |
 | V52-V55 | derivatives: the point off the stack, the program from PGMDRV, the order from which item was used, and — V55 — that PGMINT's latch does NOT serve `f'`, because upstream keeps those slots apart on purpose |
+| V58 | **the REAL appnote-22 file** (`docs/appnotes/sources/AN0022/func.p47`) loaded through the official loader and transpiled. Every other fixture is one I wrote and hand-encoded, so they are a statement about my encoding as much as about the walker; this is Jaymos's own file. Its own driver, `prettyTestReal`, registered before `graphs_cov` — see below |
 | V44 | an emitted name COMPUTES (`LN(1)+2` = 2) — the round-trip through the evaluator's own resolution, checked end to end |
 | V24-V26 | the four monadics with a grammar spelling. **V24 and V26 were both written after a mutation survived**: `√` bracketed its argument twice (its `pre` already emits a parenthesis), and `1/x`'s argument level is only distinguishable from a looser one by a SAME-level operand — `1/a×b` is not `1/(a×b)` |
 
@@ -560,6 +561,23 @@ string beside it in V1 was typed by the same hand, so the two agreed
 whether or not either was right. It now transpiles VDBL and evaluates
 **the walker's own output**. 4/3 is the only number in the pin that
 nobody here chose.
+
+**V58 has to run late, and not at the end.** It CLEARS PROGRAM MEMORY —
+unavoidable, because the driver's own fixtures have nearly filled it and
+func.p47's labels (`DBLINT`, `HT`, `IT`, ...) collide by design with
+upstream's `nested_cov` programs. Run from inside `prettyTestVisual` it
+wiped what `programs.txt` expects and six upstream cases failed 300 lines
+away from the cause, with nothing in the message pointing back. So it is
+its own driver with its own case file.
+
+Anchoring it at the END of `testSuiteList.txt` then hit the OTHER trap:
+forth-core appends `forth_interp` there, both patches generated the same
+`@@ -507,3` hunk, and the combined pass refused to apply them. It is
+anchored before `graphs_cov` instead — late enough to satisfy the
+ordering, ~10 lines clear of the contended tail. **The solo gate was
+green for both mistakes.** Only the combined pass caught the second, and
+only the full suite caught the first; the reduced case list showed
+neither.
 
 **V39, and what keying a program in actually proved.** Every other
 fixture hand-encodes its bytes (`ITM_LITERAL, STRING_LONG_INTEGER, 1,

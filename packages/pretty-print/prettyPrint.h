@@ -120,5 +120,6 @@ void prettyTestCapture (uint16_t unusedButMandatoryParameter);
 void prettyTestFormula (uint16_t unusedButMandatoryParameter);
 void prettyTestEquation(uint16_t unusedButMandatoryParameter);
 void prettyTestVisual  (uint16_t unusedButMandatoryParameter);
+void prettyTestReal    (uint16_t unusedButMandatoryParameter);
 
 #endif // !PRETTYPRINT_H

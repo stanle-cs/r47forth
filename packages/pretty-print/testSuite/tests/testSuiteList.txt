@@ -502,6 +502,13 @@ shortint_restore_cov
 
 serialize_cov
 
+; pretty-print: VISUAL against the real appnote-22 program file. It
+; CLEARS PROGRAM MEMORY, so it must come after every case that expects
+; preloaded programs (programs.txt) — and it is anchored HERE, not at the
+; end of the list, because the tail is forth-core's and two packages
+; appending at EOF conflict.
+pretty_visual_real
+
 graphs_cov
 
 nested_cov

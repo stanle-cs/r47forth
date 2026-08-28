@@ -1,0 +1,14 @@
+;*************************************************************
+;**  pretty-print: VISUAL against the REAL appnote-22 file   **
+;**  Registered at the TAIL of testSuiteList.txt because it  **
+;**  CLEARS PROGRAM MEMORY — see the driver's own comment.   **
+;*************************************************************
+In: FL_SPCRES=0 FL_CPXRES=0 SD=0 RMODE=0 IM=2compl SS=4 WS=64
+Func: prettyTestReal
+
+; V58: docs/appnotes/sources/AN0022/func.p47 loaded through the official
+; loader, then the labels Jaymos named transpiled: DBLINT, TRPINT, the
+; appnote's own integrand-under-integral (IG) and its pi (INTPI), plus
+; the halves that decline because no construct exists for them.
+In:  FL_ASLIFT=1 RX=LonI:"99"
+Out: EC=0 RX=LonI:"0"
