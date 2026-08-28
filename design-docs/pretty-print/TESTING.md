@@ -277,6 +277,13 @@ after restore.
 | MUT-105 | the renderer's f(x) arm removed | V41 |
 | MUT-106 | the emitter's round-trip and drawability checks dropped | V42 |
 | MUT-107 | `x³` emitted as a name instead of a superscript | V45 |
+| MUT-108 | a stacked power's base left unbracketed | V51 |
+| MUT-109 | a construct body no longer scoped by precedence | V57 |
+| MUT-110 | the derivative reads PGMINT's latch when PGMDRV has none | V55 |
+| MUT-111 | the second-order flag dropped | V53 |
+| MUT-112 | the construct builder's tiny/context variable runs swapped | V27, V36, V46, V50, V57 |
+| MUT-113 | operand order swapped in the tree builder | 17 pins |
+| MUT-114 | the ENTER lift latch ignored (tree form) | V38 |
 | MUT-57 | prettyReset stops restoring the T-line default (PP15) | FV14 |
 | MUT-58 | cold start restores factory defaults again (the PP11 persistence bug) | FV16 (both flags clobbered) |
 | MUT-59 | the `-MNU_PP` slot in menu_DISP reverted to ITM_NULL (PP15) | FV15 |
@@ -531,6 +538,8 @@ a hand-built array the walker might read differently from the calculator.
 | V40, V43, V45 | named functions: emitted from the item's own catalog spelling, composing under an integral, and `x³` staying a superscript rather than becoming a name |
 | V41 | **why the renderer gained an f(x) arm**: `SIN(x)/2` must still build a FRACTION. There is no 2D gain in the function itself — the gain is that one unrecognised name no longer costs the whole formula its 2D form |
 | V42 | a monadic whose catalog spelling is glyphs (`e^x`) declines rather than emitting text that would neither draw nor compute |
+| V46-V51, V56, V57 | **the node tree the product paints** (`ppfTestExpect`), not the serialized text. V49 and V51 are the two places the node form differs from the text form: a fraction bar SCOPES so `a/(b+c)` needs no parentheses, and a stacked power DOES need its base bracketed. V57 pins that an additive construct body is still scoped — the parser sniffs runs for a `+`/`-`, the tree asks the precedence, and they must agree |
+| V52-V55 | derivatives: the point off the stack, the program from PGMDRV, the order from which item was used, and — V55 — that PGMINT's latch does NOT serve `f'`, because upstream keeps those slots apart on purpose |
 | V44 | an emitted name COMPUTES (`LN(1)+2` = 2) — the round-trip through the evaluator's own resolution, checked end to end |
 | V24-V26 | the four monadics with a grammar spelling. **V24 and V26 were both written after a mutation survived**: `√` bracketed its argument twice (its `pre` already emits a parenthesis), and `1/x`'s argument level is only distinguishable from a looser one by a SAME-level operand — `1/a×b` is not `1/(a×b)` |
 
@@ -544,6 +553,13 @@ therefore consumes one more value than the correct trace provides: it
 declines (D10 underflow), while a walker carrying the phantom copy finds
 something waiting and prints an expression. Same family as the
 same-level lesson below.
+
+**V18 stopped grading its own homework (PP18).** It used to `setEquation`
+a string typed in this file and check it evaluated to 4/3 — but the
+string beside it in V1 was typed by the same hand, so the two agreed
+whether or not either was right. It now transpiles VDBL and evaluates
+**the walker's own output**. 4/3 is the only number in the pin that
+nobody here chose.
 
 **V39, and what keying a program in actually proved.** Every other
 fixture hand-encodes its bytes (`ITM_LITERAL, STRING_LONG_INTEGER, 1,

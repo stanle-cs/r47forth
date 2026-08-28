@@ -2,6 +2,60 @@
 
 Non-normative amendment trail. DESIGN.md is authoritative.
 
+## 2026-08-28 — PP18: the walker stops writing strings, and gains DERIV
+
+PP17 drew by transpiling a program to equation-language text and parsing
+it back. Stan asked why the walker needs to emit text at all, and the
+answer did not survive the question: it was settling precedence TWICE —
+inserting brackets into a string, then having the parser read them back
+out to rediscover the same structure — while `ppfCombine1`/`ppfCombine2`
+had been doing exactly that job for the capture engine the whole time. I
+had rebuilt an existing component in string form without noticing, and
+only found it by going to look when asked.
+
+The walker now builds an expression tree and lays it out through the
+shared builders. **The drawing is byte-identical to PP17's** — same
+DBLINT screenshot, `cmp` clean, produced by a completely different path.
+That, plus 45 pins passing unedited through the representation change,
+is what makes the refactor verifiable rather than merely plausible.
+
+Three things came free with the round trip gone:
+
+- **A failure class stopped existing.** The emitted alphabet had to be
+  byte-exact or the whole formula silently dropped to a linear line —
+  BINDING, with MUT-106 as its guard. A node cannot be mis-spelled. The
+  rule is recorded as retired rather than deleted, because the reasoning
+  is what argues against going back.
+- **The linear fallback became unnecessary.** It existed because
+  `ppqParse` could decline. Tree-to-nodes cannot.
+- **The text grammar left the drawing path.** VISUAL now reaches
+  `ppfCombine`, `ppfWrapIf`, `ppqBuildBigop` and the layout primitives,
+  and nothing else — which is what makes draw-only a small thing to lift
+  out, and was the whole point of the upstream reader's objection.
+
+The device build earned its place in the loop: it caught `ppvRun` being
+swallowed into the PC_BUILD guard around the test back end, which the
+simulator build cannot see because both halves compile there. The flash
+measurement is a build test as much as a size test.
+
+DERIV landed on top, and the deferral that PP17 recorded turned out to
+cost one read: `_differentiatorIteration` fills every stack level with
+the sample point AND stores it into the named variable — *"feed both
+channels"* — exactly as `DEI_xeq_user` does for an integral. The seeding
+rule was the one already in use. PGMDRV gets its own latch because
+upstream gives it one on purpose, and V55 pins that a derivative does not
+read PGMINT's.
+
+**Two places the node form is not the text form**, and both are
+improvements: a fraction bar scopes, so `a/(b+c)` draws with no
+parentheses; and a stacked power needs its base bracketed, which the
+walker does locally rather than adding a POW level to `ppfCombine` and
+changing that contract underneath the capture engine.
+
+**V18 stopped grading its own homework.** It evaluated a string typed in
+the test file, which agreed with the expectation typed beside it whether
+or not either was right. It now evaluates the walker's own output.
+
 ## 2026-08-28 — PP17: VISUAL, an RPN program drawn as its mathematics
 
 Jaymos, replying to the v0.1 announcement, asked for the one thing the

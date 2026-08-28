@@ -549,11 +549,29 @@ Captured 2026-08-28: `XEQ 'DBLINT'` gives 1.333333..., and `VISUAL
 **Shape: a third front-end, not a third renderer.** The package already
 had two producers of one node tree — the capture engine (live dispatches)
 and the equation parser (EQN text). `prettyVisual.c` adds a static walker
-that produces **equation-language TEXT**, which `ppqShowRender()` then
-parses and paints. Emitting text rather than nodes is what keeps the
-feature small: renderer, evaluator and the EXIT-dismissal protocol are
-all reused unchanged, and the product is a string the user could have
-typed into EQN — so it computes as well as draws (pinned, V18).
+over stored program steps.
+
+PP17 shipped it as a transpiler to equation-language TEXT which
+`ppqShowRender` then re-parsed. **PP18 removed that round trip**, for two
+reasons. It settled precedence twice — the walker inserted brackets into
+a string and the parser read them back out to rediscover the same
+structure — while `ppfCombine1`/`ppfCombine2` had been doing exactly that
+job for the capture engine all along. And it made the text grammar a
+dependency of drawing, which is the opposite of what an upstream reader
+asked for.
+
+The walker now builds a small expression tree and lays it out through the
+shared builders: `ppfCombine1`/`ppfCombine2` for operators,
+`ppqBuildBigop` for constructs, `ppfWrapIf` for scoping. **Nothing in the
+walker decides where a bracket goes.** The drawing came out
+byte-identical to PP17's, which is how the change was verified.
+
+Two places where the node form is not merely equivalent to the text form:
+a fraction bar SCOPES, so `a/(b+c)` draws with no parentheses at all
+(V49); and a stacked power DOES need its base bracketed, which the walker
+does locally because `ppfCombine` deliberately has no POW level — a
+`PP_SUP` normally scopes itself, and adding a level would change the
+contract underneath the capture engine (V51).
 
 **Why a symbolic stack seeded with the variable NAME is faithful.**
 Upstream feeds a body program through two channels: the integrator writes
@@ -565,13 +583,19 @@ NAME (`solver/equation.c`, the XEQ-mode RCL arm). Seeding a body frame
 with the variable name on all eight levels reproduces both channels at
 once, which is why the transpiled text computes what the RPN computed.
 
-**BINDING — the emitted alphabet.** Text this walker produces must
-satisfy the renderer AND the evaluator, which are different parsers.
-Multiplication is `STD_CROSS` (`\x80\xd7`): `'*'` is accepted by
-NEITHER. Constructs are all-upper (`INTEG(`, `SUM(`, `PROD(`) per the
-construct-spelling rule above — an emitter is now a third caller bound by
-it. Numerals carry digits, `.` and a leading `-` only; `ppqNumber` has no
-exponent arm, so `1e-8` cannot be spelled.
+**RETIRED at PP18 — the emitted alphabet.** While the walker drew by
+emitting text, that text had to satisfy the renderer AND the evaluator,
+which are different parsers: multiplication had to be `STD_CROSS`
+(`\x80\xd7`, since `'*'` is accepted by NEITHER), constructs all-upper,
+numerals digits and `.` and a leading `-` only. Getting a byte wrong
+dropped the whole formula to a linear line with no error — which is what
+made it a BINDING rule and MUT-106 its guard.
+
+It no longer binds the drawing path, because there is no longer any text
+in it: the walker builds nodes, and a node cannot be mis-spelled. The
+rule still governs the **test** back end (whose output one pin feeds to
+`fnEqCalc`) and the equation parser itself. Recorded rather than deleted
+because the reasoning is what justifies not going back.
 
 **BINDING — fail closed.** An opcode the dispatch table does not name
 declines. There is no inferred "harmless item" rule, because the item
@@ -598,6 +622,22 @@ underflow · D11 opaque reaching the mathematics · D12 variable collision ·
 D13 malformed program memory · D14 unreadable numeral · D15 fragment cap ·
 D16 pool exhausted · D17 nothing to show · D18 name the grammar cannot
 spell.
+
+**Derivatives (PP18).** `PGMDRV` latches the program, `f'`/`f"` pop the
+point and name the variable. The seeding rule is the integrator's, and
+that is a measurement rather than an analogy: `_differentiatorIteration`
+(differentiate.c) fills every stack level with the sample point AND
+stores it into the named variable — *"feed both channels: the stack for a
+program that consumes X, the variable for one that recalls its MVAR"* —
+which is what `DEI_xeq_user` does for an integral. So a body frame seeded
+with the variable name on all levels reproduces what the engine actually
+offers a program.
+
+`PGMDRV` is a **separate latch** from `PGMINT`, because it is separate
+upstream: *"a slot of its own so that taking a derivative does not
+repoint what SOLVE, INT and PLOT will run next."* A derivative that read
+`PGMINT`'s target would draw the wrong function with nothing on screen
+saying so — V55 is that pin.
 
 **Rulings.**
 
@@ -683,18 +723,16 @@ second table to keep honest; not done.
 
 **Not in v1, deliberately.** `SOLVE`/`PGMSLV` chains — the equation
 language has no root-of construct, and inventing a notation is a design
-question, not an implementation one; they decline honestly. `F1DRV`/
-`F2DRV` → `DERIV(` — the shape is parallel but the point-delivery channel
-(X, the solver variable, or both at each probe) needs its own
-verification pass before a seeding rule can be stated with the confidence
-the rest of this section has. `CLX` (lift interplay under eRPN
+question, not an implementation one; they decline honestly. `CLX` (lift interplay under eRPN
 unverified), `BINARY_REAL34` literals (they would need a plain-ASCII
 conversion free of display glyphs), and dyadic functions — the emitter's
 arity source is a monadic list, and a two-argument form would need both
 an arity answer and a `f(a;b)` grammar arm.
 
-**Budget (measured 2026-08-28).** Flash 1,146,432 -> 1,151,016
-(**+4,584 B**); device RAM **12,908/16,384, unchanged** — which is the
+**Budget (measured 2026-08-28).** Flash 1,146,432 -> 1,151,200
+(**+4,768 B** for VISUAL entire; PP18's refactor gave back 136 B by
+taking the text back end out of the device build, and DERIV cost ~320);
+device RAM **12,908/16,384, unchanged** — which is the
 design claim as an executable fact, not an intention. No BSS: the
 walker's whole state is one ~1.5 KiB stack frame
 in `fnPrettyVisual` (1 KiB fragment pool + a 256 B compose buffer),
