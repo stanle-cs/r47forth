@@ -2391,13 +2391,18 @@ void prettyTestFormula(uint16_t unusedButMandatoryParameter) {
       ppTestFail("FV15 MNU_PP is not registered in the softmenu table");
     }
     else {
-      static const int16_t want[6] = { ITM_PSHOW, ITM_PHIST, ITM_PCLR,
-                                       ITM_EQSHW, ITM_PPON,  ITM_PTLIN };
-      if(ppCount != 6) {
-        ppTestFailInt("FV15 MNU_PP size", 6, ppCount);
+      // 12, not 6: VISUAL sits on the f-shifted row (a softmenu's slots
+      // 6-11 ARE the f row), and upstream menus are padded to a multiple
+      // of six rather than left ragged
+      static const int16_t want[12] = { ITM_PSHOW,  ITM_PHIST, ITM_PCLR,
+                                        ITM_EQSHW,  ITM_PPON,  ITM_PTLIN,
+                                        ITM_VISUAL, ITM_NULL,  ITM_NULL,
+                                        ITM_NULL,   ITM_NULL,  ITM_NULL };
+      if(ppCount != 12) {
+        ppTestFailInt("FV15 MNU_PP size", 12, ppCount);
       }
       else {
-        for(int i = 0; i < 6; i++) {
+        for(int i = 0; i < 12; i++) {
           if(ppItems[i] != want[i]) {
             ppTestFailInt("FV15 MNU_PP slot", want[i], ppItems[i]);
           }
@@ -3311,6 +3316,1039 @@ void prettyTestEquation(uint16_t unusedButMandatoryParameter) {
     nimNumberPart = NP_EMPTY;
     temporaryInformation = TI_NO_INFO;
   }
+
+  ppTestWriteLonI(REGISTER_X, ppTestFailures);
+}
+
+
+/* ==== PP17: VISUAL, the RPN-program walker ==============================
+ * The pins assert the TRANSPILED STRING, not the picture: the string is
+ * the walker's whole product, and every rendering question about it was
+ * already settled by the equation battery. V18 then closes the loop by
+ * EVALUATING one of those strings — a transpilation that draws but does
+ * not compute would be a lie the renderer alone cannot catch.
+ *
+ * Fixtures are the appnote-22 chain (docs/appnotes/sources/AN0022), with
+ * package-local label names so no other driver's labels collide. */
+
+#define PPV2(itm) (uint8_t)(((itm) >> 8) | 0x80), (uint8_t)((itm) & 0xff)
+
+static void ppvTestExpect(const char *what, const char *label, const char *expected) {
+  calcRegister_t id = findNamedLabel(label, GLOBAL_LABELS);
+  if(id == INVALID_VARIABLE) {
+    ppTestFailures++;
+    printf("prettyPrint test FAIL: %s (label '%s' not registered)\n", what, label);
+    return;
+  }
+  char out[256];
+  uint8_t reason = 0;
+  uint16_t atStep = 0;
+  if(!ppvTranspile((uint16_t)(id - FIRST_LABEL), out, sizeof(out), &reason, &atStep)) {
+    ppTestFailures++;
+    printf("prettyPrint test FAIL: %s (declined D%u at step %u, expected '%s')\n",
+           what, (unsigned)reason, (unsigned)atStep, expected);
+    return;
+  }
+  if(strcmp(out, expected) != 0) {
+    ppTestFailures++;
+    printf("prettyPrint test FAIL: %s (expected '%s', actual '%s')\n", what, expected, out);
+  }
+}
+
+static void ppvTestDecline(const char *what, const char *label, uint8_t wantReason) {
+  calcRegister_t id = findNamedLabel(label, GLOBAL_LABELS);
+  if(id == INVALID_VARIABLE) {
+    ppTestFailures++;
+    printf("prettyPrint test FAIL: %s (label '%s' not registered)\n", what, label);
+    return;
+  }
+  char out[256];
+  uint8_t reason = 0;
+  uint16_t atStep = 0;
+  if(ppvTranspile((uint16_t)(id - FIRST_LABEL), out, sizeof(out), &reason, &atStep)) {
+    ppTestFailures++;
+    printf("prettyPrint test FAIL: %s (expected a decline, drew '%s')\n", what, out);
+    return;
+  }
+  if(reason != wantReason) {
+    ppTestFailInt(what, wantReason, reason);
+  }
+}
+
+/* Drive VISUAL the way the unit does: the command, ALPHA, the label
+ * typed one letter at a time, ENTER. Every other pin calls ppvTranspile
+ * or fnPrettyVisual directly, which skips the whole transient-alpha
+ * path the item's TM_LBLONLY parameter exists for — and this package
+ * has been bitten by exactly that gap before (AUDIT R5-3: containment
+ * covered only the direct-key half of the keyboard, and the solo gate
+ * stayed green because no test drove the other one). */
+static void ppvTestKeyIn(const char *label) {
+  runFunction(ITM_VISUAL);              // the key press: enters TAM
+  tamProcessInput(ITM_alpha);           // ALPHA
+  for(const char *p = label; *p != 0; p++) {
+    addItemToBuffer((uint16_t)(ITM_A + (*p - 'A')));
+  }
+  tamProcessInput(ITM_ENTER);           // resolves the name and dispatches
+}
+
+/* Key a program in through PEM, the way it is actually entered on the
+ * unit: every step arrives as runFunction() in CM_PEM, and a step with a
+ * parameter goes through the same transient-alpha machinery a user
+ * types. This matters beyond "more coverage" — every OTHER fixture here
+ * hand-encodes its bytes (ITM_LITERAL, STRING_LONG_INTEGER, 1, '0'), and
+ * a hand-encoded literal is only a GUESS at what PEM writes. If the two
+ * disagree, the walker passes every pin and still declines the first
+ * program a user types. */
+// the global step number of .END. — derived by walking, never counted:
+// fnGotoDot does NOT clamp, and a number past the end walks currentStep
+// to NULL and takes the suite down with it
+static uint16_t ppvLastGlobalStep(void) {
+  uint8_t *st = beginOfProgramMemory;
+  uint16_t n = 1;
+  while(st != NULL && !isAtEndOfPrograms(st)) {
+    uint8_t *nx = findNextStep(st);
+    if(nx == NULL || nx <= st) {
+      break;
+    }
+    st = nx;
+    n++;
+  }
+  return n;
+}
+
+static void ppvPemBegin(void) {
+  programRunStop = PGM_STOPPED;
+  calcMode = CM_PEM;
+  catalog = CATALOG_NONE;
+  tam.mode = 0;
+  tam.function = 0;
+  aimBuffer[0] = 0;
+  dynamicMenuItem = -1;
+  pemCursorIsZerothStep = false;
+  lastErrorCode = ERROR_NONE;
+  clearSystemFlag(FLAG_ALPHA);
+  // the LAST global step (.END.), not getNumberOfSteps() — that is the
+  // current PROGRAM's count, and keying from there splices the new steps
+  // into the middle of whatever program is current
+  fnGotoDot(ppvLastGlobalStep());
+}
+
+// a step whose parameter is typed: LBL 'NAME', RCL 'a', PGMINT 'P', ...
+static void ppvPemNamed(uint16_t item, const char *name) {
+  runFunction(item);
+  tamProcessInput(ITM_alpha);
+  for(const char *p = name; *p != 0; p++) {
+    if(*p >= 'A' && *p <= 'Z') {
+      addItemToBuffer((uint16_t)(ITM_A + (*p - 'A')));
+    }
+    else {
+      addItemToBuffer((uint16_t)(ITM_a + (*p - 'a')));
+    }
+  }
+  tamProcessInput(ITM_ENTER);
+}
+
+static uint32_t ppvSumRows(int16_t top, int16_t bottom) {
+  uint32_t sum = 0;
+  for(int16_t y = top; y <= bottom; y++) {
+    for(int16_t x = 0; x < SCREEN_WIDTH; x++) {
+      if(lcd_buffer_pixel_on(x, y)) {
+        sum += (uint32_t)(x + 1) * (uint32_t)(y + 1);
+      }
+    }
+  }
+  return sum;
+}
+
+static uint32_t ppvBandSum(void) {
+  uint32_t sum = 0;
+  for(int16_t y = 16; y <= 167; y++) {
+    for(int16_t x = 0; x < SCREEN_WIDTH; x++) {
+      if(lcd_buffer_pixel_on(x, y)) {
+        sum += (uint32_t)(x + 1) * (uint32_t)(y + 1);
+      }
+    }
+  }
+  return sum;
+}
+
+void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
+  (void)unusedButMandatoryParameter;
+  ppTestFailures = 0;
+
+  const uint16_t hadStatus  = currentSolverStatus;
+  const uint16_t hadVar     = currentSolverVariable;
+  const uint16_t hadProgram = currentSolverProgram;
+  const uint16_t hadMode    = calcMode;
+
+  /* ---- the appnote-22 integral chain -------------------------------- */
+  {
+    static const uint8_t pgmHT[] = {          // h(t) = t
+      ITM_LBL, STRING_LABEL_VARIABLE, 3, 'V','H','T',
+      PPV2(ITM_MVAR), STRING_LABEL_VARIABLE, 1, 't',
+      ITM_RCL, STRING_LABEL_VARIABLE, 1, 't',
+      PPV2(ITM_END),
+    };
+    static const uint8_t pgmIT[] = {          // INT(0..x) t dt
+      ITM_LBL, STRING_LABEL_VARIABLE, 3, 'V','I','T',
+      PPV2(ITM_MVAR), STRING_LABEL_VARIABLE, 1, 'x',
+      PPV2(ITM_PGMINT), STRING_LABEL_VARIABLE, 3, 'V','H','T',
+      ITM_LITERAL, STRING_LONG_INTEGER, 1, '0',
+      ITM_RCL, STRING_LABEL_VARIABLE, 1, 'x',
+      PPV2(ITM_INTEGRAL_YX), STRING_LABEL_VARIABLE, 1, 't',
+      PPV2(ITM_END),
+    };
+    static const uint8_t pgmIY[] = {          // INT(0..y) IT dx
+      ITM_LBL, STRING_LABEL_VARIABLE, 3, 'V','I','Y',
+      PPV2(ITM_MVAR), STRING_LABEL_VARIABLE, 1, 'y',
+      PPV2(ITM_PGMINT), STRING_LABEL_VARIABLE, 3, 'V','I','T',
+      ITM_LITERAL, STRING_LONG_INTEGER, 1, '0',
+      ITM_RCL, STRING_LABEL_VARIABLE, 1, 'y',
+      PPV2(ITM_INTEGRAL_YX), STRING_LABEL_VARIABLE, 1, 'x',
+      PPV2(ITM_END),
+    };
+    // DBLINT carries the appnote's own title idiom: a string literal
+    // stored to a lettered register and dropped again
+    static const uint8_t pgmDBL[] = {
+      ITM_LBL, STRING_LABEL_VARIABLE, 4, 'V','D','B','L',
+      PPV2(ITM_PGMINT), STRING_LABEL_VARIABLE, 3, 'V','I','T',
+      ITM_LITERAL, STRING_LONG_INTEGER, 1, '0',
+      ITM_LITERAL, STRING_LONG_INTEGER, 1, '2',
+      PPV2(ITM_INTEGRAL_YX), STRING_LABEL_VARIABLE, 1, 'x',
+      ITM_LITERAL, STRING_LABEL_VARIABLE, 3, '4','/','3',
+      ITM_STO, REGISTER_A_IN_KS_CODE,
+      ITM_DROP,
+      PPV2(ITM_SNAP),
+      PPV2(ITM_END),
+    };
+    // TRPINT brackets its run with an ACC setting: an exponent literal
+    // (unspellable, so opaque) stored to a named variable and dropped
+    static const uint8_t pgmTRP[] = {
+      ITM_LBL, STRING_LABEL_VARIABLE, 4, 'V','T','R','P',
+      ITM_LITERAL, STRING_REAL34, 4, '1','e','-','8',
+      ITM_STO, STRING_LABEL_VARIABLE, 3, 'A','C','C',
+      ITM_DROP,
+      PPV2(ITM_PGMINT), STRING_LABEL_VARIABLE, 3, 'V','I','Y',
+      ITM_LITERAL, STRING_LONG_INTEGER, 1, '0',
+      ITM_LITERAL, STRING_LONG_INTEGER, 1, '2',
+      PPV2(ITM_INTEGRAL_YX), STRING_LABEL_VARIABLE, 1, 'y',
+      ITM_LITERAL, STRING_LONG_INTEGER, 1, '0',
+      ITM_STO, STRING_LABEL_VARIABLE, 3, 'A','C','C',
+      ITM_DROP,
+      PPV2(ITM_END),
+    };
+    static const uint8_t pgmFX[] = {          // f(x) = x^2 - p*x - 2
+      ITM_LBL, STRING_LABEL_VARIABLE, 3, 'V','F','X',
+      PPV2(ITM_MVAR), STRING_LABEL_VARIABLE, 1, 'x',
+      PPV2(ITM_MVAR), STRING_LABEL_VARIABLE, 1, 'p',
+      ITM_RCL, STRING_LABEL_VARIABLE, 1, 'x',
+      ITM_ENTER,
+      ITM_MULT,
+      ITM_RCL, STRING_LABEL_VARIABLE, 1, 'x',
+      ITM_RCL, STRING_LABEL_VARIABLE, 1, 'p',
+      ITM_MULT,
+      ITM_SUB,
+      ITM_LITERAL, STRING_LONG_INTEGER, 1, '2',
+      ITM_SUB,
+      PPV2(ITM_END),
+    };
+    ppcTestWriteAndLoadPgm(pgmHT,  sizeof(pgmHT));
+    ppcTestWriteAndLoadPgm(pgmIT,  sizeof(pgmIT));
+    ppcTestWriteAndLoadPgm(pgmIY,  sizeof(pgmIY));
+    ppcTestWriteAndLoadPgm(pgmDBL, sizeof(pgmDBL));
+    ppcTestWriteAndLoadPgm(pgmTRP, sizeof(pgmTRP));
+    ppcTestWriteAndLoadPgm(pgmFX,  sizeof(pgmFX));
+  }
+
+  // V1: the ask itself — a double integral recovered from the chain,
+  // limits and d-variables and all, with the title idiom passing through
+  ppvTestExpect("V1 DBLINT", "VDBL", "INTEG(INTEG(t;t;0;x);x;0;2)");
+
+  // V2: three coupled levels. Also pins that a STO'd name (ACC) and an
+  // exponent literal ride through without reaching the mathematics.
+  ppvTestExpect("V2 TRPINT", "VTRP", "INTEG(INTEG(INTEG(t;t;0;x);x;0;y);y;0;2)");
+
+  // V3: a constructed function. SUB takes Y-X, so operand order shows
+  // here; ENTER dups; MVAR declares nothing the picture carries. ENTER x
+  // is x*x, not x^2 — the walker transpiles structure, never intent.
+  {
+    char want[64];
+    sprintf(want, "x%sx-x%sp-2", STD_CROSS, STD_CROSS);
+    ppvTestExpect("V3 FX", "VFX", want);
+  }
+
+  /* ---- programmed sums ---------------------------------------------- */
+  {
+    static const uint8_t pgmBD[] = {          // body: n^2, off the stack
+      ITM_LBL, STRING_LABEL_VARIABLE, 3, 'V','B','D',
+      ITM_ENTER,
+      ITM_MULT,
+      PPV2(ITM_END),
+    };
+    static const uint8_t pgmS1[] = {          // unit step
+      ITM_LBL, STRING_LABEL_VARIABLE, 3, 'V','S','1',
+      ITM_LITERAL, STRING_LONG_INTEGER, 1, '1',
+      ITM_LITERAL, STRING_LONG_INTEGER, 1, '5',
+      ITM_LITERAL, STRING_LONG_INTEGER, 1, '1',
+      PPV2(ITM_SIGMAn), STRING_LABEL_VARIABLE, 3, 'V','B','D',
+      PPV2(ITM_END),
+    };
+    static const uint8_t pgmS2[] = {          // step 2
+      ITM_LBL, STRING_LABEL_VARIABLE, 3, 'V','S','2',
+      ITM_LITERAL, STRING_LONG_INTEGER, 1, '1',
+      ITM_LITERAL, STRING_LONG_INTEGER, 1, '9',
+      ITM_LITERAL, STRING_LONG_INTEGER, 1, '2',
+      PPV2(ITM_SIGMAn), STRING_LABEL_VARIABLE, 3, 'V','B','D',
+      PPV2(ITM_END),
+    };
+    static const uint8_t pgmBN[] = {          // body recalls a REAL 'n'
+      ITM_LBL, STRING_LABEL_VARIABLE, 3, 'V','B','N',
+      ITM_RCL, STRING_LABEL_VARIABLE, 1, 'n',
+      PPV2(ITM_END),
+    };
+    static const uint8_t pgmS4[] = {
+      ITM_LBL, STRING_LABEL_VARIABLE, 3, 'V','S','4',
+      ITM_LITERAL, STRING_LONG_INTEGER, 1, '1',
+      ITM_LITERAL, STRING_LONG_INTEGER, 1, '5',
+      ITM_LITERAL, STRING_LONG_INTEGER, 1, '1',
+      PPV2(ITM_SIGMAn), STRING_LABEL_VARIABLE, 3, 'V','B','N',
+      PPV2(ITM_END),
+    };
+    ppcTestWriteAndLoadPgm(pgmBD, sizeof(pgmBD));
+    ppcTestWriteAndLoadPgm(pgmS1, sizeof(pgmS1));
+    ppcTestWriteAndLoadPgm(pgmS2, sizeof(pgmS2));
+    ppcTestWriteAndLoadPgm(pgmBN, sizeof(pgmBN));
+    ppcTestWriteAndLoadPgm(pgmS4, sizeof(pgmS4));
+  }
+  // V4/V5: the counter has no name in RPN — it arrives in a filled stack
+  // — so the text invents one. A unit step is the evaluator's default
+  // and is left out, which is also the cleaner picture.
+  {
+    char want[64];
+    sprintf(want, "SUM(n%sn;n;1;5)", STD_CROSS);
+    ppvTestExpect("V4 sum unit step", "VS1", want);
+    sprintf(want, "SUM(n%sn;n;1;9;2)", STD_CROSS);
+    ppvTestExpect("V5 sum step 2", "VS2", want);
+  }
+  // V6: the invented name must never shadow a real variable spelled the
+  // same way — upstream would read the variable, the text would read the
+  // counter, and nothing on screen would say so
+  ppvTestDecline("V6 counter collides with a real variable", "VS4", 12);
+
+  /* ---- declines ------------------------------------------------------ */
+  {
+    static const uint8_t pgmSLV[] = {         // SOLVE has no construct
+      ITM_LBL, STRING_LABEL_VARIABLE, 4, 'V','S','L','V',
+      PPV2(ITM_PGMSLV), STRING_LABEL_VARIABLE, 3, 'V','F','X',
+      ITM_LITERAL, STRING_LONG_INTEGER, 1, '0',
+      ITM_LITERAL, STRING_LONG_INTEGER, 1, '5',
+      PPV2(ITM_SOLVE), STRING_LABEL_VARIABLE, 1, 'x',
+      PPV2(ITM_END),
+    };
+    static const uint8_t pgmLOC[] = {         // XEQ of a local label
+      ITM_LBL, STRING_LABEL_VARIABLE, 4, 'V','L','O','C',
+      ITM_XEQ, 5,
+      PPV2(ITM_END),
+    };
+    static const uint8_t pgmIND[] = {         // indirect XEQ
+      ITM_LBL, STRING_LABEL_VARIABLE, 4, 'V','I','N','D',
+      ITM_XEQ, INDIRECT_REGISTER, 0,
+      PPV2(ITM_END),
+    };
+    static const uint8_t pgmOPQ[] = {         // a string reaching the maths
+      ITM_LBL, STRING_LABEL_VARIABLE, 4, 'V','O','P','Q',
+      ITM_LITERAL, STRING_LABEL_VARIABLE, 3, 'a','b','c',
+      ITM_LITERAL, STRING_LONG_INTEGER, 1, '1',
+      ITM_ADD,
+      PPV2(ITM_END),
+    };
+    static const uint8_t pgmDRT[] = {         // recall of a name a STO changed
+      ITM_LBL, STRING_LABEL_VARIABLE, 4, 'V','D','R','T',
+      ITM_LITERAL, STRING_LONG_INTEGER, 1, '3',
+      ITM_STO, STRING_LABEL_VARIABLE, 1, 'q',
+      ITM_RCL, STRING_LABEL_VARIABLE, 1, 'q',
+      PPV2(ITM_END),
+    };
+    static const uint8_t pgmREG[] = {         // recall of a numbered register
+      ITM_LBL, STRING_LABEL_VARIABLE, 4, 'V','R','E','G',
+      ITM_RCL, 5,
+      PPV2(ITM_END),
+    };
+    static const uint8_t pgmUF[] = {          // consumes what it was never given
+      ITM_LBL, STRING_LABEL_VARIABLE, 3, 'V','U','F',
+      ITM_ADD,
+      PPV2(ITM_END),
+    };
+    static const uint8_t pgmNOL[] = {         // an integral with no PGMINT
+      ITM_LBL, STRING_LABEL_VARIABLE, 4, 'V','N','O','L',
+      ITM_LITERAL, STRING_LONG_INTEGER, 1, '0',
+      ITM_LITERAL, STRING_LONG_INTEGER, 1, '1',
+      PPV2(ITM_INTEGRAL_YX), STRING_LABEL_VARIABLE, 1, 't',
+      PPV2(ITM_END),
+    };
+    static const uint8_t pgmFLW[] = {         // flow control
+      ITM_LBL, STRING_LABEL_VARIABLE, 4, 'V','F','L','W',
+      ITM_LITERAL, STRING_LONG_INTEGER, 1, '1',
+      ITM_GTO, 5,
+      PPV2(ITM_END),
+    };
+    ppcTestWriteAndLoadPgm(pgmSLV, sizeof(pgmSLV));
+    ppcTestWriteAndLoadPgm(pgmLOC, sizeof(pgmLOC));
+    ppcTestWriteAndLoadPgm(pgmIND, sizeof(pgmIND));
+    ppcTestWriteAndLoadPgm(pgmOPQ, sizeof(pgmOPQ));
+    ppcTestWriteAndLoadPgm(pgmDRT, sizeof(pgmDRT));
+    ppcTestWriteAndLoadPgm(pgmREG, sizeof(pgmREG));
+    ppcTestWriteAndLoadPgm(pgmUF,  sizeof(pgmUF));
+    ppcTestWriteAndLoadPgm(pgmNOL, sizeof(pgmNOL));
+    ppcTestWriteAndLoadPgm(pgmFLW, sizeof(pgmFLW));
+  }
+  ppvTestDecline("V7 SOLVE has no construct",        "VSLV",  1);
+  ppvTestDecline("V8 local label",                   "VLOC",  3);
+  ppvTestDecline("V9 indirect parameter",            "VIND",  2);
+  ppvTestDecline("V10 string reaching the maths",    "VOPQ", 11);
+  ppvTestDecline("V11 recall of a stored name",      "VDRT",  5);
+  ppvTestDecline("V12 numbered-register recall",     "VREG",  7);
+  ppvTestDecline("V13 stack underflow",              "VUF",  10);
+  ppvTestDecline("V14 integral with no PGMINT",      "VNOL",  6);
+  ppvTestDecline("V15 flow control",                 "VFLW",  1);
+
+  /* ---- precedence and the latch ------------------------------------- */
+  {
+    static const uint8_t pgmPRC[] = {         // a / (b + c)
+      ITM_LBL, STRING_LABEL_VARIABLE, 4, 'V','P','R','C',
+      ITM_RCL, STRING_LABEL_VARIABLE, 1, 'a',
+      ITM_RCL, STRING_LABEL_VARIABLE, 1, 'b',
+      ITM_RCL, STRING_LABEL_VARIABLE, 1, 'c',
+      ITM_ADD,
+      ITM_DIV,
+      PPV2(ITM_END),
+    };
+    static const uint8_t pgmLAT[] = {         // two integrals, one PGMINT
+      ITM_LBL, STRING_LABEL_VARIABLE, 4, 'V','L','A','T',
+      PPV2(ITM_PGMINT), STRING_LABEL_VARIABLE, 3, 'V','H','T',
+      ITM_LITERAL, STRING_LONG_INTEGER, 1, '0',
+      ITM_LITERAL, STRING_LONG_INTEGER, 1, '1',
+      PPV2(ITM_INTEGRAL_YX), STRING_LABEL_VARIABLE, 1, 't',
+      ITM_LITERAL, STRING_LONG_INTEGER, 1, '0',
+      ITM_LITERAL, STRING_LONG_INTEGER, 1, '1',
+      PPV2(ITM_INTEGRAL_YX), STRING_LABEL_VARIABLE, 1, 't',
+      ITM_ADD,
+      PPV2(ITM_END),
+    };
+    static const uint8_t pgmSLA[] = {         // a - (b + c)
+      ITM_LBL, STRING_LABEL_VARIABLE, 4, 'V','S','L','A',
+      ITM_RCL, STRING_LABEL_VARIABLE, 1, 'a',
+      ITM_RCL, STRING_LABEL_VARIABLE, 1, 'b',
+      ITM_RCL, STRING_LABEL_VARIABLE, 1, 'c',
+      ITM_ADD,
+      ITM_SUB,
+      PPV2(ITM_END),
+    };
+    static const uint8_t pgmSLM[] = {         // a / (b * c)
+      ITM_LBL, STRING_LABEL_VARIABLE, 4, 'V','S','L','M',
+      ITM_RCL, STRING_LABEL_VARIABLE, 1, 'a',
+      ITM_RCL, STRING_LABEL_VARIABLE, 1, 'b',
+      ITM_RCL, STRING_LABEL_VARIABLE, 1, 'c',
+      ITM_MULT,
+      ITM_DIV,
+      PPV2(ITM_END),
+    };
+    static const uint8_t pgmIX[] = {          // integrand that integrates over x too
+      ITM_LBL, STRING_LABEL_VARIABLE, 3, 'V','I','X',
+      PPV2(ITM_PGMINT), STRING_LABEL_VARIABLE, 3, 'V','H','T',
+      ITM_LITERAL, STRING_LONG_INTEGER, 1, '0',
+      ITM_RCL, STRING_LABEL_VARIABLE, 1, 'x',
+      PPV2(ITM_INTEGRAL_YX), STRING_LABEL_VARIABLE, 1, 'x',
+      PPV2(ITM_END),
+    };
+    static const uint8_t pgmSHD[] = {
+      ITM_LBL, STRING_LABEL_VARIABLE, 4, 'V','S','H','D',
+      PPV2(ITM_PGMINT), STRING_LABEL_VARIABLE, 3, 'V','I','X',
+      ITM_LITERAL, STRING_LONG_INTEGER, 1, '0',
+      ITM_LITERAL, STRING_LONG_INTEGER, 1, '2',
+      PPV2(ITM_INTEGRAL_YX), STRING_LABEL_VARIABLE, 1, 'x',
+      PPV2(ITM_END),
+    };
+    ppcTestWriteAndLoadPgm(pgmPRC, sizeof(pgmPRC));
+    ppcTestWriteAndLoadPgm(pgmLAT, sizeof(pgmLAT));
+    ppcTestWriteAndLoadPgm(pgmSLA, sizeof(pgmSLA));
+    ppcTestWriteAndLoadPgm(pgmSLM, sizeof(pgmSLM));
+    static const uint8_t pgmMON[] = {         // -1/sqrt(a^2)
+      ITM_LBL, STRING_LABEL_VARIABLE, 4, 'V','M','O','N',
+      ITM_RCL, STRING_LABEL_VARIABLE, 1, 'a',
+      ITM_SQUARE,
+      ITM_SQUAREROOTX,
+      ITM_1ONX,
+      ITM_CHS,
+      PPV2(ITM_END),
+    };
+    static const uint8_t pgmMOB[] = {         // 1/(a+b)
+      ITM_LBL, STRING_LABEL_VARIABLE, 4, 'V','M','O','B',
+      ITM_RCL, STRING_LABEL_VARIABLE, 1, 'a',
+      ITM_RCL, STRING_LABEL_VARIABLE, 1, 'b',
+      ITM_ADD,
+      ITM_1ONX,
+      PPV2(ITM_END),
+    };
+    ppcTestWriteAndLoadPgm(pgmIX,  sizeof(pgmIX));
+    ppcTestWriteAndLoadPgm(pgmSHD, sizeof(pgmSHD));
+    static const uint8_t pgmMOP[] = {         // 1/(a*b)
+      ITM_LBL, STRING_LABEL_VARIABLE, 4, 'V','M','O','P',
+      ITM_RCL, STRING_LABEL_VARIABLE, 1, 'a',
+      ITM_RCL, STRING_LABEL_VARIABLE, 1, 'b',
+      ITM_MULT,
+      ITM_1ONX,
+      PPV2(ITM_END),
+    };
+    ppcTestWriteAndLoadPgm(pgmMON, sizeof(pgmMON));
+    ppcTestWriteAndLoadPgm(pgmMOB, sizeof(pgmMOB));
+    ppcTestWriteAndLoadPgm(pgmMOP, sizeof(pgmMOP));
+  }
+
+  /* ---- shapes the appnote-22 set never reaches --------------------- */
+  {
+    // the appnote's OWN PLTINTG integrand: a constructed function inside
+    // an integral, which is the case Jaymos described as "a single
+    // function ... or nested or serial functions"
+    static const uint8_t pgmIG[] = {
+      ITM_LBL, STRING_LABEL_VARIABLE, 3, 'V','I','G',
+      PPV2(ITM_PGMINT), STRING_LABEL_VARIABLE, 3, 'V','F','X',
+      ITM_LITERAL, STRING_LONG_INTEGER, 1, '0',
+      ITM_LITERAL, STRING_LONG_INTEGER, 1, '8',
+      PPV2(ITM_INTEGRAL_YX), STRING_LABEL_VARIABLE, 1, 'x',
+      PPV2(ITM_END),
+    };
+    // serial, not nested: two subroutines in a row over one stack
+    static const uint8_t pgmAD1[] = {
+      ITM_LBL, STRING_LABEL_VARIABLE, 4, 'V','A','D','1',
+      ITM_LITERAL, STRING_LONG_INTEGER, 1, '1',
+      ITM_ADD,
+      PPV2(ITM_END),
+    };
+    static const uint8_t pgmDB2[] = {
+      ITM_LBL, STRING_LABEL_VARIABLE, 4, 'V','D','B','2',
+      ITM_LITERAL, STRING_LONG_INTEGER, 1, '2',
+      ITM_MULT,
+      PPV2(ITM_END),
+    };
+    static const uint8_t pgmSER[] = {
+      ITM_LBL, STRING_LABEL_VARIABLE, 4, 'V','S','E','R',
+      ITM_RCL, STRING_LABEL_VARIABLE, 1, 'a',
+      ITM_XEQ, STRING_LABEL_VARIABLE, 4, 'V','A','D','1',
+      ITM_XEQ, STRING_LABEL_VARIABLE, 4, 'V','D','B','2',
+      PPV2(ITM_END),
+    };
+    // the product arm, which no pin had reached
+    static const uint8_t pgmPRD[] = {
+      ITM_LBL, STRING_LABEL_VARIABLE, 4, 'V','P','R','D',
+      ITM_LITERAL, STRING_LONG_INTEGER, 1, '1',
+      ITM_LITERAL, STRING_LONG_INTEGER, 1, '4',
+      ITM_LITERAL, STRING_LONG_INTEGER, 1, '1',
+      PPV2(ITM_PIn), STRING_LABEL_VARIABLE, 3, 'V','B','D',
+      PPV2(ITM_END),
+    };
+    // an integration limit that is itself an expression
+    static const uint8_t pgmLIM[] = {
+      ITM_LBL, STRING_LABEL_VARIABLE, 4, 'V','L','I','M',
+      PPV2(ITM_PGMINT), STRING_LABEL_VARIABLE, 3, 'V','H','T',
+      ITM_LITERAL, STRING_LONG_INTEGER, 1, '0',
+      ITM_RCL, STRING_LABEL_VARIABLE, 1, 'u',
+      ITM_LITERAL, STRING_LONG_INTEGER, 1, '2',
+      ITM_MULT,
+      PPV2(ITM_INTEGRAL_YX), STRING_LABEL_VARIABLE, 1, 't',
+      PPV2(ITM_END),
+    };
+    // ENTER then a LITERAL: the lift latch. 5 ENTER 3 + is 8, and a
+    // walker that ignored the latch would read 5+5 or 3+3.
+    static const uint8_t pgmLFT[] = {
+      ITM_LBL, STRING_LABEL_VARIABLE, 4, 'V','L','F','T',
+      ITM_LITERAL, STRING_LONG_INTEGER, 1, '5',
+      ITM_ENTER,
+      ITM_LITERAL, STRING_LONG_INTEGER, 1, '3',
+      ITM_ADD,
+      PPV2(ITM_END),
+    };
+    // stack motions: x<>y reverses a non-commutative operand order
+    static const uint8_t pgmSWP[] = {
+      ITM_LBL, STRING_LABEL_VARIABLE, 4, 'V','S','W','P',
+      ITM_RCL, STRING_LABEL_VARIABLE, 1, 'a',
+      ITM_RCL, STRING_LABEL_VARIABLE, 1, 'b',
+      ITM_XexY,
+      ITM_SUB,
+      PPV2(ITM_END),
+    };
+    // DROPY removes the SECOND level, not the top
+    static const uint8_t pgmDRY[] = {
+      ITM_LBL, STRING_LABEL_VARIABLE, 4, 'V','D','R','Y',
+      ITM_RCL, STRING_LABEL_VARIABLE, 1, 'a',
+      ITM_RCL, STRING_LABEL_VARIABLE, 1, 'b',
+      ITM_RCL, STRING_LABEL_VARIABLE, 1, 'c',
+      PPV2(ITM_DROPY),
+      ITM_ADD,
+      PPV2(ITM_END),
+    };
+    ppcTestWriteAndLoadPgm(pgmIG,  sizeof(pgmIG));
+    ppcTestWriteAndLoadPgm(pgmAD1, sizeof(pgmAD1));
+    ppcTestWriteAndLoadPgm(pgmDB2, sizeof(pgmDB2));
+    ppcTestWriteAndLoadPgm(pgmSER, sizeof(pgmSER));
+    ppcTestWriteAndLoadPgm(pgmPRD, sizeof(pgmPRD));
+    ppcTestWriteAndLoadPgm(pgmLIM, sizeof(pgmLIM));
+    ppcTestWriteAndLoadPgm(pgmLFT, sizeof(pgmLFT));
+    // The lift latch's whole effect is on stack DEPTH: ENTER-then-replace
+    // and ENTER-then-push agree on the top two values and differ only
+    // underneath, so a pin has to reach PAST them to see it. This one
+    // consumes one more than the correct trace provides — it declines,
+    // and a walker that skipped the latch would find a phantom copy
+    // waiting and print an expression instead.
+    static const uint8_t pgmLF2[] = {
+      ITM_LBL, STRING_LABEL_VARIABLE, 4, 'V','L','F','2',
+      ITM_RCL, STRING_LABEL_VARIABLE, 1, 'a',
+      ITM_ENTER,
+      ITM_RCL, STRING_LABEL_VARIABLE, 1, 'b',
+      ITM_SUB,
+      ITM_RCL, STRING_LABEL_VARIABLE, 1, 'c',
+      ITM_MULT,
+      ITM_ADD,
+      PPV2(ITM_END),
+    };
+    ppcTestWriteAndLoadPgm(pgmSWP, sizeof(pgmSWP));
+    ppcTestWriteAndLoadPgm(pgmDRY, sizeof(pgmDRY));
+    // PP17 widening: functions with a name the evaluator resolves
+    static const uint8_t pgmSIN[] = {
+      ITM_LBL, STRING_LABEL_VARIABLE, 4, 'V','S','I','N',
+      ITM_RCL, STRING_LABEL_VARIABLE, 1, 'x',
+      ITM_sin,
+      PPV2(ITM_END),
+    };
+    static const uint8_t pgmSF[] = {          // SIN(x)/2 — a function inside a fraction
+      ITM_LBL, STRING_LABEL_VARIABLE, 3, 'V','S','F',
+      ITM_RCL, STRING_LABEL_VARIABLE, 1, 'x',
+      ITM_sin,
+      ITM_LITERAL, STRING_LONG_INTEGER, 1, '2',
+      ITM_DIV,
+      PPV2(ITM_END),
+    };
+    static const uint8_t pgmEXP[] = {         // a name the grammar cannot spell
+      ITM_LBL, STRING_LABEL_VARIABLE, 4, 'V','E','X','P',
+      ITM_RCL, STRING_LABEL_VARIABLE, 1, 'x',
+      ITM_EXP,
+      PPV2(ITM_END),
+    };
+    static const uint8_t pgmISN[] = {         // an integral over a function
+      ITM_LBL, STRING_LABEL_VARIABLE, 4, 'V','I','S','N',
+      PPV2(ITM_PGMINT), STRING_LABEL_VARIABLE, 4, 'V','S','I','N',
+      ITM_LITERAL, STRING_LONG_INTEGER, 1, '0',
+      ITM_LITERAL, STRING_LONG_INTEGER, 1, '1',
+      PPV2(ITM_INTEGRAL_YX), STRING_LABEL_VARIABLE, 1, 'x',
+      PPV2(ITM_END),
+    };
+    ppcTestWriteAndLoadPgm(pgmLF2, sizeof(pgmLF2));
+    ppcTestWriteAndLoadPgm(pgmSIN, sizeof(pgmSIN));
+    ppcTestWriteAndLoadPgm(pgmSF,  sizeof(pgmSF));
+    ppcTestWriteAndLoadPgm(pgmEXP, sizeof(pgmEXP));
+    static const uint8_t pgmCUB[] = {         // x^3 has a grammar spelling
+      ITM_LBL, STRING_LABEL_VARIABLE, 4, 'V','C','U','B',
+      ITM_RCL, STRING_LABEL_VARIABLE, 1, 'a',
+      ITM_CUBE,
+      PPV2(ITM_END),
+    };
+    ppcTestWriteAndLoadPgm(pgmISN, sizeof(pgmISN));
+    ppcTestWriteAndLoadPgm(pgmCUB, sizeof(pgmCUB));
+  }
+  {
+    char want[96];
+    // V29: the appnote's own integrand under its own integral
+    sprintf(want, "INTEG(x%sx-x%sp-2;x;0;8)", STD_CROSS, STD_CROSS);
+    ppvTestExpect("V29 constructed function under an integral", "VIG", want);
+    // V30: SERIAL subroutines, the other half of what was asked for
+    sprintf(want, "(a+1)%s2", STD_CROSS);
+    ppvTestExpect("V30 serial XEQ chain", "VSER", want);
+    // V31: the product arm
+    sprintf(want, "PROD(n%sn;n;1;4)", STD_CROSS);
+    ppvTestExpect("V31 programmed product", "VPRD", want);
+    // V32: a limit that is an expression, not a literal or a bare name
+    sprintf(want, "INTEG(t;t;0;u%s2)", STD_CROSS);
+    ppvTestExpect("V32 computed integration limit", "VLIM", want);
+  }
+  // V33: ENTER latches the lift, so the next literal REPLACES X
+  ppvTestExpect("V33 ENTER then literal", "VLFT", "5+3");
+  // V34/V35: stack motions
+  ppvTestExpect("V34 x<>y reverses the operands", "VSWP", "b-a");
+  ppvTestExpect("V35 DROPY removes the second level", "VDRY", "a+c");
+  // V38: and the latch seen from underneath — see the fixture's note
+  ppvTestDecline("V38 the lift latch leaves no phantom copy", "VLF2", 10);
+
+  /* ---- PP17 widening: named functions ------------------------------- */
+  // V40: a function with a name the evaluator resolves is emitted, and
+  // the name is the item's own catalog spelling, not a hand table
+  ppvTestExpect("V40 a named function", "VSIN", "SIN(x)");
+  // V41: the reason the RENDERER gained an f(x) arm. There is no 2D gain
+  // in SIN(x) itself — a drawn one is the same shape as a linear one —
+  // but without the arm the strict parser failed on the trailing '(' and
+  // the WHOLE formula lost its 2D form, fraction and all. This pins that
+  // the fraction survives a function inside it.
+  {
+    uint8_t root;
+    ppReset();
+    if(!ppqParse("SIN(x)/2", PP_FONT_STANDARD, PP_FONT_STANDARD, &root)) {
+      ppTestFail("V41 a function inside a fraction did not parse");
+    }
+    else if(ppNodeAt(root)->kind != PP_FRAC) {
+      ppTestFailInt("V41 root kind", PP_FRAC, ppNodeAt(root)->kind);
+    }
+    ppvTestExpect("V41 transpiles to it", "VSF", "SIN(x)/2");
+  }
+  // V42: a monadic whose catalog spelling is glyphs (e^x) has no name
+  // the grammar can carry, so it declines rather than emit something
+  // that would neither draw nor compute
+  ppvTestDecline("V42 a name the grammar cannot spell", "VEXP", 1);
+  // V43: and the two compose — a function under an integral
+  ppvTestExpect("V43 function under an integral", "VISN", "INTEG(SIN(x);x;0;1)");
+  // V45: the cube has a grammar spelling, so it stays 2D rather than
+  // becoming a name
+  ppvTestExpect("V45 cube", "VCUB", "a^3");
+  // V44: the emitted spelling COMPUTES, which is the whole point of
+  // resolving it through the evaluator's own table
+  {
+    if(numberOfFormulae == 0) {
+      fnEqNew(NOPARAM);
+    }
+    calcMode = CM_NORMAL;
+    aimBuffer[0] = 0;
+    nimNumberPart = NP_EMPTY;
+    setEquation(currentFormula, "LN(1)+2");
+    lastErrorCode = 0;
+    fnEqCalc(NOPARAM);
+    if(lastErrorCode != ERROR_NONE || getRegisterDataType(REGISTER_X) != dtReal34) {
+      ppTestFail("V44 an emitted function name did not compute");
+    }
+    else {
+      real34_t want, diff, tol;
+      stringToReal34("2", &want);
+      real34Subtract(REGISTER_REAL34_DATA(REGISTER_X), &want, &diff);
+      real34SetPositiveSign(&diff);
+      stringToReal34("1e-20", &tol);
+      if(!real34CompareLessThan(&diff, &tol)) {
+        ppTestFail("V44 LN(1)+2 != 2");
+      }
+    }
+    lastErrorCode = 0;
+  }
+  // V16: a lower-precedence right operand keeps its brackets, or
+  // a/(b+c) would silently become a/b+c
+  ppvTestExpect("V16 precedence", "VPRC", "a/(b+c)");
+  // V21/V22: and so does an EQUAL-precedence one. This is the case the
+  // left/right asymmetry exists for — the grammar is left-associative,
+  // so a-(b+c) may keep its brackets while a-b+c means something else.
+  ppvTestExpect("V21 same-level right operand (additive)", "VSLA", "a-(b+c)");
+  {
+    char want[64];
+    sprintf(want, "a/(b%sc)", STD_CROSS);
+    ppvTestExpect("V22 same-level right operand (multiplicative)", "VSLM", want);
+  }
+  // V23: an inner d-variable spelled like an outer one would leave the
+  // outer integral reading the inner's last node
+  ppvTestDecline("V23 shadowed d-variable", "VSHD", 12);
+  // V24: the four monadics that HAVE a grammar spelling. The radical
+  // brings its own parentheses, so it must not also take precedence
+  // brackets — sqrt((a)) parses, and is still wrong to emit.
+  {
+    char want[80];
+    sprintf(want, "-1/%s(a^2)", "\xa2\x1a");
+    ppvTestExpect("V24 monadics", "VMON", want);
+  }
+  // V25/V26: and a monadic DOES bracket an operand that binds no tighter
+  // than it does. V26 is the one that matters: 1/a*b is not 1/(a*b),
+  // and only a SAME-level operand distinguishes the two arg levels.
+  ppvTestExpect("V25 monadic brackets a sum", "VMOB", "1/(a+b)");
+  {
+    char want[80];
+    sprintf(want, "1/(a%sb)", STD_CROSS);
+    ppvTestExpect("V26 monadic brackets a product", "VMOP", want);
+  }
+  // V17: PGMINT is a persistent latch upstream, so a second integral
+  // without a fresh one runs the same integrand
+  ppvTestExpect("V17 latch persists", "VLAT", "INTEG(t;t;0;1)+INTEG(t;t;0;1)");
+
+  /* ---- the loop closed: the text COMPUTES --------------------------- */
+  // V18: a picture that cannot be evaluated would be a transpilation
+  // that only looks right. The double integral is 4/3.
+  {
+    if(numberOfFormulae == 0) {
+      fnEqNew(NOPARAM);
+    }
+    calcMode = CM_NORMAL;
+    aimBuffer[0] = 0;
+    nimNumberPart = NP_EMPTY;
+    setEquation(currentFormula, "INTEG(INTEG(t;t;0;x);x;0;2)");
+    lastErrorCode = 0;
+    fnEqCalc(NOPARAM);
+    if(lastErrorCode != ERROR_NONE || getRegisterDataType(REGISTER_X) != dtReal34) {
+      ppTestFail("V18 transpiled double integral errored");
+    }
+    else {
+      real34_t want, diff, tol;
+      stringToReal34("1.33333333333333333333333333333333", &want);
+      real34Subtract(REGISTER_REAL34_DATA(REGISTER_X), &want, &diff);
+      real34SetPositiveSign(&diff);
+      stringToReal34("1e-6", &tol);
+      if(!real34CompareLessThan(&diff, &tol)) {
+        ppTestFail("V18 transpiled double integral != 4/3");
+      }
+    }
+    lastErrorCode = 0;
+  }
+
+  /* ---- the surface --------------------------------------------------- */
+  // V19: a stale integrate session must not frame a program's drawing in
+  // an integral sign it never asked for, and the session must come back
+  // exactly as it was.
+  {
+    calcRegister_t id = findNamedLabel("VPRC", GLOBAL_LABELS);
+    uint32_t clean, stale;
+    calcMode = CM_NORMAL;
+    temporaryInformation = TI_NO_INFO;
+    lastErrorCode = 0;
+    currentSolverStatus = 0;
+    fnPrettyVisual((uint16_t)id);
+    clean = ppvBandSum();
+
+    temporaryInformation = TI_NO_INFO;
+    lastErrorCode = 0;
+    currentSolverStatus = (uint16_t)(SOLVER_STATUS_INTERACTIVE | SOLVER_STATUS_EQUATION_INTEGRATE);
+    fnPrettyVisual((uint16_t)id);
+    stale = ppvBandSum();
+
+    if(currentSolverStatus != (uint16_t)(SOLVER_STATUS_INTERACTIVE | SOLVER_STATUS_EQUATION_INTEGRATE)) {
+      ppTestFail("V19 solver session not restored");
+    }
+    if(clean == 0) {
+      ppTestFail("V19 nothing was painted");
+    }
+    else if(clean != stale) {
+      ppTestFail("V19 a stale solver session changed the drawing");
+    }
+  }
+  // V20: a decline paints NOTHING — the whole text is composed before a
+  // pixel is touched
+  {
+    calcRegister_t id = findNamedLabel("VSLV", GLOBAL_LABELS);
+    temporaryInformation = TI_NO_INFO;
+    lastErrorCode = 0;
+    screenHoldsDrawnPixels = false;
+    fnPrettyVisual((uint16_t)id);
+    if(screenHoldsDrawnPixels) {
+      ppTestFail("V20 a declined program still painted");
+    }
+    if(lastErrorCode != ERROR_INVALID_DATA_TYPE_FOR_OP) {
+      ppTestFailInt("V20 decline error code", ERROR_INVALID_DATA_TYPE_FOR_OP, lastErrorCode);
+    }
+    lastErrorCode = 0;
+  }
+
+  // V27: WHERE the drawing goes was part of the request. The formula
+  // lands in the Z/T rows and the X line — which holds the answer the
+  // program just computed — is left exactly as it was.
+  {
+    calcRegister_t id = findNamedLabel("VDBL", GLOBAL_LABELS);
+    calcMode = CM_NORMAL;
+    temporaryInformation = TI_NO_INFO;
+    lastErrorCode = 0;
+    currentSolverStatus = 0;
+    lcd_fill_rect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, LCD_SET_VALUE);
+    // a stand-in for the answer sitting on the X line
+    lcd_fill_rect(100, Y_POSITION_OF_REGISTER_X_LINE, 40, 12, LCD_EMPTY_VALUE);
+    uint32_t xBefore = ppvSumRows(Y_POSITION_OF_REGISTER_X_LINE,
+                                  Y_POSITION_OF_REGISTER_X_LINE + 20);
+    fnPrettyVisual((uint16_t)id);
+    // BOTH halves must carry ink: a double integral is taller than one
+    // stack line, so this is what tells "drawn across the Z/T window"
+    // apart from "a one-line form that happens to sit inside it"
+    uint32_t inT = ppvSumRows(Y_POSITION_OF_REGISTER_T_LINE - 4,
+                              Y_POSITION_OF_REGISTER_T_LINE + 31);
+    uint32_t inZ = ppvSumRows(Y_POSITION_OF_REGISTER_Z_LINE - 4,
+                              Y_POSITION_OF_REGISTER_Z_LINE + 31);
+    uint32_t inWindow = inT + inZ;
+    uint32_t below    = ppvSumRows(Y_POSITION_OF_REGISTER_Y_LINE - 4,
+                                   Y_POSITION_OF_REGISTER_Y_LINE + 31);
+    uint32_t xAfter   = ppvSumRows(Y_POSITION_OF_REGISTER_X_LINE,
+                                   Y_POSITION_OF_REGISTER_X_LINE + 20);
+    if(inWindow == 0) {
+      ppTestFail("V27 nothing drawn in the Z/T window");
+    }
+    if(inT == 0 || inZ == 0) {
+      ppTestFail("V27 the double integral did not span both stack rows");
+    }
+    if(below != 0) {
+      ppTestFail("V27 the drawing spilled past Z into the Y line");
+    }
+    if(xAfter != xBefore) {
+      ppTestFail("V27 the X line was disturbed");
+    }
+    if(!screenHoldsDrawnPixels) {
+      ppTestFail("V27 the Z/T surface did not declare its pixels");
+    }
+    if(temporaryInformation != TI_SHOWNOTHING) {
+      ppTestFail("V27 the Z/T surface cannot be dismissed by EXIT");
+    }
+    temporaryInformation = TI_NO_INFO;
+    screenHoldsDrawnPixels = false;
+    screenUpdatingMode &= ~SCRUPD_MANUAL_STACK;
+  }
+  // V28: the measurement this placement rests on. One stack line is
+  // 36 px and holds a single integral only when shrunk; the T and Z
+  // bands together are 72, which is what makes the double fit at all.
+  {
+    struct { const char *text; int16_t stdH; int16_t tinyH; } cases[] = {
+      { "INTEG(t;t;0;1)",                            38, 31 },
+      { "INTEG(INTEG(t;t;0;x);x;0;2)",               58, 51 },
+      { "INTEG(INTEG(INTEG(t;t;0;x);x;0;y);y;0;2)",  78, 71 },
+    };
+    for(int c = 0; c < 3; c++) {
+      for(int rung = 0; rung < 2; rung++) {
+        uint8_t root;
+        ppReset();
+        if(!ppqParse(cases[c].text, PP_FONT_STANDARD, PP_FONT_STANDARD, &root)) {
+          ppTestFail("V28 a transpiled integral did not parse");
+          continue;
+        }
+        if(rung == 1) {
+          ppSetFontDeep(root, PP_FONT_TINY);
+        }
+        if(!ppMeasure(root, 0)) {
+          ppTestFail("V28 measure failed");
+          continue;
+        }
+        const ppNode_t *n = ppNodeAt(root);
+        int16_t want = rung ? cases[c].tinyH : cases[c].stdH;
+        if(n->ascent + n->descent != want) {
+          ppTestFailInt("V28 height", want, n->ascent + n->descent);
+        }
+      }
+    }
+    // and the two claims those numbers are here to hold
+    if(!(38 > Y_POSITION_OF_REGISTER_Z_LINE - Y_POSITION_OF_REGISTER_T_LINE)) {
+      ppTestFail("V28 a single line would now hold a full-size integral");
+    }
+    if(!(58 <= (Y_POSITION_OF_REGISTER_Z_LINE + 31) - (Y_POSITION_OF_REGISTER_T_LINE - 4) + 1)) {
+      ppTestFail("V28 the Z/T pair no longer holds the double integral");
+    }
+  }
+
+  /* ---- a program KEYED IN, not hand-encoded ------------------------ */
+  // V39: LBL 'VKEY' / RCL 'a' / ENTER / x / 2 / - keyed through PEM,
+  // then transpiled. Nothing here was hand-encoded, so this is the pin
+  // that would catch the walker reading a literal PEM writes differently
+  // from the ones the other fixtures spell out.
+  {
+    uint8_t savedCalcMode4 = calcMode;
+    uint16_t savedProg = currentProgramNumber;
+    uint8_t *savedStep = currentStep;
+
+    ppvPemBegin();
+    ppvPemNamed(ITM_LBL, "VKEY");
+    ppvPemNamed(ITM_RCL, "a");
+    runFunction(ITM_ENTER);
+    runFunction(ITM_MULT);
+    runFunction(ITM_2);       // opens NIM
+    runFunction(ITM_SUB);     // commits the literal, then its own step
+    runFunction(ITM_RTN);     // terminate it, as a user would
+
+    calcMode = CM_NORMAL;
+    aimBuffer[0] = 0;
+    nimNumberPart = NP_EMPTY;
+    clearSystemFlag(FLAG_ALPHA);
+    tam.mode = 0;
+    if(lastErrorCode != ERROR_NONE) {
+      ppTestFailInt("V39 keying the program errored", ERROR_NONE, lastErrorCode);
+      lastErrorCode = ERROR_NONE;
+    }
+    {
+      char want[64];
+      sprintf(want, "a%sa-2", STD_CROSS);
+      ppvTestExpect("V39 a PEM-keyed program", "VKEY", want);
+    }
+    currentProgramNumber = savedProg;
+    currentStep = savedStep;
+    calcMode = savedCalcMode4;
+  }
+
+  /* ---- through the real keys --------------------------------------- */
+  // V36: the whole chain, keypress to pixels. TM_LBLONLY has to hand
+  // fnPrettyVisual a FIRST_LABEL-based id, the alpha buffer has to
+  // resolve the typed name, and the drawing has to land where the
+  // direct call put it.
+  {
+    uint8_t savedCalcMode3 = calcMode;
+    bool_t  savedAlpha = getSystemFlag(FLAG_ALPHA);
+    calcMode = CM_NORMAL;
+    temporaryInformation = TI_NO_INFO;
+    lastErrorCode = ERROR_NONE;
+    currentSolverStatus = 0;
+    aimBuffer[0] = 0;
+    lcd_fill_rect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, LCD_SET_VALUE);
+
+    ppvTestKeyIn("VDBL");
+
+    uint32_t inT = ppvSumRows(Y_POSITION_OF_REGISTER_T_LINE - 4,
+                              Y_POSITION_OF_REGISTER_T_LINE + 31);
+    uint32_t inZ = ppvSumRows(Y_POSITION_OF_REGISTER_Z_LINE - 4,
+                              Y_POSITION_OF_REGISTER_Z_LINE + 31);
+    if(lastErrorCode != ERROR_NONE) {
+      ppTestFailInt("V36 typed VISUAL errored", ERROR_NONE, lastErrorCode);
+    }
+    if(inT == 0 || inZ == 0) {
+      ppTestFail("V36 a typed VISUAL did not draw across the Z/T window");
+    }
+    if(tam.mode != 0) {
+      ppTestFail("V36 still in TAM after ENTER");
+    }
+    lastErrorCode = ERROR_NONE;
+    temporaryInformation = TI_NO_INFO;
+    screenHoldsDrawnPixels = false;
+    screenUpdatingMode &= ~SCRUPD_MANUAL_STACK;
+    calcMode = savedCalcMode3;
+    if(savedAlpha) { setSystemFlag(FLAG_ALPHA); } else { clearSystemFlag(FLAG_ALPHA); }
+    aimBuffer[0] = 0;
+  }
+  // V37: a name that is not a label never reaches the walker at all —
+  // TAM refuses it, and nothing is drawn
+  {
+    uint8_t savedCalcMode3 = calcMode;
+    bool_t  savedAlpha = getSystemFlag(FLAG_ALPHA);
+    calcMode = CM_NORMAL;
+    temporaryInformation = TI_NO_INFO;
+    lastErrorCode = ERROR_NONE;
+    aimBuffer[0] = 0;
+    lcd_fill_rect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, LCD_SET_VALUE);
+    screenHoldsDrawnPixels = false;
+
+    ppvTestKeyIn("VZZQ");
+
+    if(lastErrorCode != ERROR_LABEL_NOT_FOUND) {
+      ppTestFailInt("V37 unknown label error", ERROR_LABEL_NOT_FOUND, lastErrorCode);
+    }
+    if(ppvSumRows(Y_POSITION_OF_REGISTER_T_LINE - 4,
+                  Y_POSITION_OF_REGISTER_Z_LINE + 31) != 0) {
+      ppTestFail("V37 an unknown label still drew something");
+    }
+    lastErrorCode = ERROR_NONE;
+    temporaryInformation = TI_NO_INFO;
+    screenHoldsDrawnPixels = false;
+    screenUpdatingMode &= ~SCRUPD_MANUAL_STACK;
+    calcMode = savedCalcMode3;
+    if(savedAlpha) { setSystemFlag(FLAG_ALPHA); } else { clearSystemFlag(FLAG_ALPHA); }
+    aimBuffer[0] = 0;
+  }
+
+  currentSolverStatus    = hadStatus;
+  currentSolverVariable  = hadVar;
+  currentSolverProgram   = hadProgram;
+  calcMode               = hadMode;
+  temporaryInformation   = TI_NO_INFO;
+  screenHoldsDrawnPixels = false;
+  aimBuffer[0] = 0;
+  nimNumberPart = NP_EMPTY;
 
   ppTestWriteLonI(REGISTER_X, ppTestFailures);
 }

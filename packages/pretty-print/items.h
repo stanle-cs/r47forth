@@ -230,6 +230,7 @@
 #define ITM_0214                     214
 #define ITM_PTLIN                    215  // pretty-print package: T-line live formula toggle
 #define ITM_EQSHW                    216  // pretty-print package: full-screen equation view
+#define ITM_VISUAL                   984  // pretty-print package: RPN program -> drawn mathematics
 #define MNU_PP                       217  // pretty-print package: the natural-display softmenu (claims registry §7)
 #define ITM_0217                     217
 #define ITM_0218                     218

@@ -111,6 +111,11 @@ bool_t ppqShowRender(const char *src);
 uint8_t ppqFrameIntegral(uint8_t eq);                    ///< PP13: ∫ with real ULIM/LLIM limits + d<var>; bare PP_INT without them
 uint8_t ppqFrameDerivative(uint8_t eq, bool_t second);   ///< PP13: d/dx (d²/dx²) framing
 
+// prettyVisual.c — RPN program -> equation-language text (the test seam:
+// pins assert the STRING, independently of what the renderer makes of it)
+bool_t ppvTranspile(uint16_t labelIdx, char *out, uint16_t cap,
+                    uint8_t *reasonOut, uint16_t *stepOut);
+
 // prettyFormula.c — display-time name decodes (best-effort, fall back)
 void ppfVariableName(uint16_t varId, char *out);         ///< out cap >= 17; falls back to "x"
 

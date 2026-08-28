@@ -712,6 +712,7 @@ const funcTest_t funcTestNoParam[] = {
   {"prettyTestCapture",      prettyTestCapture,   1},
   {"prettyTestFormula",      prettyTestFormula,   1},
   {"prettyTestEquation",     prettyTestEquation,  1},
+  {"prettyTestVisual",       prettyTestVisual,    1},
   {"fnGetREALDF",            fnGetREALDF           },
   {"fnGetFractionDigits",    fnGetFractionDigits   },
   {"fnGetLastErr",           fnGetLastErr          },

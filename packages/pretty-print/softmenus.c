@@ -724,9 +724,12 @@ TO_QSPI const int16_t menu_alphaMisc[]    ={ ITM_CR,                        ITM_
 
 
 /* pretty-print package: the natural-display softmenu (claims registry
- * §7). One row: the three view commands, the equation view, then the
- * two persisted toggles. */
-TO_QSPI const int16_t menu_PP[]          = { ITM_PSHOW,                     ITM_PHIST,                  ITM_PCLR,                 ITM_EQSHW,             ITM_PPON,                    ITM_PTLIN                     };
+ * §7). Unshifted: the three view commands, the equation view, then the
+ * two persisted toggles. VISUAL joins on the f-shifted row (slots 6-11)
+ * rather than displacing an announced key; the padding keeps the array a
+ * multiple of six, as every upstream menu is. */
+TO_QSPI const int16_t menu_PP[]          = { ITM_PSHOW,                     ITM_PHIST,                  ITM_PCLR,                 ITM_EQSHW,             ITM_PPON,                    ITM_PTLIN,
+                                             ITM_VISUAL,                    ITM_NULL,                   ITM_NULL,                 ITM_NULL,              ITM_NULL,                    ITM_NULL                      };
 
 TO_QSPI const int16_t menu_EQN[]         = { ITM_EQ_NEW,                    ITM_EQ_EDI,                  -MNU_2NDDERIV,                -MNU_1STDERIV,                -MNU_Sf,                      -MNU_Solver,
                                              ITM_EQ_DEL,                    ITM_EQSHW,                    ITM_NULL,                     ITM_NULL,                     ITM_NULL,                    -MNU_Grapher               };

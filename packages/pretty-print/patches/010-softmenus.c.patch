@@ -1,5 +1,5 @@
 diff --git a/src/c47/softmenus.c b/src/c47/softmenus.c
-index 6d036d9a0c49cf030d1e1b82d0deb5b32cc02183..16a0f81593e34621eb1e9472b60be540109c9d03 100644
+index 6d036d9a0c49cf030d1e1b82d0deb5b32cc02183..b7ae9dc245a0fde9db2bb9ccede7fb9b6d09b717 100644
 --- a/src/c47/softmenus.c
 +++ b/src/c47/softmenus.c
 @@ -60,7 +60,7 @@ TO_QSPI const int16_t menu_DISP[]        = { ITM_FIX,                       ITM_
@@ -11,14 +11,17 @@ index 6d036d9a0c49cf030d1e1b82d0deb5b32cc02183..16a0f81593e34621eb1e9472b60be540
                                               ITM_SCIOVR,                    ITM_ENGOVR,                 ITM_SIGZEROS,             ITM_NULL,              ITM_RNG,                     ITM_HIDE,
  
                                               ITM_SETCHN,                    ITM_SETEUR,                 ITM_SETIND,               ITM_SETJPN,            ITM_SETUK,                   ITM_SETUSA,
-@@ -723,8 +723,13 @@ TO_QSPI const int16_t menu_alphaMisc[]    ={ ITM_CR,                        ITM_
+@@ -723,8 +723,16 @@ TO_QSPI const int16_t menu_alphaMisc[]    ={ ITM_CR,                        ITM_
                                               ITM_LF_PIC,                    ITM_SMALL_SQUARE,             ITM_NULL,                     ITM_NULL,                     ITM_NULL,                     ITM_NULL                  };
  
  
 +/* pretty-print package: the natural-display softmenu (claims registry
-+ * §7). One row: the three view commands, the equation view, then the
-+ * two persisted toggles. */
-+TO_QSPI const int16_t menu_PP[]          = { ITM_PSHOW,                     ITM_PHIST,                  ITM_PCLR,                 ITM_EQSHW,             ITM_PPON,                    ITM_PTLIN                     };
++ * §7). Unshifted: the three view commands, the equation view, then the
++ * two persisted toggles. VISUAL joins on the f-shifted row (slots 6-11)
++ * rather than displacing an announced key; the padding keeps the array a
++ * multiple of six, as every upstream menu is. */
++TO_QSPI const int16_t menu_PP[]          = { ITM_PSHOW,                     ITM_PHIST,                  ITM_PCLR,                 ITM_EQSHW,             ITM_PPON,                    ITM_PTLIN,
++                                             ITM_VISUAL,                    ITM_NULL,                   ITM_NULL,                 ITM_NULL,              ITM_NULL,                    ITM_NULL                      };
 +
  TO_QSPI const int16_t menu_EQN[]         = { ITM_EQ_NEW,                    ITM_EQ_EDI,                  -MNU_2NDDERIV,                -MNU_1STDERIV,                -MNU_Sf,                      -MNU_Solver,
 -                                             ITM_EQ_DEL,                    ITM_NULL,                     ITM_NULL,                     ITM_NULL,                     ITM_NULL,                    -MNU_Grapher               };
@@ -26,7 +29,7 @@ index 6d036d9a0c49cf030d1e1b82d0deb5b32cc02183..16a0f81593e34621eb1e9472b60be540
  
  TO_QSPI const int16_t menu_ADV[]         = { ITM_SIGMAn,                    ITM_PIn,                       ITM_PLTf,                   -MNU_Sfdx,                     ITM_SOLVE,                    ITM_F1DRV,
                                               ITM_iSIGMAn,                   ITM_iPIn,                      ITM_PGMPLT,                  ITM_PGMINT,                   ITM_PGMSLV,                   ITM_PGMDRV,
-@@ -1222,6 +1227,7 @@ TO_QSPI const softmenu_t softmenu[] = {
+@@ -1222,6 +1230,7 @@ TO_QSPI const softmenu_t softmenu[] = {
  /* 184 */  {.menuItem = -MNU_CONV_P_LOAD,   .numItems = sizeof(menu_CONV_PLoad    )/sizeof(int16_t), .softkeyItem = menu_CONV_PLoad     },       // NOTE !! do not add menus here, add them at the end. The menu numbers are fixed for the Wiki references. 2024-02-21 jm
  /* 185 */  {.menuItem = -MNU_TAMLOCALLABEL, .numItems = sizeof(menu_TamLocalLabel )/sizeof(int16_t), .softkeyItem = menu_TamLocalLabel  },       // NOTE !! do not add menus here, add them at the end. The menu numbers are fixed for the Wiki references. 2024-02-21 jm
  
@@ -34,7 +37,7 @@ index 6d036d9a0c49cf030d1e1b82d0deb5b32cc02183..16a0f81593e34621eb1e9472b60be540
  /* 186 */  {.menuItem =  0,                 .numItems = 0,                                           .softkeyItem = NULL                }
  
  
-@@ -3473,6 +3479,16 @@ void showSoftmenuCurrentPart(void) {
+@@ -3473,6 +3482,16 @@ void showSoftmenuCurrentPart(void) {
              }
            }                                                                      //JM^^
  

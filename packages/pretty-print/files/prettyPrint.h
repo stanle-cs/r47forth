@@ -55,6 +55,13 @@ bool_t prettyTryEquation(const char *src, int16_t xLeft);
 // interactive integrate solver the integrand is framed by a big ∫.
 void fnPrettyEqShow(uint16_t unusedButMandatoryParameter);
 
+// VISUAL (ITM_VISUAL, row 984): draws a stored RPN program as the
+// mathematics it computes, without running it. Takes a global program
+// label; transpiles the chain to equation-language text and shows it
+// through the EQSHW renderer. Declines (raises an error, paints nothing)
+// on anything a static walk cannot express.
+void fnPrettyVisual(uint16_t label);
+
 // PTLIN (ITM_PTLIN, row 215): opt-in live formula on the T register
 // line — DEFAULT OFF; falls through to T's value when no formula fits.
 void fnPrettyTlineToggle(uint16_t unusedButMandatoryParameter);
@@ -81,6 +88,12 @@ void prettyReset           (void);
 // own no. `name` is the uppercase spelling, ASCII by construction.
 // Returns false unless the very next character is '(' , which is what
 // keeps a variable merely ENDING in a construct name from matching.
+// The function-name twin of ppEqConstructIs, and shared for the same
+// reason: the renderer's f(x) arm, the walker's emitter and the
+// evaluator must agree on what a function name IS. Defined in
+// solver/equation.c beside the alias table it mirrors.
+int16_t ppEqFunctionItem(const char *name);
+
 static inline bool_t ppEqConstructIs(const char *s, const char *name, uint8_t len) {
   if(s[len] != '(') {
     return false;
@@ -106,5 +119,6 @@ void prettyTestShow    (uint16_t unusedButMandatoryParameter);
 void prettyTestCapture (uint16_t unusedButMandatoryParameter);
 void prettyTestFormula (uint16_t unusedButMandatoryParameter);
 void prettyTestEquation(uint16_t unusedButMandatoryParameter);
+void prettyTestVisual  (uint16_t unusedButMandatoryParameter);
 
 #endif // !PRETTYPRINT_H

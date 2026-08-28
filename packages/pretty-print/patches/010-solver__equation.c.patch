@@ -1,8 +1,45 @@
 diff --git a/src/c47/solver/equation.c b/src/c47/solver/equation.c
-index ca3da3341ccc17998627221684ba14c7f7559138..30e921fb178837d499f1e2bb9f07da9602e33c8b 100644
+index ca3da3341ccc17998627221684ba14c7f7559138..94214b4970c101b89adae048f09fdf127e092f31 100644
 --- a/src/c47/solver/equation.c
 +++ b/src/c47/solver/equation.c
-@@ -657,7 +657,11 @@ void showEquation(uint16_t equationId, uint16_t startAt, uint16_t cursorAt, bool
+@@ -213,6 +213,36 @@ void fnEqCalc(uint16_t unusedButMandatoryParameter) {
+ 
+ 
+ 
++
++/* PP17: the ONE function-name test the renderer, the evaluator and the
++ * program walker all call — the same role ppEqConstructIs plays for the
++ * constructs. It mirrors _parseWord's PARSER_HINT_FUNCTION resolution
++ * exactly: the alias table first, then catalog and softmenu names gated
++ * on EIM_ENABLED and a parameterless item. Mirroring rather than
++ * inventing is the point — a name any one of the three accepts has to be
++ * a name all three accept, or a program draws and will not compute, or
++ * computes and will not draw. Returns the item id, or -1. */
++int16_t ppEqFunctionItem(const char *name) {
++  for(uint32_t i = 0; functionAlias[i].name[0] != 0; ++i) {
++    if(compareString(functionAlias[i].name, name, CMP_NAME) == 0) {
++      return (int16_t)functionAlias[i].opCode;
++    }
++  }
++  for(uint32_t i = 1; i < LAST_ITEM; ++i) {
++    if(((indexOfItems[i].status & EIM_STATUS) == EIM_ENABLED) && (indexOfItems[i].param <= NOPARAM)
++        && (compareString(indexOfItems[i].itemCatalogName, name, CMP_NAME) == 0)) {
++      return (int16_t)i;
++    }
++  }
++  for(uint32_t i = 1; i < LAST_ITEM; ++i) {
++    if(((indexOfItems[i].status & EIM_STATUS) == EIM_ENABLED) && (indexOfItems[i].param <= NOPARAM)
++        && (compareString(indexOfItems[i].itemSoftmenuName, name, CMP_NAME) == 0)) {
++      return (int16_t)i;
++    }
++  }
++  return -1;
++}
++
+ void setEquation(uint16_t equationId, const char *equationString) {
+   uint32_t newSizeInBlocks = TO_BLOCKS(stringByteLength(equationString) + 1);
+   uint8_t *newPtr;
+@@ -657,7 +687,11 @@ void showEquation(uint16_t equationId, uint16_t startAt, uint16_t cursorAt, bool
      }
  
      if((!dryRun) && (*cursorShown || cursorAt == EQUATION_NO_CURSOR)) {
@@ -15,7 +52,7 @@ index ca3da3341ccc17998627221684ba14c7f7559138..30e921fb178837d499f1e2bb9f07da96
      }
    }
  }
-@@ -701,6 +705,10 @@ static void _menuItem(int16_t item, char *bufPtr) {
+@@ -701,6 +735,10 @@ static void _menuItem(int16_t item, char *bufPtr) {
  #define PARSER_OPERATOR_ITM_XFACT              5006
  #define PARSER_OPERATOR_ITM_END_OF_FORMULA     5007
  
@@ -26,7 +63,7 @@ index ca3da3341ccc17998627221684ba14c7f7559138..30e921fb178837d499f1e2bb9f07da96
  static uint32_t _operatorPriority(uint16_t func) {
    // priority of operator: smaller number represents higher priority
    // associative property: even number represents left-associativity, odd number represents right-associativity.
-@@ -1326,6 +1334,24 @@ void parseEquation(uint16_t equationId, uint16_t parseMode, char *buffer, char *
+@@ -1326,6 +1364,24 @@ void parseEquation(uint16_t equationId, uint16_t parseMode, char *buffer, char *
        ++strPtr;
      }
  
@@ -51,7 +88,7 @@ index ca3da3341ccc17998627221684ba14c7f7559138..30e921fb178837d499f1e2bb9f07da96
      #pragma GCC diagnostic push
      #pragma GCC diagnostic ignored "-Wimplicit-fallthrough"
      switch(*strPtr) {
-@@ -1654,3 +1680,565 @@ void parseEquation(uint16_t equationId, uint16_t parseMode, char *buffer, char *
+@@ -1654,3 +1710,565 @@ void parseEquation(uint16_t equationId, uint16_t parseMode, char *buffer, char *
      _processOperator(PARSER_OPERATOR_ITM_END_OF_FORMULA, mvarBuffer);
    }
  }

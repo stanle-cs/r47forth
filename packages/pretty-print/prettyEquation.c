@@ -384,6 +384,59 @@ static uint8_t ppqBigopConstruct(ppqCtx_t *c, uint8_t font, uint8_t tinyF) {
   }
 }
 
+/* PP17: a function application — sin(x), ln(x). There is no 2D gain in
+ * the application ITSELF (a drawn sin(x) is the same shape as a linear
+ * one), which is why this does NOT set fracSeen. The gain is that one
+ * unrecognised name no longer costs the WHOLE formula its 2D form: the
+ * strict parser used to fail on the trailing '(' and drop sin(x)/2 to a
+ * linear line, fraction and all.
+ *
+ * A probe: it consumes nothing unless the name resolves through
+ * ppEqFunctionItem, which is the evaluator's own resolution. */
+static uint8_t ppqFunctionCall(ppqCtx_t *c, uint8_t font, uint8_t tinyF) {
+  int16_t save = c->pos, start = c->pos, next;
+  while(c->pos < c->len) {
+    uint16_t ch = ppqPeek(c, &next);
+    if((ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z')) {
+      c->pos = next;
+    }
+    else {
+      break;
+    }
+  }
+  int16_t len = (int16_t)(c->pos - start);
+  char nm[24];
+  if(len == 0 || len >= (int16_t)sizeof(nm) || c->pos >= c->len || c->s[c->pos] != '(') {
+    c->pos = save;
+    return PP_NONE;
+  }
+  xcopy(nm, (void *)(c->s + start), (uint32_t)len);
+  nm[len] = 0;
+  if(ppEqFunctionItem(nm) < 0) {
+    c->pos = save;
+    return PP_NONE;
+  }
+  c->pos++;   // the '('
+  uint8_t arg = ppqExpr(c, font, tinyF);
+  ppqSkipSpace(c);
+  if(c->failed || arg == PP_NONE || ppqPeek(c, &next) != ')') {
+    c->failed = true;
+    return PP_NONE;
+  }
+  c->pos = next;
+  uint8_t hb  = ppNewBox(PP_HBOX, font);
+  uint8_t run = ppNewRun(nm, (uint16_t)len, font);
+  uint8_t par = ppNewBox(PP_PAREN, font);
+  if(hb == PP_NONE || run == PP_NONE || par == PP_NONE) {
+    c->failed = true;
+    return PP_NONE;
+  }
+  ppAppendChild(par, arg);
+  ppAppendChild(hb, run);
+  ppAppendChild(hb, par);
+  return hb;
+}
+
 static uint8_t ppqPrimary(ppqCtx_t *c, uint8_t font, uint8_t tinyF) {
   int16_t next;
   ppqSkipSpace(c);
@@ -399,6 +452,13 @@ static uint8_t ppqPrimary(ppqCtx_t *c, uint8_t font, uint8_t tinyF) {
     }
     if(big != PP_NONE) {
       return big;
+    }
+    uint8_t fn = ppqFunctionCall(c, font, tinyF);
+    if(c->failed) {
+      return PP_NONE;
+    }
+    if(fn != PP_NONE) {
+      return fn;
     }
   }
 

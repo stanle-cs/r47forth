@@ -1,8 +1,8 @@
 diff --git a/src/testSuite/testSuite.c b/src/testSuite/testSuite.c
-index bc8a9792a584984b3e18dee2a6626ce81a330205..ca6f98eeae05eb1a7ca9c303cdccfc76cd1f28a6 100644
+index bc8a9792a584984b3e18dee2a6626ce81a330205..0b2dad2cd34aef67543d4a61d237578f4007354b 100644
 --- a/src/testSuite/testSuite.c
 +++ b/src/testSuite/testSuite.c
-@@ -702,6 +702,16 @@ const funcTest_t funcTestNoParam[] = {
+@@ -702,6 +702,17 @@ const funcTest_t funcTestNoParam[] = {
    {"fnGetRange",             fnGetRange            },
    {"fnGetHide",              fnGetHide             },
    {"fnGetNDEC",              fnGetNDEC             },
@@ -16,6 +16,7 @@ index bc8a9792a584984b3e18dee2a6626ce81a330205..ca6f98eeae05eb1a7ca9c303cdccfc76
 +  {"prettyTestCapture",      prettyTestCapture,   1},
 +  {"prettyTestFormula",      prettyTestFormula,   1},
 +  {"prettyTestEquation",     prettyTestEquation,  1},
++  {"prettyTestVisual",       prettyTestVisual,    1},
    {"fnGetREALDF",            fnGetREALDF           },
    {"fnGetFractionDigits",    fnGetFractionDigits   },
    {"fnGetLastErr",           fnGetLastErr          },

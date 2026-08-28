@@ -1,8 +1,8 @@
 diff --git a/src/c47/items.h b/src/c47/items.h
-index 98924313217f3b57f1b663367c8e45c0dc0f1010..eed90d9038b2aec2bcbb9b10a1aa5b4cc2532253 100644
+index 98924313217f3b57f1b663367c8e45c0dc0f1010..c5ba0ad7d93da1cd49b1cd0687c4d39e2de162d2 100644
 --- a/src/c47/items.h
 +++ b/src/c47/items.h
-@@ -228,8 +228,9 @@
+@@ -228,8 +228,10 @@
  #define CST_84                       212
  #define ITM_0213                     213
  #define ITM_0214                     214
@@ -10,11 +10,12 @@ index 98924313217f3b57f1b663367c8e45c0dc0f1010..eed90d9038b2aec2bcbb9b10a1aa5b4c
 -#define ITM_0216                     216
 +#define ITM_PTLIN                    215  // pretty-print package: T-line live formula toggle
 +#define ITM_EQSHW                    216  // pretty-print package: full-screen equation view
++#define ITM_VISUAL                   984  // pretty-print package: RPN program -> drawn mathematics
 +#define MNU_PP                       217  // pretty-print package: the natural-display softmenu (claims registry §7)
  #define ITM_0217                     217
  #define ITM_0218                     218
  #define ITM_0219                     219
-@@ -481,10 +482,10 @@
+@@ -481,10 +483,10 @@
  #define ITM_SIGMA1ony2               456
  #define ITM_SIGMAx3                  457
  #define ITM_SIGMAx4                  458

@@ -4,14 +4,15 @@
     "browsers/prettyBrowser.c": "2713e702221371f8ae88a5573ca4da6b6cb373cb4f69e0276ba37bbcfc9a5b54",
     "browsers/prettyBrowser.h": "258582eb5e57612171171e6a4e2113a011acfbf6e431a292645e1dae5f186802",
     "prettyCapture.c": "31aa44e982b9db708be471fca947922276ef3d1656ddd552c1d34547a200f9e0",
-    "prettyEquation.c": "9195dd26a11dee7b18981a5b9cedfa442b9b50b4e98f208ab7677f0d45d71fb5",
+    "prettyEquation.c": "183d2ba6904298b90f9bf1c326a2b4ddb7b97d5491238868bac8f87530b74682",
     "prettyFormula.c": "f5c7e4babf01a553e5caeecb56bd97456414471a647b15011e91407df4f6f7aa",
-    "prettyInternal.h": "ef846339479d7dead7c89a1b46661a11d4c10b39f555dca0c2e99e77c8dbaab8",
+    "prettyInternal.h": "604aaa73449426946d4b412e994a182771daf149085048c828247d79cca2fa48",
     "prettyLayout.c": "71bdf05f29e9adbc1eb0f24457601022d49c13a767769e2d106ddcc1976528c6",
-    "prettyPrint.h": "ffadbf7241de0c79d9121b76a2074b7a3319ab2f5a00a6966ebee6d00a88e079",
-    "prettyTest.c": "737568a63cfc93d56a0d3474ca51ae18d36fba9d87b34a034ba96b98039a0809",
+    "prettyPrint.h": "53077dfc121ba99e71a864b19e3cf37ea1ddaca1c0f953e497bffd3482f1a2cd",
+    "prettyTest.c": "aacd3960dc2645956a353d2a06b87e620a53a46a612f690130a9c14798303972",
     "prettyValue.c": "aaf9674a2e3a41e31679a3d3a694006523f79150123bc231b9c828eaa107e481",
-    "testSuite/tests/pretty_print.txt": "778b71cee0339ec87dc971217dc9efcaf0e83609660ebc9b7b9de295bf3c9b4e"
+    "prettyVisual.c": "c3c4569f5f515353381a87872621e75321daf901a7ea11254bc59de5c7f926c4",
+    "testSuite/tests/pretty_print.txt": "68f9b9ee8096f9b48f95b1a24465aff4b69fdbac4a9dc1206dde8e5d6a543be4"
   },
   "patches": {
     "010-bufferize.c.patch": "03977a78177c15a757ccd5882b671a6d82a79b0aaeca3b67bab78d607d2842f4",
@@ -19,13 +20,13 @@
     "010-calcMode.c.patch": "7312ae4e482d9a24d707cc2a8528e08b4c4d3e16277e3282de94abc9b352d6da",
     "010-config.c.patch": "5c818043e706c38919dfeea92af0eaa78fb8862d75690b5b8fa6fc8fc93309dc",
     "010-defines.h.patch": "6a6c0f84d7456bbc509b93f134bde8434c878b66b663027a204fde74c0494ad6",
-    "010-items.c.patch": "1e2bf628bc073b3bbc6fb3301a1f7e36fd31942df773a18f934756b53f4454f6",
-    "010-items.h.patch": "968f535efa868937e91dde4ab7bd8c912bd78d17d19f4df0abdac4e0a6edbdf4",
+    "010-items.c.patch": "42c77093417f9825a67fd345caad26959a8e0400e8f960a206b7e415a6dac72d",
+    "010-items.h.patch": "508bb5698f166ddc2379f5ad38ec1e14c3c35fee27391bf0ad26a41a0d0ce4b2",
     "010-keyboard.c.patch": "221905425d559b60738fa307ac5b0c3c9fb564cf72ef89cb436a9dcaaa3b93f6",
     "010-screen.c.patch": "1fc56a5066fdaddde713de1c3b8283ed6e8e27656cad4058fa1d7de8a5ac57d9",
-    "010-softmenus.c.patch": "528b588450396251b05d4858bfd2c52c415119b4c622c6ccb686202f678e761a",
-    "010-solver__equation.c.patch": "14c363b6af670753c4b2e52f4bcb7aed75d23eb52e9090fee44090cddb9fbda4",
-    "010-testSuite__testSuite.c.patch": "5be374ae3f7fbe10998dcb0cf81abc1526f62b94551da35335e0e53e57b37049",
+    "010-softmenus.c.patch": "967e5851b0b3661db5cdc4c1a686fba34ae58f56cc1a25b49a3f9b71063daf64",
+    "010-solver__equation.c.patch": "71bfc801c58d9edbe329c63fea70faf5b5813fc4e72adb2463441161f42ae888",
+    "010-testSuite__testSuite.c.patch": "873f73c7c640f9b4fbfcafaf2d32f423a49ee953a17e1d9b9db01723ba03e59a",
     "010-testSuite__tests__testSuiteList.txt.patch": "7602270613b0807bd2f56e6a3bba266176226695f6f2ba3de0fbe99cf53bf666"
   }
 }

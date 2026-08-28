@@ -213,6 +213,36 @@ void fnEqCalc(uint16_t unusedButMandatoryParameter) {
 
 
 
+
+/* PP17: the ONE function-name test the renderer, the evaluator and the
+ * program walker all call — the same role ppEqConstructIs plays for the
+ * constructs. It mirrors _parseWord's PARSER_HINT_FUNCTION resolution
+ * exactly: the alias table first, then catalog and softmenu names gated
+ * on EIM_ENABLED and a parameterless item. Mirroring rather than
+ * inventing is the point — a name any one of the three accepts has to be
+ * a name all three accept, or a program draws and will not compute, or
+ * computes and will not draw. Returns the item id, or -1. */
+int16_t ppEqFunctionItem(const char *name) {
+  for(uint32_t i = 0; functionAlias[i].name[0] != 0; ++i) {
+    if(compareString(functionAlias[i].name, name, CMP_NAME) == 0) {
+      return (int16_t)functionAlias[i].opCode;
+    }
+  }
+  for(uint32_t i = 1; i < LAST_ITEM; ++i) {
+    if(((indexOfItems[i].status & EIM_STATUS) == EIM_ENABLED) && (indexOfItems[i].param <= NOPARAM)
+        && (compareString(indexOfItems[i].itemCatalogName, name, CMP_NAME) == 0)) {
+      return (int16_t)i;
+    }
+  }
+  for(uint32_t i = 1; i < LAST_ITEM; ++i) {
+    if(((indexOfItems[i].status & EIM_STATUS) == EIM_ENABLED) && (indexOfItems[i].param <= NOPARAM)
+        && (compareString(indexOfItems[i].itemSoftmenuName, name, CMP_NAME) == 0)) {
+      return (int16_t)i;
+    }
+  }
+  return -1;
+}
+
 void setEquation(uint16_t equationId, const char *equationString) {
   uint32_t newSizeInBlocks = TO_BLOCKS(stringByteLength(equationString) + 1);
   uint8_t *newPtr;
