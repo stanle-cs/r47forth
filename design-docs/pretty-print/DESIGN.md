@@ -735,12 +735,14 @@ taking the text back end out of the device build, and DERIV cost ~320);
 device RAM **12,908/16,384, unchanged** — which is the
 design claim as an executable fact, not an intention. No BSS: the
 walker's whole state is one ~1.5 KiB stack frame
-in `fnPrettyVisual` (1 KiB fragment pool + a 256 B compose buffer),
-plus ~50 B per recursion level, capped at depth 5. Fragments are
-descriptors into one linear pool, not a buffer per stack slot — eight
-256-byte slots per frame would cost kilobytes at depth. Reclamation is by
-construct-boundary rollback: every descriptor alive when a body walk
-starts points below the mark taken at that moment.
+in `fnPrettyVisual` (a 512 B leaf-text pool + a 48-node
+expression arena), plus ~50 B per recursion level, capped at depth 5.
+Both are bump-allocated and dropped whole per walk.
+
+**PP18 note:** the fragment pool, the 256 B compose buffer and the
+construct-boundary rollback this paragraph used to describe are gone
+with the text back end. A tree holds its body as a child, so there is
+nothing to roll back and no scratch buffer whose reuse has to be timed.
 
 
 ## §7 Composition claims (BINDING for other packages)

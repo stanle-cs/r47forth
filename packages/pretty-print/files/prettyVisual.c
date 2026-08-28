@@ -73,7 +73,13 @@ typedef struct {
   uint16_t textOff;     ///< LIT/VAR: into ctx->pool
   uint8_t  textLen;
   uint8_t  flags;       ///< PPV_F_*
-  uint8_t  varOff;      ///< CONSTRUCT: the variable name, also in ctx->pool
+  uint16_t varOff;      ///< CONSTRUCT: the variable name, also in ctx->pool.
+                        ///< uint16_t, not uint8_t: the pool is 512 bytes and
+                        ///< a name interned past offset 255 was read back
+                        ///< from 256 lower — another leaf's text, in bounds,
+                        ///< so the integral drew a d-variable the program
+                        ///< never integrates over, with no decline and no
+                        ///< D-number (AUDIT PP18-7, observed in the wild)
   uint8_t  varLen;
 } ppvAst_t;
 
@@ -397,8 +403,9 @@ static void ppvWalk(ppvCtx_t *ctx, uint16_t labelIdx, ppvStack_t *stk);
  * walk the body. That single seeding covers both channels upstream uses:
  * the integrator writes each node into the named variable AND fills the
  * stack with it, a programmed sum delivers its counter through the
- * filled stack alone. The body's one result is handed back in
- * ctx->scratch, which survives the caller's pool rollback. */
+ * filled stack alone. The body's one result is handed back as an AST
+ * index; the scratch buffer and the construct-boundary pool rollback
+ * this comment used to describe went with the text back end. */
 static bool_t ppvBody(ppvCtx_t *ctx, uint16_t bodyIdx, const char *var,
                       bool_t synthetic, uint8_t *out) {
   if(ctx->bindingCount >= PPV_MAX_DEPTH) {
@@ -455,7 +462,7 @@ static bool_t ppvConstruct(ppvCtx_t *ctx, ppvStack_t *stk, uint16_t item,
   ctx->ast[n].child[1] = from;
   ctx->ast[n].child[2] = to;
   ctx->ast[n].child[3] = step;
-  ctx->ast[n].varOff   = (uint8_t)voff;
+  ctx->ast[n].varOff   = voff;
   ctx->ast[n].varLen   = (uint8_t)vlen;
   ctx->ast[n].flags    = second ? PPV_F_SECOND : 0;
   return ppvPush(ctx, stk, n);
@@ -617,6 +624,31 @@ static bool_t ppvDerivative(ppvCtx_t *ctx, ppvStack_t *stk, const uint8_t *pa,
 // counter has no name in RPN — it arrives in a filled stack — so the
 // tree has to invent one, and any body that recalls a variable spelled
 // the same way declines rather than let the invented name shadow it.
+/* Is this name already a variable somewhere in the tree we have built?
+ *
+ * AUDIT PP18-9: the counter was checked only against ENCLOSING constructs,
+ * which is empty at top level — so a program whose loop count lives in a
+ * variable called `n` drew SUM(n x n; n; 1; n), with the free variable
+ * sitting in the upper-limit slot of the operator that binds it. Nothing
+ * on screen told the two `n`s apart. The rule DESIGN.md states is about
+ * shadowing in the drawn formula; the limits are inside the operator's
+ * visual scope, so they are part of it. */
+static bool_t ppvNameUsedInAst(const ppvCtx_t *ctx, const char *name) {
+  uint16_t len = (uint16_t)strlen(name);
+  for(uint8_t i = 0; i < ctx->astUsed; i++) {
+    const ppvAst_t *a = &ctx->ast[i];
+    if(a->kind == PPA_VAR && a->textLen == len
+        && memcmp(ctx->pool + a->textOff, name, len) == 0) {
+      return true;
+    }
+    if(a->kind == PPA_CONSTRUCT && a->varLen == len
+        && memcmp(ctx->pool + a->varOff, name, len) == 0) {
+      return true;
+    }
+  }
+  return false;
+}
+
 static bool_t ppvSumProd(ppvCtx_t *ctx, ppvStack_t *stk, const uint8_t *pa, bool_t isSum) {
   uint16_t bodyIdx;
   if(!ppvLabelIndex(ctx, pa, &bodyIdx)) {
@@ -633,7 +665,8 @@ static bool_t ppvSumProd(ppvCtx_t *ctx, ppvStack_t *stk, const uint8_t *pa, bool
   static const char *const cands[] = { "n", "m", "k", "j" };
   const char *v = NULL;
   for(uint8_t i = 0; i < 4 && v == NULL; i++) {
-    if(!ppvNameInList(ctx->binding, ctx->bindingCount, cands[i])) {
+    if(!ppvNameInList(ctx->binding, ctx->bindingCount, cands[i])
+        && !ppvNameUsedInAst(ctx, cands[i])) {
       v = cands[i];
     }
   }
@@ -811,6 +844,7 @@ static void ppvStep(ppvCtx_t *ctx, ppvStack_t *stk, uint16_t op, const uint8_t *
 
     case ITM_PGMINT: {
       uint16_t idx;
+      stk->liftDisabled = false;   // AUDIT PP18-5, see ITM_XEQ
       if(ppvLabelIndex(ctx, pa, &idx)) {
         // NOT restored when a construct returns: currentSolverProgram is
         // a persistent global upstream, so a callee's relatch is exactly
@@ -822,6 +856,15 @@ static void ppvStep(ppvCtx_t *ctx, ppvStack_t *stk, uint16_t op, const uint8_t *
 
     case ITM_XEQ: {
       uint16_t idx;
+      /* AUDIT PP18-5: these three arms return before the epilogue that
+       * clears the latch, so an ENTER before them stayed armed and the
+       * next lifting read OVERWROTE the dup instead of pushing. At top
+       * level that is a false D10 decline for a program that never
+       * underflows; inside a construct body, where the seeded frame
+       * supplies a phantom operand, it is a silent wrong drawing —
+       * a x (a+b) drew as x x (a+b). Upstream clears stack-lift in the
+       * dispatch epilogue for every SLS_ENABLED item, and these are. */
+      stk->liftDisabled = false;
       if(ppvLabelIndex(ctx, pa, &idx)) {
         ppvWalk(ctx, idx, stk);   // a subroutine shares its caller's stack
       }
@@ -830,6 +873,7 @@ static void ppvStep(ppvCtx_t *ctx, ppvStack_t *stk, uint16_t op, const uint8_t *
 
     case ITM_PGMDRV: {
       uint16_t idx;
+      stk->liftDisabled = false;   // AUDIT PP18-5, see ITM_XEQ
       if(ppvLabelIndex(ctx, pa, &idx)) {
         ctx->latchedDrv = idx;
       }
@@ -974,10 +1018,20 @@ static uint8_t ppvAstToNodes(ppvCtx_t *ctx, uint8_t n,
         ctx->layoutFull = true;   // AUDIT PP18-10: `step` was the one
         return PP_NONE;           // operand not checked
       }
-      // the parser scopes an additive body by sniffing its runs for a
+      // The parser scopes an additive body by sniffing its runs for a
       // +/- joiner, because a parse has no precedence to consult. We do,
       // so we ask the real question.
-      body = ppfWrapIf(body, pBody, PPF_PREC_MUL, ctxFont);
+      //
+      // A nested CONSTRUCT body is the exception, and it is why the
+      // ADD precedence below is about operand context only: an inner
+      // integral is terminated by the outer's own " d<var>", exactly as
+      // the notation intends, and INTEG(INTEG(...)) is written without
+      // brackets in every textbook. What needs a bracket is a construct
+      // with an operator beside it, where nothing terminates the body.
+      body = ppfWrapIf(body,
+                       (ctx->ast[a->child[0]].kind == PPA_CONSTRUCT)
+                         ? PPF_PREC_ATOM : pBody,
+                       PPF_PREC_MUL, ctxFont);
       if(body == PP_NONE) {
         return PP_NONE;
       }
@@ -993,6 +1047,19 @@ static uint8_t ppvAstToNodes(ppvCtx_t *ctx, uint8_t n,
       uint8_t kind = isInt ? PPQ_BIG_INTEG
                    : isDrv ? PPQ_BIG_DERIV
                    : ((a->item == ITM_SIGMAn) ? PPQ_BIG_SUM : PPQ_BIG_PROD);
+      /* AUDIT PP18-4: a big operator is NOT an atom, whatever the
+       * function-entry default says. Its body is drawn to the RIGHT of
+       * the stroke and extends as far as the body goes, so a factor or
+       * an exponent placed beside it binds INTO the body: `SUM n x 2`
+       * reads as SUM(n x 2), and (1+2+3)^2 drew exactly the picture
+       * 1^2+2^2+3^2 deserves. Reporting ADD makes ppfCombine bracket it
+       * under x, / and ^ — and leaves it bare as the left operand of a
+       * +, which is the one place convention already scopes it.
+       *
+       * The guard for stacked powers 40 lines up found this same class
+       * and enumerated the two OP1 members in front of it instead of the
+       * class; that is why the construct member shipped. */
+      *outPrec = PPF_PREC_ADD;
       return ppqBuildBigop(kind, a->item, body, varTiny, varCtx,
                            from, to, step,
                            (a->flags & PPV_F_SECOND) != 0, ctxFont);

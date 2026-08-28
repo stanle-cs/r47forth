@@ -277,6 +277,18 @@ after restore.
 | MUT-105 | the renderer's f(x) arm removed | V41 |
 | MUT-106 | the emitter's round-trip and drawability checks dropped | V42 |
 | MUT-107 | `x³` emitted as a name instead of a superscript | V45 |
+| MUT-115 | DERIV seeds the f' parameter again (PP18-1) | V60, V62, V63 |
+| MUT-116 | the first declared MVAR always wins over a match | V61 |
+| MUT-117 | a body declaring no MVAR is drawn anyway | V63 |
+| MUT-118 | the layout latch ignored | **survives alone** — see below |
+| MUT-119 | the operand check moved after the second recursion | **survives alone** — see below |
+| MUT-120 | the full screen cleared before the fit is known (PP18-2) | V67 |
+| MUT-121 | **both** PP18-3 guards removed — the shipped shape | V66 |
+| MUT-122 | a construct reports ATOM precedence again (PP18-4) | V68, V69 |
+| MUT-123 | a nested construct body bracketed | V46 |
+| MUT-124 | `varOff` back to `uint8_t` (PP18-7) | V70 |
+| MUT-125 | the counter checked only against enclosing constructs (PP18-9) | V71 |
+| MUT-126 | the lift latch survives XEQ again (PP18-5) | V72 |
 | MUT-108 | a stacked power's base left unbracketed | V51 |
 | MUT-109 | a construct body no longer scoped by precedence | V57 |
 | MUT-110 | the derivative reads PGMINT's latch when PGMDRV has none | V55 |
@@ -504,7 +516,13 @@ bar rows: our own code cannot break it, and that is the point.
 ## The V family — VISUAL, the RPN-program walker (PP17)
 
 `prettyTestVisual` (tests/pretty_print.txt) pins the **transpiled
-string**, not the picture. That is deliberate: the string is the walker's
+string** for most cases — but since PP18 that string is NOT the product.
+The product is a node tree; the text back end is a PC_BUILD-only test
+seam. The string is asserted because it is readable and derived from the
+same AST the drawing is, and the node-shape pins (V46-V51, V56, V57,
+V68, V69, V73, V74) exist because a string cannot catch a fault in the
+layout pass. AUDIT PP18-16: this section used to say the string was the
+product, which would have sent the next reader to the wrong oracle. That is deliberate: the string is the walker's
 whole product, and every rendering question about it was already settled
 by the equation battery, so a pin that checked pixels would be testing
 `ppqParse` a second time and the walker not at all. `ppvTranspile` exists
@@ -543,6 +561,20 @@ a hand-built array the walker might read differently from the calculator.
 | V58 | **the REAL appnote-22 file** (`docs/appnotes/sources/AN0022/func.p47`) loaded through the official loader and transpiled. Every other fixture is one I wrote and hand-encoded, so they are a statement about my encoding as much as about the walker; this is Jaymos's own file. Its own driver, `prettyTestReal`, registered before `graphs_cov` — see below |
 | V44 | an emitted name COMPUTES (`LN(1)+2` = 2) — the round-trip through the evaluator's own resolution, checked end to end |
 | V24-V26 | the four monadics with a grammar spelling. **V24 and V26 were both written after a mutation survived**: `√` bracketed its argument twice (its `pre` already emits a parenthesis), and `1/x`'s argument level is only distinguishable from a looser one by a SAME-level operand — `1/a×b` is not `1/(a×b)` |
+
+**MUT-118 and MUT-119 survive alone, and that is the design.** The
+exponential fix has two guards — an entry latch, and an operand check
+placed BEFORE the second recursion — and each heals the other's mutation:
+remove the latch and the early return still stops the doubling; move the
+early return and the latch still does. Only MUT-121, which removes both,
+reproduces the shipped shape and reds V66. Recorded rather than credited
+as two coverage holes, per the skill's rule to check for self-healing
+paths first. The redundancy is deliberate: this is the finding whose
+failure mode is a calculator that never comes back.
+
+**V66 asserts a visit COUNT, not a time.** A wall-clock pin passes on
+this desktop for a program that hangs an 80 MHz DM42n. The counter lives
+in the walker's own context and the test seam returns it.
 
 **V38 and the invisible half of a stack rule.** MUT-101 (ignore the ENTER
 lift latch) survived V33 (`5 ENTER 3 +` → `5+3`). It had to: with the

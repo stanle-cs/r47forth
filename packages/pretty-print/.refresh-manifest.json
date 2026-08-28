@@ -9,11 +9,11 @@
     "prettyInternal.h": "c8752bdca96adf0a29753307212a57f60b1b239b75f23c2c6bbaa474af5461a4",
     "prettyLayout.c": "71bdf05f29e9adbc1eb0f24457601022d49c13a767769e2d106ddcc1976528c6",
     "prettyPrint.h": "e33424a36cce86c2d7275346690c7e48a957509cfd8214d40ae520f32d8af235",
-    "prettyTest.c": "5cb24a82411776256712c54bc4928d2d223bafd3fa8b17ed3c894dd7c5fbca7b",
+    "prettyTest.c": "c5c06ee636c0a792392aca86cfb2d3ffe2ed3d57bf884ec32ae77f375ede0e45",
     "prettyValue.c": "aaf9674a2e3a41e31679a3d3a694006523f79150123bc231b9c828eaa107e481",
-    "prettyVisual.c": "c3d48d9e2ac9dcdd7818f03b953abdf320cb1c8f76b41d7dcff8e1b666daef47",
+    "prettyVisual.c": "646ca3a9f19b3376c9a2483db47f65af2de7a4b5450491b7b683a497d812ee13",
     "testSuite/tests/pretty_print.txt": "68f9b9ee8096f9b48f95b1a24465aff4b69fdbac4a9dc1206dde8e5d6a543be4",
-    "testSuite/tests/pretty_visual_real.txt": "3ae3d00ad6d3f96f47e62b71fee35448e8925aebdde9884751bc3f438bf2c92e"
+    "testSuite/tests/pretty_visual_real.txt": "2404156af3f6f9365cce66d9d00fd0b24109eb7d48a7dd800769927d09c115b7"
   },
   "patches": {
     "010-bufferize.c.patch": "03977a78177c15a757ccd5882b671a6d82a79b0aaeca3b67bab78d607d2842f4",

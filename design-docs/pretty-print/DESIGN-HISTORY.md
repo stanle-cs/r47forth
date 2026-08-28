@@ -2,6 +2,67 @@
 
 Non-normative amendment trail. DESIGN.md is authoritative.
 
+## 2026-08-28 — PP18 audit round 1: sixteen findings, and the one that lied
+
+A cross-model round over the five PP18 commits: eight blind finder
+dimensions, an independent refutation pass per finding, 33 agents.
+Sixteen CONFIRMED, one refuted. The refactor's central claim held —
+precedence is settled once, the drawing is byte-identical, 45 pins
+survived unedited — and the report says so. Everything of consequence
+was somewhere else.
+
+**The worst finding was a picture that lied, and it was mine.** I wrote
+that DERIV's seeding rule was "a measured claim, not an analogy" and
+then measured one call short. `_differentiatorIteration` does store the
+sample into `variable`; `calcDeriv` gets `variable` from
+`deriv_pgm_variable(label)`, which reads the BODY program's own MVAR
+declarations. A body declaring no MVAR returns 0 while VISUAL drew a
+picture meaning 6. Both halves were executed in the real binary. The
+class name is **measured one call short** — an invariant verified at the
+callee and assumed at the caller — and its companion, **the only fixture
+satisfies the assumption the code never checks**: my single DERIV body
+declared `MVAR 'x'` and was driven by `f' 'x'`, the one configuration in
+which the two channels agree, so five pins passed a rule that held only
+for them.
+
+**Three more were one sentence.** PP17's text back end had been carrying
+three implicit bounds — a rolled-back pool, a 255-byte fragment cap, and
+a guaranteed linear line of last resort. PP18 deleted the text and all
+three went with it, and I replaced none, because every pin still passed.
+The consequences were a hang (the ENTER DAG re-expanded 2^k with no
+abort, because a PP_NONE return was a per-call value and not a latch), a
+blank framed screen with the answer erased and no error, and one
+unchecked construct operand. **Deleting a representation deletes the
+bounds it happened to enforce, and a green suite will not mention it.**
+
+**A guard that enumerated its examples instead of its class.** PP18-4:
+constructs reported ATOM precedence, so a Σ under a square drew the
+exponent on the Σ's body — two programs whose answers differ by 2.6x
+drawing the same picture. The guard for stacked powers forty lines
+above had found exactly this class and listed the two OP1 members in
+front of it. Fixing it also drew the line the fix needed: a construct as
+an OPERAND needs brackets because nothing terminates its body; a
+construct as a BODY does not, because the outer construct's own " d<var>"
+does, which is why nested integrals are written without them.
+
+Also fixed: the lift latch surviving XEQ/PGMINT/PGMDRV (a false decline
+at top level, a silent wrong drawing inside a body), `varOff` a uint8_t
+indexing a 512-byte pool (observed misfiring during another finding's
+verification), and the invented Σ counter colliding with a free variable
+of the same name — **a scope rule implemented where it was noticed
+rather than over the scope it names**.
+
+**Two process notes.** The hang's fix has two redundant guards, so
+neither mutates red alone; only removing both reproduces the shipped
+shape. Recorded as redundancy rather than credited as two coverage
+holes. And V66 asserts a visit COUNT, because a timing pin passes on a
+desktop for a program that hangs the calculator.
+
+The oracle the report recommended is now V65, and it is the shape that
+would have caught PP18-1 without anyone thinking of derivatives at all:
+run the program, evaluate the walker's own drawing, require them to
+agree. No expected string appears in it.
+
 ## 2026-08-28 — PP18: the walker stops writing strings, and gains DERIV
 
 PP17 drew by transpiling a program to equation-language text and parsing

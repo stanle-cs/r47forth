@@ -775,6 +775,27 @@ static void ppcTestExpectSig(const char *what, const char *expected) {
   }
 }
 
+/* Does the measured tree hold a run with exactly this text? For pins that
+ * care a decode REACHED the picture, not where it landed. */
+static bool_t ppTreeHasRun(uint8_t n, const char *text) {
+  if(n == PP_NONE) {
+    return false;
+  }
+  const ppNode_t *nd = ppNodeAt(n);
+  if(nd == NULL) {
+    return false;
+  }
+  if(nd->kind == PP_RUN && strcmp(ppTextAt(nd->textOff), text) == 0) {
+    return true;
+  }
+  for(uint8_t c = nd->firstChild; c != PP_NONE; c = ppNodeAt(c)->nextSibling) {
+    if(ppTreeHasRun(c, text)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 /* Copy-adapted from testSuite.c covWriteAndLoadPgm: write a program in
  * the program-file format and import it through the official loader,
  * which appends it and registers the global label. The Test-suffixed
@@ -3321,15 +3342,24 @@ void prettyTestEquation(uint16_t unusedButMandatoryParameter) {
 }
 
 
-/* ==== PP17: VISUAL, the RPN-program walker ==============================
- * The pins assert the TRANSPILED STRING, not the picture: the string is
- * the walker's whole product, and every rendering question about it was
- * already settled by the equation battery. V18 then closes the loop by
- * EVALUATING one of those strings — a transpilation that draws but does
- * not compute would be a lie the renderer alone cannot catch.
+/* ==== VISUAL, the RPN-program walker ====================================
+ * Most pins here assert the TRANSPILED STRING. That string is NOT the
+ * product — since PP18 the product is a node tree, and the text back end
+ * exists only under PC_BUILD as a test seam (AUDIT PP18-16 corrected
+ * this header, which used to call the string "the walker's whole
+ * product" and would have told the next reader to trust the wrong
+ * thing). The string is asserted because it is readable and because it
+ * is derived from the same AST the drawing is; what it CANNOT do is
+ * catch a fault in the layout pass, which is what the node-shape pins
+ * V46-V51, V56, V57, V68, V69, V73 and V74 are for.
+ *
+ * V18 and V65 close the loop from the other side: they evaluate the
+ * walker's own output and require it to agree with what the program
+ * actually computes. V65 is the one that would have caught PP18-1.
  *
  * Fixtures are the appnote-22 chain (docs/appnotes/sources/AN0022), with
- * package-local label names so no other driver's labels collide. */
+ * package-local label names so no other driver's labels collide; V58
+ * loads the real file. */
 
 #define PPV2(itm) (uint8_t)(((itm) >> 8) | 0x80), (uint8_t)((itm) & 0xff)
 
@@ -4068,6 +4098,95 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
     #undef PPV_DUP4
     #undef PPV_REC4
     ppcTestWriteAndLoadPgm(pgmD5, sizeof(pgmD5));
+    // AUDIT PP18-4: a construct used as an OPERAND. The body is empty, so
+    // it returns the seeded counter and the picture stays small enough to
+    // read in a signature.
+    static const uint8_t pgmNB[] = {
+      ITM_LBL, STRING_LABEL_VARIABLE, 3, 'V','N','B',
+      PPV2(ITM_END),
+    };
+    static const uint8_t pgmSQ[] = {          // (SUM ...)^2
+      ITM_LBL, STRING_LABEL_VARIABLE, 3, 'V','S','Q',
+      ITM_LITERAL, STRING_LONG_INTEGER, 1, '1',
+      ITM_LITERAL, STRING_LONG_INTEGER, 1, '3',
+      ITM_LITERAL, STRING_LONG_INTEGER, 1, '1',
+      PPV2(ITM_SIGMAn), STRING_LABEL_VARIABLE, 3, 'V','N','B',
+      ITM_SQUARE,
+      PPV2(ITM_END),
+    };
+    static const uint8_t pgmPX[] = {          // (PROD ...) x 2
+      ITM_LBL, STRING_LABEL_VARIABLE, 3, 'V','P','X',
+      ITM_LITERAL, STRING_LONG_INTEGER, 1, '1',
+      ITM_LITERAL, STRING_LONG_INTEGER, 1, '3',
+      ITM_LITERAL, STRING_LONG_INTEGER, 1, '1',
+      PPV2(ITM_PIn), STRING_LABEL_VARIABLE, 3, 'V','N','B',
+      ITM_LITERAL, STRING_LONG_INTEGER, 1, '2',
+      ITM_MULT,
+      PPV2(ITM_END),
+    };
+    // AUDIT PP18-7: 22 twelve-letter names intern 264 bytes before the
+    // construct's own variable, pushing its offset past 255
+    static const uint8_t pgmOFF[] = {
+      ITM_LBL, STRING_LABEL_VARIABLE, 4, 'V','O','F','F',
+      PPV2(ITM_PGMINT), STRING_LABEL_VARIABLE, 3, 'V','N','B',
+      ITM_RCL, STRING_LABEL_VARIABLE, 12, 'q','q','a','d','e','f','g','h','i','j','k','l',
+      ITM_RCL, STRING_LABEL_VARIABLE, 12, 'q','q','b','d','e','f','g','h','i','j','k','l',
+      ITM_RCL, STRING_LABEL_VARIABLE, 12, 'q','q','c','d','e','f','g','h','i','j','k','l',
+      ITM_RCL, STRING_LABEL_VARIABLE, 12, 'q','q','d','d','e','f','g','h','i','j','k','l',
+      ITM_RCL, STRING_LABEL_VARIABLE, 12, 'q','q','e','d','e','f','g','h','i','j','k','l',
+      ITM_RCL, STRING_LABEL_VARIABLE, 12, 'q','q','f','d','e','f','g','h','i','j','k','l',
+      ITM_RCL, STRING_LABEL_VARIABLE, 12, 'q','q','g','d','e','f','g','h','i','j','k','l',
+      ITM_RCL, STRING_LABEL_VARIABLE, 12, 'q','q','h','d','e','f','g','h','i','j','k','l',
+      ITM_RCL, STRING_LABEL_VARIABLE, 12, 'q','q','i','d','e','f','g','h','i','j','k','l',
+      ITM_RCL, STRING_LABEL_VARIABLE, 12, 'q','q','j','d','e','f','g','h','i','j','k','l',
+      ITM_RCL, STRING_LABEL_VARIABLE, 12, 'q','q','k','d','e','f','g','h','i','j','k','l',
+      ITM_RCL, STRING_LABEL_VARIABLE, 12, 'q','q','l','d','e','f','g','h','i','j','k','l',
+      ITM_RCL, STRING_LABEL_VARIABLE, 12, 'q','q','m','d','e','f','g','h','i','j','k','l',
+      ITM_RCL, STRING_LABEL_VARIABLE, 12, 'q','q','n','d','e','f','g','h','i','j','k','l',
+      ITM_RCL, STRING_LABEL_VARIABLE, 12, 'q','q','o','d','e','f','g','h','i','j','k','l',
+      ITM_RCL, STRING_LABEL_VARIABLE, 12, 'q','q','p','d','e','f','g','h','i','j','k','l',
+      ITM_RCL, STRING_LABEL_VARIABLE, 12, 'q','q','q','d','e','f','g','h','i','j','k','l',
+      ITM_RCL, STRING_LABEL_VARIABLE, 12, 'q','q','r','d','e','f','g','h','i','j','k','l',
+      ITM_RCL, STRING_LABEL_VARIABLE, 12, 'q','q','s','d','e','f','g','h','i','j','k','l',
+      ITM_RCL, STRING_LABEL_VARIABLE, 12, 'q','q','t','d','e','f','g','h','i','j','k','l',
+      ITM_RCL, STRING_LABEL_VARIABLE, 12, 'q','q','u','d','e','f','g','h','i','j','k','l',
+      ITM_RCL, STRING_LABEL_VARIABLE, 12, 'q','q','v','d','e','f','g','h','i','j','k','l',
+      ITM_LITERAL, STRING_LONG_INTEGER, 1, '0',
+      ITM_LITERAL, STRING_LONG_INTEGER, 1, '2',
+      PPV2(ITM_INTEGRAL_YX), STRING_LABEL_VARIABLE, 1, 'w',
+      PPV2(ITM_END),
+    };
+    // AUDIT PP18-9: the loop count lives in a variable called 'n'
+    static const uint8_t pgmCOL[] = {
+      ITM_LBL, STRING_LABEL_VARIABLE, 4, 'V','C','O','L',
+      ITM_LITERAL, STRING_LONG_INTEGER, 1, '1',
+      ITM_RCL, STRING_LABEL_VARIABLE, 1, 'n',
+      ITM_LITERAL, STRING_LONG_INTEGER, 1, '1',
+      PPV2(ITM_SIGMAn), STRING_LABEL_VARIABLE, 3, 'V','B','D',
+      PPV2(ITM_END),
+    };
+    ppcTestWriteAndLoadPgm(pgmOFF, sizeof(pgmOFF));
+    // AUDIT PP18-5: an ENTER before a subroutine call
+    static const uint8_t pgmXB[] = {
+      ITM_LBL, STRING_LABEL_VARIABLE, 3, 'V','X','B',
+      ITM_RCL, STRING_LABEL_VARIABLE, 1, 'b',
+      ITM_ADD,
+      PPV2(ITM_END),
+    };
+    static const uint8_t pgmXA[] = {          // a x (a+b)
+      ITM_LBL, STRING_LABEL_VARIABLE, 3, 'V','X','A',
+      ITM_RCL, STRING_LABEL_VARIABLE, 1, 'a',
+      ITM_ENTER,
+      ITM_XEQ, STRING_LABEL_VARIABLE, 3, 'V','X','B',
+      ITM_MULT,
+      PPV2(ITM_END),
+    };
+    ppcTestWriteAndLoadPgm(pgmXB, sizeof(pgmXB));
+    ppcTestWriteAndLoadPgm(pgmXA, sizeof(pgmXA));
+    ppcTestWriteAndLoadPgm(pgmCOL, sizeof(pgmCOL));
+    ppcTestWriteAndLoadPgm(pgmNB, sizeof(pgmNB));
+    ppcTestWriteAndLoadPgm(pgmSQ, sizeof(pgmSQ));
+    ppcTestWriteAndLoadPgm(pgmPX, sizeof(pgmPX));
     ppcTestWriteAndLoadPgm(pgmXP, sizeof(pgmXP));
     ppcTestWriteAndLoadPgm(pgmBIG, sizeof(pgmBIG));
   }
@@ -4228,6 +4347,88 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
     temporaryInformation = TI_NO_INFO;
     screenHoldsDrawnPixels = false;
     screenUpdatingMode &= ~SCRUPD_MANUAL_STACK;
+  }
+
+  // V70 (AUDIT PP18-7): the construct's variable name is interned past
+  // pool offset 255. A uint8_t varOff read it back from 256 bytes lower
+  // — another leaf's text, still in bounds, so the integral drew a
+  // d-variable the program never integrates over with no decline and no
+  // D-number. This was observed in the wild during another finding's
+  // verification, not constructed.
+  ppvTestExpect("V70 variable name interned past offset 255", "VOFF",
+                "INTEG(w;w;0;2)");
+  // V71 (AUDIT PP18-9): the invented counter was checked only against
+  // ENCLOSING constructs, which is empty at top level, so a program
+  // whose loop count is a variable called 'n' drew the free 'n' in the
+  // upper-limit slot of the operator that binds 'n'. Nothing on screen
+  // told them apart.
+  {
+    char want[64];
+    sprintf(want, "SUM(m%sm;m;1;n)", STD_CROSS);
+    ppvTestExpect("V71 counter avoids a name the formula already uses",
+                  "VCOL", want);
+  }
+
+  // V72 (AUDIT PP18-5): XEQ, PGMINT and PGMDRV returned before the
+  // epilogue that clears the ENTER lift latch, so the callee's first
+  // lifting read OVERWROTE the dup instead of pushing. At top level that
+  // is a false underflow decline for a program that never underflows;
+  // inside a construct body, where the seeded frame supplies a phantom
+  // operand, it is a silent wrong drawing instead.
+  {
+    char want[64];
+    sprintf(want, "a%s(a+b)", STD_CROSS);
+    ppvTestExpect("V72 the lift latch does not survive XEQ", "VXA", want);
+  }
+
+  // V73 (AUDIT PP18-13): the node signature prints every PP_BIGOP as
+  // "B(...)" and drops the operator tag, so V46, V50 and V68 would all
+  // pass unchanged if an integral drew as a sum. The tag is what the
+  // paint pass picks the stroke glyph from, so it IS the operator; it
+  // lives in the box's textOff (prettyInternal.h). Assert it directly
+  // rather than reformat every signature in the file.
+  {
+    struct { const char *label; uint16_t tag; const char *what; } tags[3] = {
+      { "VDBL", ITM_INTEGRAL_YX, "V73 an integral draws the integral stroke" },
+      { "VS1",  ITM_SIGMAn,      "V73 a sum draws the sum stroke"            },
+      { "VPX",  ITM_PIn,         "V73 a product draws the product stroke"    },
+    };
+    for(unsigned t = 0; t < 3; t++) {
+      calcRegister_t id = findNamedLabel(tags[t].label, GLOBAL_LABELS);
+      uint8_t root;
+      if(id == INVALID_VARIABLE
+          || !ppvTestBuildNodes((uint16_t)(id - FIRST_LABEL), PP_FONT_STANDARD,
+                                PP_FONT_STANDARD, &root, NULL)) {
+        ppTestFail(tags[t].what);
+        continue;
+      }
+      // the outermost PP_BIGOP in the tree
+      uint8_t n = root;
+      while(n != PP_NONE && ppNodeAt(n)->kind != PP_BIGOP) {
+        n = ppNodeAt(n)->firstChild;
+      }
+      if(n == PP_NONE) {
+        ppTestFail(tags[t].what);
+      }
+      else if(ppNodeAt(n)->textOff != tags[t].tag) {
+        ppTestFailInt(tags[t].what, tags[t].tag, ppNodeAt(n)->textOff);
+      }
+    }
+  }
+  // V74 (AUDIT PP18-12): the second-order flag's NODE wiring had no pin
+  // — MUT-111 was guarded only in the text seam, so the drawn d^2/dx^2
+  // could have lost its superscripts silently.
+  {
+    calcRegister_t id = findNamedLabel("VDR2", GLOBAL_LABELS);
+    uint8_t root;
+    if(id == INVALID_VARIABLE
+        || !ppvTestBuildNodes((uint16_t)(id - FIRST_LABEL), PP_FONT_STANDARD,
+                              PP_FONT_STANDARD, &root, NULL)) {
+      ppTestFail("V74 second derivative did not lay out");
+    }
+    else if(!ppTreeHasRun(root, "d" "\xa1\x62")) {
+      ppTestFail("V74 the drawn second derivative lost its superscript");
+    }
   }
 
   // V54: only a latch set during the walk counts
@@ -4594,7 +4795,7 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
   //   V51 — a stacked power DOES need its base bracketed, and gets it
   //         here rather than from the text grammar's associativity
   {
-    struct { const char *what; const char *label; const char *sig; } cases[8];
+    struct { const char *what; const char *label; const char *sig; } cases[10];
     char sMul[64], sSum[64];
     sprintf(sMul, "[[[x %s x] - [x %s p]] - 2]", STD_DOT, STD_DOT);
     sprintf(sSum, "B([n %s n]|[n = 1]|5)", STD_DOT);
@@ -4623,8 +4824,20 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
     sprintf(sScope, "B([P([[[x %s x] - [x %s p]] - 2]) d x]|0|8)", STD_DOT, STD_DOT);
     cases[7].what = "V57 additive construct body is scoped";
     cases[7].label = "VIG";                     cases[7].sig = sScope;
+    // V68/V69 (AUDIT PP18-4): a big operator is NOT an atom. Its body
+    // extends rightward, so anything multiplied or raised beside it
+    // binds INTO the body unless the construct is bracketed. Two
+    // programs whose answers differ by a factor of 2.6 drew the same
+    // picture: (1+2+3)^2 = 36 and 1^2+2^2+3^2 = 14.
+    char sSq[96], sPx[96];
+    sprintf(sSq, "S(P(B(n|[n = 1]|3))|2)");
+    cases[8].what = "V68 a construct under a power is bracketed";
+    cases[8].label = "VSQ";                     cases[8].sig = sSq;
+    sprintf(sPx, "[P(B(n|[n = 1]|3)) %s 2]", STD_DOT);
+    cases[9].what = "V69 a construct left of a product is bracketed";
+    cases[9].label = "VPX";                     cases[9].sig = sPx;
 
-    for(unsigned c = 0; c < 8; c++) {
+    for(unsigned c = 0; c < 10; c++) {
       calcRegister_t id = findNamedLabel(cases[c].label, GLOBAL_LABELS);
       uint8_t root;
       if(id == INVALID_VARIABLE
@@ -4652,21 +4865,26 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
 
 
 
-/* ==== the REAL appnote-22 file (its own driver, and it runs LAST) =======
+/* ==== the REAL appnote-22 file (its own driver, anchored late) =========
  * Every fixture in prettyTestVisual is one I wrote and hand-encoded,
  * which makes them a statement about my own encoding as much as about
  * the walker. This loads docs/appnotes/sources/AN0022/func.p47 —
  * Jaymos's actual file, the one his forum message pointed at — through
  * the official loader and transpiles the labels he named.
  *
- * It lives in its own driver, registered at the TAIL of
- * testSuiteList.txt, because it CLEARS PROGRAM MEMORY. Run from inside
- * prettyTestVisual it wiped the programs a later file (programs.txt)
- * expects, and six upstream cases failed 300 lines away from the cause.
- * Clearing is unavoidable here — our own fixtures have nearly filled
- * program memory, and func.p47's labels (DBLINT, HT, IT, ...) collide
- * by design with upstream's own nested_cov programs. Running last makes
- * both harmless.
+ * It lives in its own driver because it CLEARS PROGRAM MEMORY. Run from
+ * inside prettyTestVisual it wiped the programs a later file
+ * (programs.txt) expects, and six upstream cases failed 300 lines away
+ * from the cause. Clearing is unavoidable here — our own fixtures have
+ * nearly filled program memory, and func.p47's labels (DBLINT, HT,
+ * IT, ...) collide by design with upstream's own nested_cov programs.
+ *
+ * It is anchored in testSuiteList.txt BEFORE graphs_cov, not at the
+ * tail: forth-core appends there and two packages appending at EOF
+ * produce the same hunk and a hard conflict. So it runs after
+ * programs.txt, which is what the ordering needs, but graphs_cov,
+ * nested_cov, config_cov and stack_cov still run after it — none of
+ * which depends on preloaded programs. Not "last" (AUDIT PP18-14).
  *
  * A missing file FAILS rather than skips: the suite runs from the repo
  * root, so absence means something a silent skip would hide. */
@@ -4679,9 +4897,10 @@ void prettyTestReal(uint16_t unusedButMandatoryParameter) {
    * much as about the walker. This loads docs/appnotes/sources/AN0022/
    * func.p47 — Jaymos's actual file, the one his forum message pointed
    * at — through the official loader, and transpiles the labels he
-   * named. It runs LAST and clears program memory both before and
-   * after: the fixtures above have nearly filled it, and a later driver
-   * should find a clean slate rather than somebody else's programs.
+   * named. It clears program memory both before and after: the fixtures
+   * above have nearly filled it, and a later driver should find a clean
+   * slate rather than somebody else's programs. It runs late in the
+   * list, not last — see the driver's own header (AUDIT PP18-14).
    *
    * A missing file FAILS rather than skips. The suite runs from the
    * repo root (meson test -C build.sim), so absence means something is
@@ -4694,12 +4913,21 @@ void prettyTestReal(uint16_t unusedButMandatoryParameter) {
     }
     else {
       FILE *outF = fopen("c47programTest.bin", "wb");
-      int ch;
-      while((ch = fgetc(in)) != EOF) {
-        fputc(ch, outF);
+      if(outF == NULL) {
+        // the sibling fopen two lines up is checked; this one was not,
+        // and the suite died SIGSEGV inside this driver rather than
+        // reporting a case (AUDIT PP18-11)
+        fclose(in);
+        ppTestFail("V58 cannot write the loader's input file");
+        outF = NULL;
       }
-      fclose(in);
-      fclose(outF);
+      else {
+        int ch;
+        while((ch = fgetc(in)) != EOF) {
+          fputc(ch, outF);
+        }
+        fclose(in);
+        fclose(outF);
       fnClPAll(CONFIRMED);
       lastErrorCode = ERROR_NONE;
       fnLoadProgram(NOPARAM);
@@ -4724,6 +4952,7 @@ void prettyTestReal(uint16_t unusedButMandatoryParameter) {
       }
       fnClPAll(CONFIRMED);
       lastErrorCode = ERROR_NONE;
+      }
     }
   }
 
