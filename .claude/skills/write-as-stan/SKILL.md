@@ -256,3 +256,82 @@ release i_hedge floor dropped to 0 on this evidence. When he hands you
 an edited post: adopt it byte-for-byte, fact-check every claim inside
 it, and confine drafting to the additions he asked for — each new
 sentence still runs the full loop.
+
+## Added 2026-08-27 (pretty-print v0.1 announcement, Stan's edit of r6)
+
+The r6 draft passed the full battery and both cross-model lanes; Stan
+rewrote the drafted half anyway ("terrible writing today") and said his
+own version is still not 100%. Every lesson below traces to a concrete
+edit of his. His r7 text is the working baseline.
+
+- **Typeable input always goes in a [code] block.** The draft buried the
+  84-word capacity expression inline in a sentence ("In full it's
+  INTEG(...)"). He cut it into its own [code] block under a one-line
+  lead-in ("Here's an example stress test of the package:"). The
+  stylometry report even said longest=84w and the drafter shrugged it
+  off as "a formula, unavoidable". A sentence that long is never
+  unavoidable; it is a formatting decision made wrong. (aiaudit now has
+  a mechanical check for formula-shaped text outside [code].)
+- **Never narrate what an example already shows.** Beside the stress
+  test he deleted the picture description ("an integral of a second
+  derivative with a sum and a product inside") AND the syntax notes
+  (root takes brackets, powers are ^, lowercase works) — the typeable
+  code block demonstrates every one of those facts. He also deleted
+  "and they nest inside each other" from the constructs sentence: the
+  example nests four deep right below. Show once; say nothing twice.
+- **Drafted questions: ZERO.** The mechanism question died to his read
+  a third time ("Why draw nothing instead of coming close?" — cut with
+  its whole answer), after BOTH out-of-family auditors marked it
+  leave-alone-for-accuracy and after it was ruled keep on the precedent
+  of his published undo post. The published precedent is HIS license,
+  not the drafter's. Questions enter a post only through his own edit;
+  the r2 two-question ceiling above bounds what survives his edit, not
+  what a draft may contain. Rationale that would have hung off the
+  question gets stated declaratively or not at all.
+- **Behavior survives, philosophy doesn't.** The formula-memory honesty
+  paragraph ("runs on the same rule... keeps the number and lets the
+  formula go") was deleted whole. It stated the design invariant, not a
+  behavior the reader will meet. Invariants live in DESIGN.md; the post
+  states what happens on the screen.
+- **Technical referents get ONE technical term, reused.** He replaced
+  "always stay on the plain line" with "always stay on the fallback
+  string representation" and "goes the same way" with "is also reverted
+  to fallback" — coining one term and repeating it, where the draft
+  synonym-rotated folksy stand-ins. He expanded his own compression the
+  same direction: "T carries the working" became "The location of the T
+  register now carries the working expression" (precise: PTLINE takes
+  T's screen row, not T). Anti-repetition instincts apply to rhetoric,
+  never to terminology; cut-and-dry means the technical noun appears
+  and then appears again.
+- **Narration of the tool becomes instruction to the reader.** "EQSHW
+  drew the one above" became "Press EQSHW to draw the one above."
+  Tell the reader what to press, not what the software did.
+- **Boilerplate idiom is exempt from the no-reuse rule.** The draft
+  wrote "flashing stays at your own risk" and "the same terms c43 is
+  under" purely to dodge 6-word framescan shingles against his
+  published post; he reverted both to the natural idiom ("flash at your
+  own risk", "GPL-3.0-only inherited from upstream"). Disclaimers and
+  licence lines are his standing idioms, deliberately repeated across
+  his posts. Judge those shingles KEEP; a sentence contorted to beat a
+  scanner is a new tell, not a fix.
+- **A fact-fix keeps his point.** His wrong PSHOW bullet ("draws the
+  steps") was flattened by the draft to "draws the value of X"; his own
+  fix reads "draws the expression for the value of X" — the false part
+  corrected, the point (it draws a 2D expression, not digits) kept.
+  When a fact in his sentence dies, find the true version of what he
+  meant, not the flattest true statement.
+- **Features before caveats.** He moved Equations above Refusals: an
+  announcement runs feature sections (each with its attachment) first,
+  then Refusals, then Limits, then Install. The draft had a caveat
+  section splitting the feature tour.
+- **Don't state the obvious complement.** "loses its formula, the value
+  itself stays" became "loses pretty print" — that the value survives
+  goes without saying.
+
+What survived his pass verbatim is evidence too: the refusal opener,
+the whole everyday-arithmetic paragraph with its hedge and matrix
+parenthetical, four Limits bullets, the entire Install top, and the
+fronted "So back the calculator up first." The failure was concentrated
+in presentation choices (inline formula, narrated example), the
+question, the philosophy paragraph, and register (folksy where
+technical was due) — not in the voice constructions.

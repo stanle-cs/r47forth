@@ -127,6 +127,36 @@ findings this round and the fixes have not been re-audited out-of-family.
 Every prior round went to Stan's read in exactly this state, and his read
 is the only gate that can say yes.
 
+**r7 — Stan's edit of r6 (2026-08-27), adopted verbatim.** "Terrible
+writing today... still not 100% fixed." His rewrite is saved byte-for-byte
+as `pretty-print-v0.1-r7.txt` and is the working baseline. What he
+changed and what it taught is encoded in the write-as-stan skill (dated
+section) and DESIGN.md §2 (announcement rulings): features before
+caveats, typeable input in [code] (new aiaudit `formula-outside-code`
+check, calibrated red on r6 / green on r7 and his published post), no
+narrating what an example shows, ZERO drafted questions (third kill),
+behavior not philosophy, one technical term reused, boilerplate idiom
+exempt from the no-reuse rule.
+
+Fact-flags ON his r7 text, all source-verified, his call:
+
+1. **"Setting the d_d variable" — the variable is δ_d** (STD_delta
+   STD_SUB_d, differentiate.c:244). "d_d" came from FACTS.md's own error
+   (now corrected there) and survived three drafts. A reader typing d_d
+   creates a different variable and the fix silently does nothing; the
+   Δ softkey path in the same sentence works regardless.
+2. **"Read the application notes to know more about setting the delta"
+   points at a documented gap.** DESIGN-HISTORY round 7 (2026-08-26)
+   read all 30 appnotes: AN0022 explains solver/integrator accuracy at
+   length and never mentions derivative accuracy or the delta; AN0011
+   has no accuracy guidance. The sentence sends readers somewhere the
+   answer is not. Recommend cutting it (the bullet already names the
+   softkey).
+3. **DERIV shows 3 arguments in the forms block, 4 in the stress test.**
+   His cut of the optional-args sentence leaves the stress test's
+   `;x;2;2` tail unexplained. One short line restores coherence if he
+   wants it.
+
 ## Not done, and it matters
 
 The machines endorse this draft. That is not the same as done, and the

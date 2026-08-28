@@ -119,6 +119,34 @@ update posts from now on:
   the target/base/licence recap and the sim-vs-hardware disclosure
   from the update post (the stage-2 post already carries them).
 
+**Announcement-post rulings (Stan's edit, 2026-08-27, pretty-print
+v0.1 r6→r7).** He rewrote a battery-clean, cross-model-passed draft;
+these bind future announcement drafts (full analysis in the
+write-as-stan skill, same date):
+
+- Section order is features first, caveats after: feature sections with
+  their attachments, then Refusals, then Limits, then Install. A caveat
+  section may not split the feature tour.
+- Typeable input (an expression, a command, a program line) goes in a
+  [code] block with a one-line lead-in, never inline in a sentence.
+  aiaudit's `formula-outside-code` check enforces the mechanical part.
+- Nothing an example demonstrates gets restated in prose — no picture
+  descriptions beside the picture, no syntax rules beside a typeable
+  example that shows the syntax.
+- DRAFTS carry zero rhetorical/mechanism questions. His published posts
+  contain them, and that is his license at edit time, not the
+  drafter's; three drafted questions have now died to his read across
+  three posts, two of them after auditors said keep.
+- Design rationale ("the display never lies") stays in DESIGN.md; the
+  post states on-screen behavior only.
+- One technical term per concept, repeated: he coined "fallback" and
+  used it twice where the draft rotated folksy synonyms ("the plain
+  line", "goes the same way"). Synonym rotation on mechanisms is a
+  drafter tell.
+- Boilerplate idioms (flash-at-your-own-risk, licence lines) are
+  exempt from the cross-document no-reuse rule; judge those framescan
+  shingles KEEP rather than contorting the sentence.
+
 ---
 
 ## 3. Mechanical gate

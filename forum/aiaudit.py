@@ -101,6 +101,18 @@ def title_case_headings(raw):
             bad.append(h.strip())
     return bad
 
+def formula_outside_code(prose):
+    # 2026-08-27 (pretty-print r6): an 84-word typeable expression sat
+    # inline in a sentence; Stan moved it to [code]. Machine input in
+    # prose is a formatting decision made wrong, not "unavoidable".
+    hits = []
+    for tok in prose.split():
+        if '[' in tok or 'http' in tok:
+            continue
+        if len(tok) >= 25 and re.search(r'[();=]', tok):
+            hits.append(tok)
+    return hits
+
 def audit(path):
     raw = open(path, encoding='utf-8').read()
     prose = strip_code(raw)
@@ -149,6 +161,10 @@ def audit(path):
     if r3:
         total += len(r3)
         print(f"  [CONSTRUCTION] rule-of-three: {len(r3)}  e.g. \"{r3[0][:70]}\"")
+    foc = formula_outside_code(prose)
+    if foc:
+        total += len(foc)
+        print(f"  [FORMAT] formula-outside-code: {len(foc)}  e.g. \"{foc[0][:60]}\" — typeable input belongs in [code]")
     # stylometry: LLM prose has unusually low sentence-length variance
     s = sentences(prose)
     if len(s) >= 8:

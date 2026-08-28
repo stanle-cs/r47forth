@@ -157,7 +157,10 @@ No dependency on either sibling. It builds and runs alone.
 - Upstream's second derivative sizes its step as a fraction of x with an
   absolute fallback only at exactly 0. So `x = 0` and `x >= 0.01` are
   exact, and `x <= 0.005` returns a wrong answer silently. Setting the
-  named variable `d_d` (the Δ softkey in the derivative menu) fixes it.
+  named variable `δ_d` (the Δ softkey in the derivative menu) fixes it —
+  the name is STD_delta STD_SUB_d, differentiate.c:244; "d_d" (this
+  sheet's earlier spelling, copied into three drafts) is WRONG and a
+  reader typing it creates a different variable.
   This is upstream's behaviour, not the package's, and an upstream report
   is owed.
 - The full-screen pager has no "no formulas" message where the browser has
