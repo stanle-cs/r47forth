@@ -88,6 +88,9 @@ typedef struct {
   uint16_t poolUsed;
   uint8_t  astUsed;
   uint16_t latchedInt;                  ///< PGMINT target, labelList index; 0xFFFF = none
+  uint16_t latchedDrv;                  ///< PGMDRV target; a SEPARATE slot upstream,
+                                        ///< so that taking a derivative does not
+                                        ///< repoint what INT will run next
   uint16_t stepsWalked;
   uint16_t declineStep;
   uint8_t  callDepth;
@@ -482,6 +485,51 @@ static bool_t ppvIntegral(ppvCtx_t *ctx, ppvStack_t *stk, const uint8_t *pa) {
                       PPV_NIL, false);
 }
 
+/* DERIV: the point comes off the stack, the program from PGMDRV.
+ *
+ * The seeding rule is the integrator's, and that is a measured claim,
+ * not an analogy: _differentiatorIteration fills every stack level with
+ * the sample point AND stores it into the named variable
+ * (differentiate.c, "feed both channels: the stack for a program that
+ * consumes X, the variable for one that recalls its MVAR"). Identical to
+ * DEI_xeq_user. So a body frame seeded with the variable name on all
+ * levels reproduces what the engine actually offers a program, exactly
+ * as it does for an integral.
+ *
+ * PGMDRV is a slot of its own upstream, so a derivative does not
+ * repoint what INT would run; the walker keeps the two latches apart
+ * for the same reason.
+ */
+static bool_t ppvDerivative(ppvCtx_t *ctx, ppvStack_t *stk, const uint8_t *pa,
+                            bool_t second) {
+  char v[PPV_NAME_MAX];
+  if(!ppvVarName(ctx, pa, v)) {
+    return false;
+  }
+  if(ctx->latchedDrv == 0xFFFF) {
+    ppvDecline(ctx, PPV_D_NOLATCH);
+    return false;
+  }
+  uint16_t bodyIdx = ctx->latchedDrv;
+  uint8_t at;
+  if(!ppvPop(ctx, stk, &at)) {
+    return false;
+  }
+  if(ppvIsOpaque(ctx, at)) {
+    ppvDecline(ctx, PPV_D_OPAQUE);
+    return false;
+  }
+  if(ppvNameInList(ctx->binding, ctx->bindingCount, v)) {
+    ppvDecline(ctx, PPV_D_COLLISION);
+    return false;
+  }
+  uint8_t body;
+  if(!ppvBody(ctx, bodyIdx, v, false, &body)) {
+    return false;
+  }
+  return ppvConstruct(ctx, stk, ITM_F1DRV, v, body, at, PPV_NIL, PPV_NIL, second);
+}
+
 // SUM/PROD: X = step, Y = to, Z = from (_programmableSumProd). The
 // counter has no name in RPN — it arrives in a filled stack — so the
 // tree has to invent one, and any body that recalls a variable spelled
@@ -697,7 +745,17 @@ static void ppvStep(ppvCtx_t *ctx, ppvStack_t *stk, uint16_t op, const uint8_t *
       return;
     }
 
+    case ITM_PGMDRV: {
+      uint16_t idx;
+      if(ppvLabelIndex(ctx, pa, &idx)) {
+        ctx->latchedDrv = idx;
+      }
+      return;
+    }
+
     case ITM_INTEGRAL_YX: ppvIntegral(ctx, stk, pa);        break;
+    case ITM_F1DRV:       ppvDerivative(ctx, stk, pa, false); break;
+    case ITM_F2DRV:       ppvDerivative(ctx, stk, pa, true);  break;
     case ITM_SIGMAn:      ppvSumProd(ctx, stk, pa, true);   break;
     case ITM_PIn:         ppvSumProd(ctx, stk, pa, false);  break;
 
@@ -820,8 +878,9 @@ static uint8_t ppvAstToNodes(const ppvCtx_t *ctx, uint8_t n,
       uint8_t step = (a->child[3] == PPV_NIL)
                        ? PP_NONE
                        : ppvAstToNodes(ctx, a->child[3], childFont, childFont, &pStep);
-      if(body == PP_NONE || from == PP_NONE || to == PP_NONE) {
-        return PP_NONE;
+      if(body == PP_NONE || from == PP_NONE
+          || (to == PP_NONE && a->item != ITM_F1DRV)) {
+        return PP_NONE;   // DERIV has a point, not a range
       }
       // the parser scopes an additive body by sniffing its runs for a
       // +/- joiner, because a parse has no precedence to consult. We do,
@@ -831,14 +890,20 @@ static uint8_t ppvAstToNodes(const ppvCtx_t *ctx, uint8_t n,
         return PP_NONE;
       }
       bool_t isInt = (a->item == ITM_INTEGRAL_YX);
+      bool_t isDrv = (a->item == ITM_F1DRV);
+      // INTEG needs only the context-font run, SUM/PROD only the tiny
+      // one, DERIV both
       uint8_t varTiny = isInt ? PP_NONE
                               : ppNewRun(ctx->pool + a->varOff, a->varLen, PP_FONT_TINY);
-      uint8_t varCtx  = isInt ? ppNewRun(ctx->pool + a->varOff, a->varLen, ctxFont)
-                              : PP_NONE;
+      uint8_t varCtx  = (isInt || isDrv)
+                          ? ppNewRun(ctx->pool + a->varOff, a->varLen, ctxFont)
+                          : PP_NONE;
       uint8_t kind = isInt ? PPQ_BIG_INTEG
-                           : ((a->item == ITM_SIGMAn) ? PPQ_BIG_SUM : PPQ_BIG_PROD);
+                   : isDrv ? PPQ_BIG_DERIV
+                   : ((a->item == ITM_SIGMAn) ? PPQ_BIG_SUM : PPQ_BIG_PROD);
       return ppqBuildBigop(kind, a->item, body, varTiny, varCtx,
-                           from, to, step, false, ctxFont);
+                           from, to, step,
+                           (a->flags & PPV_F_SECOND) != 0, ctxFont);
     }
 
     default:
@@ -854,6 +919,7 @@ static uint8_t ppvRun(ppvCtx_t *ctx, uint16_t labelIdx) {
   ctx->poolUsed      = 0;
   ctx->astUsed       = 0;
   ctx->latchedInt    = 0xFFFF;
+  ctx->latchedDrv    = 0xFFFF;
   ctx->stepsWalked   = 0;
   ctx->declineStep   = 0;
   ctx->callDepth     = 0;
@@ -1028,12 +1094,22 @@ static void ppvSerialize(const ppvCtx_t *ctx, uint8_t n, ppvOut_t *o) {
 
     case PPA_CONSTRUCT:
       ppvOutStr(o, (a->item == ITM_INTEGRAL_YX) ? "INTEG("
+                 : (a->item == ITM_F1DRV)       ? "DERIV("
                  : (a->item == ITM_SIGMAn)      ? "SUM(" : "PROD(");
       ppvSerialize(ctx, a->child[0], o);
       ppvOutStr(o, ";");
       ppvOutRaw(o, ctx->pool + a->varOff, a->varLen);
       ppvOutStr(o, ";");
       ppvSerialize(ctx, a->child[1], o);
+      if(a->item == ITM_F1DRV) {
+        // DERIV(body;var;at[;order]) — no upper limit, and the order is
+        // a literal the renderer accepts only as 1 or 2
+        if((a->flags & PPV_F_SECOND) != 0) {
+          ppvOutStr(o, ";2");
+        }
+        ppvOutStr(o, ")");
+        return;
+      }
       ppvOutStr(o, ";");
       ppvSerialize(ctx, a->child[2], o);
       if(a->child[3] != PPV_NIL) {

@@ -3960,8 +3960,49 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
       ITM_SQUARE,
       PPV2(ITM_END),
     };
+    // PP18: the derivative family
+    static const uint8_t pgmDB[] = {          // f(x) = x*x
+      ITM_LBL, STRING_LABEL_VARIABLE, 3, 'V','D','B',
+      PPV2(ITM_MVAR), STRING_LABEL_VARIABLE, 1, 'x',
+      ITM_RCL, STRING_LABEL_VARIABLE, 1, 'x',
+      ITM_ENTER,
+      ITM_MULT,
+      PPV2(ITM_END),
+    };
+    static const uint8_t pgmDRV[] = {         // f'(x) at 3
+      ITM_LBL, STRING_LABEL_VARIABLE, 4, 'V','D','R','V',
+      PPV2(ITM_PGMDRV), STRING_LABEL_VARIABLE, 3, 'V','D','B',
+      ITM_LITERAL, STRING_LONG_INTEGER, 1, '3',
+      PPV2(ITM_F1DRV), STRING_LABEL_VARIABLE, 1, 'x',
+      PPV2(ITM_END),
+    };
+    static const uint8_t pgmDR2[] = {         // f"(x) at 3
+      ITM_LBL, STRING_LABEL_VARIABLE, 4, 'V','D','R','2',
+      PPV2(ITM_PGMDRV), STRING_LABEL_VARIABLE, 3, 'V','D','B',
+      ITM_LITERAL, STRING_LONG_INTEGER, 1, '3',
+      PPV2(ITM_F2DRV), STRING_LABEL_VARIABLE, 1, 'x',
+      PPV2(ITM_END),
+    };
+    static const uint8_t pgmDNL[] = {         // a derivative with no PGMDRV
+      ITM_LBL, STRING_LABEL_VARIABLE, 4, 'V','D','N','L',
+      ITM_LITERAL, STRING_LONG_INTEGER, 1, '3',
+      PPV2(ITM_F1DRV), STRING_LABEL_VARIABLE, 1, 'x',
+      PPV2(ITM_END),
+    };
+    static const uint8_t pgmDIN[] = {         // PGMINT's latch must NOT serve f'
+      ITM_LBL, STRING_LABEL_VARIABLE, 4, 'V','D','I','N',
+      PPV2(ITM_PGMINT), STRING_LABEL_VARIABLE, 3, 'V','D','B',
+      ITM_LITERAL, STRING_LONG_INTEGER, 1, '3',
+      PPV2(ITM_F1DRV), STRING_LABEL_VARIABLE, 1, 'x',
+      PPV2(ITM_END),
+    };
     ppcTestWriteAndLoadPgm(pgmCUB, sizeof(pgmCUB));
     ppcTestWriteAndLoadPgm(pgmPOW, sizeof(pgmPOW));
+    ppcTestWriteAndLoadPgm(pgmDB,  sizeof(pgmDB));
+    ppcTestWriteAndLoadPgm(pgmDRV, sizeof(pgmDRV));
+    ppcTestWriteAndLoadPgm(pgmDR2, sizeof(pgmDR2));
+    ppcTestWriteAndLoadPgm(pgmDNL, sizeof(pgmDNL));
+    ppcTestWriteAndLoadPgm(pgmDIN, sizeof(pgmDIN));
   }
   {
     char want[96];
@@ -4015,6 +4056,25 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
   // V45: the cube has a grammar spelling, so it stays 2D rather than
   // becoming a name
   ppvTestExpect("V45 cube", "VCUB", "a^3");
+
+  /* ---- PP18: derivatives ------------------------------------------- */
+  // V52/V53: the point comes off the stack, the program from PGMDRV, and
+  // the order is which item was used. Seeding is the integrator's rule,
+  // which is a measurement and not an analogy — differentiate.c fills
+  // the stack AND stores to the variable, exactly as DEI_xeq_user does.
+  {
+    char want[64];
+    sprintf(want, "DERIV(x%sx;x;3)", STD_CROSS);
+    ppvTestExpect("V52 first derivative", "VDRV", want);
+    sprintf(want, "DERIV(x%sx;x;3;2)", STD_CROSS);
+    ppvTestExpect("V53 second derivative", "VDR2", want);
+  }
+  // V54: only a latch set during the walk counts
+  ppvTestDecline("V54 derivative with no PGMDRV", "VDNL", 6);
+  // V55: PGMDRV is a slot of its OWN upstream — a derivative must not
+  // read whatever PGMINT last pointed at, or it would draw the wrong
+  // function with no sign that it had
+  ppvTestDecline("V55 PGMINT's latch does not serve f'", "VDIN", 6);
   // V44: the emitted spelling COMPUTES, which is the whole point of
   // resolving it through the evaluator's own table
   {
@@ -4373,7 +4433,7 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
   //   V51 — a stacked power DOES need its base bracketed, and gets it
   //         here rather than from the text grammar's associativity
   {
-    struct { const char *what; const char *label; const char *sig; } cases[6];
+    struct { const char *what; const char *label; const char *sig; } cases[8];
     char sMul[64], sSum[64];
     sprintf(sMul, "[[[x %s x] - [x %s p]] - 2]", STD_DOT, STD_DOT);
     sprintf(sSum, "B([n %s n]|[n = 1]|5)", STD_DOT);
@@ -4389,8 +4449,21 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
     cases[4].sig  = sSum;
     cases[5].what = "V51 stacked power brackets its base";
     cases[5].label = "VPOW";                    cases[5].sig = "S(P(S(a|2))|2)";
+    char sDrv[80];
+    sprintf(sDrv, "[F(d|[d x]) U(P([x %s x])|[x = 3])]", STD_DOT);
 
-    for(unsigned c = 0; c < 6; c++) {
+    cases[6].what = "V56 derivative shape";
+    cases[6].label = "VDRV";                    cases[6].sig = sDrv;
+    // V57: an ADDITIVE construct body keeps its brackets. The parser
+    // gets this by sniffing the body's runs for a +/- joiner because a
+    // parse has no precedence to consult; the tree asks the real
+    // question instead, and must reach the same answer.
+    char sScope[160];
+    sprintf(sScope, "B([P([[[x %s x] - [x %s p]] - 2]) d x]|0|8)", STD_DOT, STD_DOT);
+    cases[7].what = "V57 additive construct body is scoped";
+    cases[7].label = "VIG";                     cases[7].sig = sScope;
+
+    for(unsigned c = 0; c < 8; c++) {
       calcRegister_t id = findNamedLabel(cases[c].label, GLOBAL_LABELS);
       uint8_t root;
       if(id == INVALID_VARIABLE
