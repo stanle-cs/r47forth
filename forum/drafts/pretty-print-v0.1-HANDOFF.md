@@ -98,7 +98,7 @@ rejected draft. Treat it as a source of FACTS only, not of sentences.
 
 | artifact | state |
 |---|---|
-| `pkg_dist/pretty-print.zip` | built, 118,450 bytes, COPYING verified inside |
+| `pkg_dist/pretty-print.zip` | rebuilt 2026-08-27 after the EXIT + lowercase fixes, 121,002 bytes, 31 entries, COPYING verified inside |
 | `forum/screenshots/pp-attach-1-stack-and-browser.png` | current, retaken 2026-08-27 |
 | `forum/screenshots/pp-attach-2-nesting.png` | current, retaken 2026-08-27 |
 | `forum/drafts/pretty-print-v0.1-FACTS.md` | verified fact sheet, measured not recalled |
