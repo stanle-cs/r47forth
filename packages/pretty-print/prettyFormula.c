@@ -72,10 +72,6 @@ static bool_t ppfFormatStaged(char *dest, size_t destSize) {
  * layouts + their precedences — shared by the tree walker and the token
  * decoder so both paths typeset identically. */
 
-#define PPF_PREC_ADD  1
-#define PPF_PREC_MUL  2
-#define PPF_PREC_ATOM 3
-
 static uint8_t ppfParen(uint8_t inner, uint8_t fontId) {
   uint8_t p = ppNewBox(PP_PAREN, fontId);
   if(p == PP_NONE || inner == PP_NONE) {
@@ -85,18 +81,18 @@ static uint8_t ppfParen(uint8_t inner, uint8_t fontId) {
   return p;
 }
 
-static uint8_t ppfWrapIf(uint8_t node, int prec, int minPrec, uint8_t fontId) {
+uint8_t ppfWrapIf(uint8_t node, int prec, int minPrec, uint8_t fontId) {
   if(node == PP_NONE) {
     return PP_NONE;
   }
   return (prec < minPrec) ? ppfParen(node, fontId) : node;
 }
 
-static uint8_t ppfRun(const char *s, uint8_t fontId) {
+uint8_t ppfRun(const char *s, uint8_t fontId) {
   return ppNewRun(s, (uint16_t)strlen(s), fontId);
 }
 
-static uint8_t ppfCombine2(uint16_t item, uint8_t a, int aPrec, uint8_t b, int bPrec,
+uint8_t ppfCombine2(uint16_t item, uint8_t a, int aPrec, uint8_t b, int bPrec,
                            uint8_t ctxFont, uint8_t childFont, int *outPrec) {
   *outPrec = PPF_PREC_ATOM;
   switch(item) {
@@ -196,7 +192,7 @@ static uint8_t ppfCombine2(uint16_t item, uint8_t a, int aPrec, uint8_t b, int b
   }
 }
 
-static uint8_t ppfCombine1(uint16_t item, uint8_t a, int aPrec,
+uint8_t ppfCombine1(uint16_t item, uint8_t a, int aPrec,
                            uint8_t ctxFont, uint8_t childFont, int *outPrec) {
   *outPrec = PPF_PREC_ATOM;
   switch(item) {

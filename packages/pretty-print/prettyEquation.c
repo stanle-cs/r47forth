@@ -131,7 +131,7 @@ static uint8_t ppqName(ppqCtx_t *c, uint8_t font) {
   return ppNewRun(c->s + start, (uint16_t)(c->pos - start), font);
 }
 
-static uint8_t ppqUnwrapParen(uint8_t n) {
+uint8_t ppqUnwrapParen(uint8_t n) {
   const ppNode_t *nd = ppNodeAt(n);
   if(nd != NULL && nd->kind == PP_PAREN) {
     return nd->firstChild;   // the bar/vinculum scopes: drop the parens
@@ -167,6 +167,125 @@ static uint8_t ppqScopeBody(ppqCtx_t *c, uint8_t body, uint8_t font) {
     }
   }
   return body;
+}
+
+/* PP18: the NODE ASSEMBLY half of a construct, split out of
+ * ppqBigopConstruct so the program walker can build the same shapes
+ * without going through the text grammar. Takes already-built children
+ * and touches no parser state; the parsing stayed behind.
+ *
+ * Every allocation is bound and checked BEFORE any append: PP_HBOX is
+ * variadic, so ppMeasure cannot arity-check it and ppAppendChild
+ * silently no-ops on PP_NONE — an unchecked append renders a formula
+ * with an operand missing and reports success (audit R4-3). PP_BIGOP,
+ * PP_FRAC and PP_SUB fail loudly; the HBOXes here do not.
+ *
+ * `body` arrives ALREADY SCOPED. The parser scopes by sniffing its runs
+ * for +/- (ppqScopeBody), because a parse has no precedence to consult;
+ * the walker has an AST and brackets by precedence instead. Neither
+ * belongs in here.
+ *
+ * varTiny / varCtx: SUM and PROD use only the tiny run, INTEG only the
+ * context-font one, DERIV both. PP_NONE for the one a kind does not use.
+ */
+uint8_t ppqBuildBigop(uint8_t kind, uint16_t tag, uint8_t body,
+                      uint8_t varTiny, uint8_t varCtx,
+                      uint8_t fromN, uint8_t toN, uint8_t stepN,
+                      bool_t secondOrder, uint8_t ctxFont) {
+  if(body == PP_NONE || fromN == PP_NONE) {
+    return PP_NONE;
+  }
+  // limits and scripts always typeset TINY — the big-operator convention
+  if(kind == PPQ_BIG_SUM || kind == PPQ_BIG_PROD) {
+    uint8_t big   = ppNewBox(PP_BIGOP, ctxFont);
+    uint8_t under = ppNewBox(PP_HBOX, PP_FONT_TINY);
+    uint8_t eqRun = ppqRun("=", PP_FONT_TINY);
+    if(big == PP_NONE || under == PP_NONE || eqRun == PP_NONE
+        || varTiny == PP_NONE || toN == PP_NONE) {
+      return PP_NONE;
+    }
+    ppSetBoxTag(big, tag);
+    ppSetFontDeep(varTiny, PP_FONT_TINY);
+    ppSetFontDeep(fromN, PP_FONT_TINY);
+    ppSetFontDeep(toN, PP_FONT_TINY);
+    ppAppendChild(under, varTiny);
+    ppAppendChild(under, eqRun);
+    ppAppendChild(under, fromN);
+    if(stepN != PP_NONE) {
+      // a non-unit step is part of the range: show it
+      uint8_t dRun = ppqRun("," STD_DELTA, PP_FONT_TINY);
+      if(dRun == PP_NONE) {
+        return PP_NONE;
+      }
+      ppSetFontDeep(stepN, PP_FONT_TINY);
+      ppAppendChild(under, dRun);
+      ppAppendChild(under, stepN);
+    }
+    ppAppendChild(big, body);
+    ppAppendChild(big, under);
+    ppAppendChild(big, toN);
+    return big;
+  }
+  if(kind == PPQ_BIG_INTEG) {
+    uint8_t big  = ppNewBox(PP_BIGOP, ctxFont);
+    uint8_t hb   = ppNewBox(PP_HBOX, ctxFont);
+    uint8_t dRun = ppqRun(" d", ctxFont);
+    if(big == PP_NONE || hb == PP_NONE || dRun == PP_NONE
+        || varCtx == PP_NONE || toN == PP_NONE) {
+      return PP_NONE;
+    }
+    ppSetBoxTag(big, tag);
+    ppSetFontDeep(fromN, PP_FONT_TINY);
+    ppSetFontDeep(toN, PP_FONT_TINY);
+    ppAppendChild(hb, body);
+    ppAppendChild(hb, dRun);
+    ppAppendChild(hb, varCtx);
+    ppAppendChild(big, hb);
+    ppAppendChild(big, fromN);
+    ppAppendChild(big, toN);
+    return big;
+  }
+  // DERIV: d/dvar (body) with var=at as a subscript suffix; an order-2
+  // argument raises the superscript-2 glyphs. 0xa162 is that glyph.
+  {
+    uint8_t hb     = ppNewBox(PP_HBOX, ctxFont);
+    uint8_t frac   = ppNewBox(PP_FRAC, ctxFont);
+    uint8_t num    = ppqRun(secondOrder ? "d" "\xa1\x62" : "d", ctxFont);
+    uint8_t denBox = ppNewBox(PP_HBOX, ctxFont);
+    uint8_t dRun   = ppqRun("d", ctxFont);
+    uint8_t par    = ppNewBox(PP_PAREN, ctxFont);
+    uint8_t sub    = ppNewBox(PP_SUB, ctxFont);
+    uint8_t script = ppNewBox(PP_HBOX, PP_FONT_TINY);
+    uint8_t eqRun  = ppqRun("=", PP_FONT_TINY);
+    if(hb == PP_NONE || frac == PP_NONE || num == PP_NONE || denBox == PP_NONE
+        || dRun == PP_NONE || varCtx == PP_NONE || par == PP_NONE
+        || sub == PP_NONE || script == PP_NONE || eqRun == PP_NONE
+        || varTiny == PP_NONE) {
+      return PP_NONE;
+    }
+    ppAppendChild(denBox, dRun);
+    ppAppendChild(denBox, varCtx);
+    if(secondOrder) {
+      uint8_t s2 = ppqRun("\xa1\x62", ctxFont);
+      if(s2 == PP_NONE) {
+        return PP_NONE;
+      }
+      ppAppendChild(denBox, s2);
+    }
+    ppAppendChild(frac, num);
+    ppAppendChild(frac, denBox);
+    ppAppendChild(par, body);
+    ppSetFontDeep(varTiny, PP_FONT_TINY);
+    ppSetFontDeep(fromN, PP_FONT_TINY);
+    ppAppendChild(script, varTiny);
+    ppAppendChild(script, eqRun);
+    ppAppendChild(script, fromN);
+    ppAppendChild(sub, par);
+    ppAppendChild(sub, script);
+    ppAppendChild(hb, frac);
+    ppAppendChild(hb, sub);
+    return hb;
+  }
 }
 
 // PP14: the equation-language big operators render as their 2D shapes.
@@ -266,122 +385,55 @@ static uint8_t ppqBigopConstruct(ppqCtx_t *c, uint8_t font, uint8_t tinyF) {
   }
 
   c->fracSeen = true;
-  // limits and scripts always typeset TINY — the big-operator
-  // convention; tinyF only governs the strip's fraction shrink
-  if(kind == 0 || kind == 1) {
-    uint8_t big = ppNewBox(PP_BIGOP, font);
-    uint8_t under = ppNewBox(PP_HBOX, PP_FONT_TINY);
-    uint8_t eqRun = ppqRun("=", PP_FONT_TINY);
-    if(big == PP_NONE || under == PP_NONE || eqRun == PP_NONE) {
+
+  // DERIV's order is a PARSE question (only a literal 1 or 2 renders),
+  // resolved here so the builder takes a plain flag
+  bool_t second = false;
+  if(kind == 2 && stepN != PP_NONE) {
+    const ppNode_t *sn = ppNodeAt(stepN);
+    second = (sn != NULL && sn->kind == PP_RUN && strcmp(ppTextAt(sn->textOff), "2") == 0);
+    if(!second && (sn == NULL || sn->kind != PP_RUN
+                   || strcmp(ppTextAt(sn->textOff), "1") != 0)) {
       c->failed = true;
       return PP_NONE;
     }
-    ppSetBoxTag(big, tag);
-    ppSetFontDeep(varRun, PP_FONT_TINY);
-    ppSetFontDeep(fromN, PP_FONT_TINY);
-    ppSetFontDeep(toN, PP_FONT_TINY);
-    ppAppendChild(under, varRun);
-    ppAppendChild(under, eqRun);
-    ppAppendChild(under, fromN);
-    if(stepN != PP_NONE) {
-      // a non-unit step is part of the range: show it
-      uint8_t dRun = ppqRun("," STD_DELTA, PP_FONT_TINY);
-      if(dRun == PP_NONE) {
-        c->failed = true;
-        return PP_NONE;
-      }
-      ppSetFontDeep(stepN, PP_FONT_TINY);
-      ppAppendChild(under, dRun);
-      ppAppendChild(under, stepN);
-    }
+    stepN = PP_NONE;   // consumed into `second`; never appended
+  }
+  // the parser cannot see precedence, so it scopes by sniffing the body's
+  // own runs for a +/- joiner
+  if(kind != 2) {
     body = ppqScopeBody(c, body, font);
     if(body == PP_NONE) {
       return PP_NONE;
     }
-    ppAppendChild(big, body);
-    ppAppendChild(big, under);
-    ppAppendChild(big, toN);
-    return big;
   }
-  if(kind == 3) {
-    uint8_t big = ppNewBox(PP_BIGOP, font);
-    uint8_t hb = ppNewBox(PP_HBOX, font);
-    uint8_t dRun = ppqRun(" d", font);
-    uint8_t varRun2 = ppqVarRun(c, varStart, varEnd, font);
-    if(big == PP_NONE || hb == PP_NONE || dRun == PP_NONE || varRun2 == PP_NONE) {
-      c->failed = true;
-      return PP_NONE;
-    }
-    ppSetBoxTag(big, tag);
-    ppSetFontDeep(fromN, PP_FONT_TINY);
-    ppSetFontDeep(toN, PP_FONT_TINY);
-    body = ppqScopeBody(c, body, font);
-    if(body == PP_NONE) {
-      return PP_NONE;
-    }
-    ppAppendChild(hb, body);
-    ppAppendChild(hb, dRun);
-    ppAppendChild(hb, varRun2);
-    ppAppendChild(big, hb);
-    ppAppendChild(big, fromN);
-    ppAppendChild(big, toN);
-    return big;
-  }
-  // DERIV: d/dvar (body) with var=at as a subscript suffix; an order-2
-  // argument raises the superscript-2 glyphs
   {
-    bool_t second = false;
-    if(stepN != PP_NONE) {
-      const ppNode_t *sn = ppNodeAt(stepN);
-      second = (sn != NULL && sn->kind == PP_RUN && strcmp(ppTextAt(sn->textOff), "2") == 0);
-      if(!second) {
-        const ppNode_t *sn1 = ppNodeAt(stepN);
-        if(sn1 == NULL || sn1->kind != PP_RUN || strcmp(ppTextAt(sn1->textOff), "1") != 0) {
-          c->failed = true;   // only literal order 1 or 2 renders
-          return PP_NONE;
-        }
-      }
-    }
-    uint8_t hb = ppNewBox(PP_HBOX, font);
-    uint8_t frac = ppNewBox(PP_FRAC, font);
-    uint8_t num = ppqRun(second ? "d" "\xa1\x62" : "d", font);
-    uint8_t denBox = ppNewBox(PP_HBOX, font);
-    uint8_t dRun = ppqRun("d", font);
-    uint8_t varRun2 = ppqVarRun(c, varStart, varEnd, font);
-    uint8_t par = ppNewBox(PP_PAREN, font);
-    uint8_t sub = ppNewBox(PP_SUB, font);
-    uint8_t script = ppNewBox(PP_HBOX, PP_FONT_TINY);
-    uint8_t eqRun = ppqRun("=", PP_FONT_TINY);
-    if(hb == PP_NONE || frac == PP_NONE || num == PP_NONE || denBox == PP_NONE
-        || dRun == PP_NONE || varRun2 == PP_NONE || par == PP_NONE
-        || sub == PP_NONE || script == PP_NONE || eqRun == PP_NONE) {
+    uint8_t varCtx = (kind == 2 || kind == 3)
+                       ? ppqVarRun(c, varStart, varEnd, font) : PP_NONE;
+    uint8_t root = ppqBuildBigop((uint8_t)kind, tag, body,
+                                 (kind == 3) ? PP_NONE : varRun, varCtx,
+                                 fromN, toN, stepN, second, font);
+    if(root == PP_NONE) {
       c->failed = true;
-      return PP_NONE;
     }
-    ppAppendChild(denBox, dRun);
-    ppAppendChild(denBox, varRun2);
-    if(second) {
-      uint8_t s2 = ppqRun("\xa1\x62", font);
-      if(s2 == PP_NONE) {
-        c->failed = true;
-        return PP_NONE;
-      }
-      ppAppendChild(denBox, s2);
-    }
-    ppAppendChild(frac, num);
-    ppAppendChild(frac, denBox);
-    ppAppendChild(par, body);
-    ppSetFontDeep(varRun, PP_FONT_TINY);
-    ppSetFontDeep(fromN, PP_FONT_TINY);
-    ppAppendChild(script, varRun);
-    ppAppendChild(script, eqRun);
-    ppAppendChild(script, fromN);
-    ppAppendChild(sub, par);
-    ppAppendChild(sub, script);
-    ppAppendChild(hb, frac);
-    ppAppendChild(hb, sub);
-    return hb;
+    return root;
   }
+}
+
+/* PP18: the node half of a function application, split out so the walker
+ * builds the same shape without the grammar. The name is NOT re-checked
+ * here — both callers gate on ppEqFunctionItem first. */
+uint8_t ppqBuildCall(const char *name, uint16_t len, uint8_t arg, uint8_t font) {
+  uint8_t hb  = ppNewBox(PP_HBOX, font);
+  uint8_t run = ppNewRun(name, len, font);
+  uint8_t par = ppNewBox(PP_PAREN, font);
+  if(hb == PP_NONE || run == PP_NONE || par == PP_NONE || arg == PP_NONE) {
+    return PP_NONE;
+  }
+  ppAppendChild(par, arg);
+  ppAppendChild(hb, run);
+  ppAppendChild(hb, par);
+  return hb;
 }
 
 /* PP17: a function application — sin(x), ln(x). There is no 2D gain in
@@ -424,16 +476,10 @@ static uint8_t ppqFunctionCall(ppqCtx_t *c, uint8_t font, uint8_t tinyF) {
     return PP_NONE;
   }
   c->pos = next;
-  uint8_t hb  = ppNewBox(PP_HBOX, font);
-  uint8_t run = ppNewRun(nm, (uint16_t)len, font);
-  uint8_t par = ppNewBox(PP_PAREN, font);
-  if(hb == PP_NONE || run == PP_NONE || par == PP_NONE) {
+  uint8_t hb = ppqBuildCall(nm, (uint16_t)len, arg, font);
+  if(hb == PP_NONE) {
     c->failed = true;
-    return PP_NONE;
   }
-  ppAppendChild(par, arg);
-  ppAppendChild(hb, run);
-  ppAppendChild(hb, par);
   return hb;
 }
 

@@ -111,6 +111,33 @@ bool_t ppqShowRender(const char *src);
 uint8_t ppqFrameIntegral(uint8_t eq);                    ///< PP13: ∫ with real ULIM/LLIM limits + d<var>; bare PP_INT without them
 uint8_t ppqFrameDerivative(uint8_t eq, bool_t second);   ///< PP13: d/dx (d²/dx²) framing
 
+/* prettyFormula.c — the shared 2D node builders. These were the capture
+ * engine's private back end until PP18; the program walker now feeds them
+ * too, so that precedence and parenthesisation are decided in ONE place
+ * instead of once per front-end. There is deliberately no POW level: a
+ * PP_SUP scopes itself geometrically, so only ADD and MUL ever need
+ * brackets. A caller stacking powers must bracket the base itself. */
+#define PPF_PREC_ADD  1
+#define PPF_PREC_MUL  2
+#define PPF_PREC_ATOM 3
+
+uint8_t ppfRun    (const char *s, uint8_t fontId);
+uint8_t ppfWrapIf (uint8_t node, int prec, int minPrec, uint8_t fontId);   ///< parens iff prec < minPrec
+uint8_t ppfCombine1(uint16_t item, uint8_t a, int aPrec,
+                    uint8_t ctxFont, uint8_t childFont, int *outPrec);
+uint8_t ppfCombine2(uint16_t item, uint8_t a, int aPrec, uint8_t b, int bPrec,
+                    uint8_t ctxFont, uint8_t childFont, int *outPrec);
+
+// prettyEquation.c — node assembly, shared with the walker (PP18). Both
+// keep the shapes the EQ pins fix; only the PARSING stayed behind.
+enum { PPQ_BIG_SUM = 0, PPQ_BIG_PROD = 1, PPQ_BIG_DERIV = 2, PPQ_BIG_INTEG = 3 };
+uint8_t ppqUnwrapParen(uint8_t n);
+uint8_t ppqBuildBigop (uint8_t kind, uint16_t tag, uint8_t body,
+                       uint8_t varTiny, uint8_t varCtx,
+                       uint8_t fromN, uint8_t toN, uint8_t stepN,
+                       bool_t secondOrder, uint8_t ctxFont);
+uint8_t ppqBuildCall  (const char *name, uint16_t len, uint8_t arg, uint8_t font);
+
 // prettyVisual.c — RPN program -> equation-language text (the test seam:
 // pins assert the STRING, independently of what the renderer makes of it)
 bool_t ppvTranspile(uint16_t labelIdx, char *out, uint16_t cap,
