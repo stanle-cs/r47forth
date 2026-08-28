@@ -729,9 +729,10 @@ conversion free of display glyphs), and dyadic functions — the emitter's
 arity source is a monadic list, and a two-argument form would need both
 an arity answer and a `f(a;b)` grammar arm.
 
-**Budget (measured 2026-08-28).** Flash 1,146,432 -> 1,151,200
-(**+4,768 B** for VISUAL entire; PP18's refactor gave back 136 B by
-taking the text back end out of the device build, and DERIV cost ~320);
+**Budget (measured 2026-08-28).** Flash 1,146,432 -> 1,151,640
+(**+5,208 B** for VISUAL entire; PP18's refactor gave back 136 B by
+taking the text back end out of the device build, DERIV cost ~320, and
+the audit-round fixes ~440);
 device RAM **12,908/16,384, unchanged** — which is the
 design claim as an executable fact, not an intention. No BSS: the
 walker's whole state is one ~1.5 KiB stack frame
