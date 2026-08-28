@@ -1314,13 +1314,12 @@ void fnPrettyVisual(uint16_t label) {
   ppvCtx_t ctx;
   uint8_t root = ppvRun(&ctx, idx);
   if(root == PPV_NIL) {
-    uint8_t reason = ctx.declineReason;
-    uint16_t atStep = ctx.declineStep;
-    // nothing has been painted: the whole text is composed before any
+    // nothing has been painted: the tree is built entire before any
     // pixel is touched, so a decline leaves the screen alone
     displayCalcErrorMessage(ERROR_INVALID_DATA_TYPE_FOR_OP, ERR_REGISTER_LINE, REGISTER_X);
     #if (EXTRA_INFO_ON_CALC_ERROR == 1)
-      sprintf(errorMessage, "step %u: cannot be drawn (D%u)", atStep, reason);
+      sprintf(errorMessage, "step %u: cannot be drawn (D%u)",
+              (unsigned)ctx.declineStep, (unsigned)ctx.declineReason);
       moreInfoOnError("In function fnPrettyVisual:", errorMessage, NULL, NULL);
     #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
     return;

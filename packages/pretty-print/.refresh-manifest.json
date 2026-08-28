@@ -11,7 +11,7 @@
     "prettyPrint.h": "e33424a36cce86c2d7275346690c7e48a957509cfd8214d40ae520f32d8af235",
     "prettyTest.c": "72f51742884b57825a34250421861798f042102bf6874fd1784774319502c8d7",
     "prettyValue.c": "aaf9674a2e3a41e31679a3d3a694006523f79150123bc231b9c828eaa107e481",
-    "prettyVisual.c": "0e8eb7ac5e8e53cffb038a45292d949e6836410fe26452e031dff869368a404c",
+    "prettyVisual.c": "34a027b28696ae250cde0ef0faea88fe63d0ffac0d0aac14b5de719e6408f730",
     "testSuite/tests/pretty_print.txt": "68f9b9ee8096f9b48f95b1a24465aff4b69fdbac4a9dc1206dde8e5d6a543be4",
     "testSuite/tests/pretty_visual_real.txt": "3ae3d00ad6d3f96f47e62b71fee35448e8925aebdde9884751bc3f438bf2c92e"
   },
