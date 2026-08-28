@@ -157,6 +157,32 @@ Fact-flags ON his r7 text, all source-verified, his call:
    `;x;2;2` tail unexplained. One short line restores coherence if he
    wants it.
 
+**SHIP VERSION — `pretty-print-v0.1-FINAL.txt` (2026-08-27).** Stan's own
+text, saved verbatim, after he clarified the argument block himself
+(`step(opt)`/`order(opt)`, chosen over `[;step]` because C47's appnotes
+spend square brackets on keystrokes) and moved the stress test into its
+own [code] block. Fact-checked line by line against source. Scanners:
+`aiaudit` 8 (his published post 4), all judged — the colon-elaboration
+and copula-avoidance hits are inside his own sentences. `voicematch2`
+BLOCKING(1), direct_you absent; his published announcement clears the
+same floor, so the floor is calibrated and the text genuinely dropped
+the construction. Advisory only at this stage: his read gates.
+
+FOUR findings on the ship text, none of them style:
+
+| finding | evidence |
+|---|---|
+| **`d_d` is not the variable.** It is `δ_d` — `STD_delta STD_SUB_d`, differentiate.c:244. A reader who types `d_d` creates a different named variable, `deriv_user_step` never finds it, and the fix silently does nothing | source read; the Δ softkey half of the sentence works regardless |
+| **"Read the application notes to know more about setting the delta" points at nothing.** Extracted and searched all 30 appnotes for the delta variable, derivative step and derivative accuracy: zero hits. AN0022 covers solver/integrator accuracy at length and never mentions derivatives; AN0011 documents f'/f'' with no accuracy guidance | mechanical search, this session; matches round 7's reading |
+| **EQSHW does not use the browser.** `fnPrettyEqShow` → `ppqShowRender`, a self-painted full screen; the file never references CM_PRETTY_BROWSER. The browser is PHIST's surface, with selection and paging | source read |
+| **"nothing taken from the calculator's pool" is a resting-state claim.** True at rest, but evaluating a construct borrows pool blocks and returns them (equation.c:1751, 1800, 1863). Anyone who greps the source after reading that sentence finds three `allocC47Blocks` calls | source read |
+
+Minor, judged not worth blocking: "a number typed with more than 30
+characters loses pretty print" — it loses the FORMULA; the value itself
+still draws in 2D. And "PSHOW draws the expression for the value of X"
+is no longer false (it does draw X's value in 2D) though it can still be
+read as "the steps that made X"; his own correction, left alone.
+
 ## Not done, and it matters
 
 The machines endorse this draft. That is not the same as done, and the
