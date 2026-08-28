@@ -37,43 +37,50 @@
 #include "c47.h"
 #include "prettyInternal.h"
 
-#define PPV_POOL_BYTES   1024   ///< fragment text arena for one whole walk
-#define PPV_FRAG_MAX      255   ///< a fragment must fit an evaluator slice
+#define PPV_POOL_BYTES    512   ///< leaf TEXT only: literals and names
+#define PPV_AST_NODES      48   ///< expression nodes for one whole walk
+#define PPV_FRAG_MAX      255   ///< a serialized form must fit an evaluator slice
 #define PPV_STACK_SLOTS     8   ///< SSIZE8 simulated regardless of the flag
 #define PPV_MAX_DEPTH       5   ///< XEQ inlining + construct recursion
 #define PPV_STEP_BUDGET   256   ///< decoded steps across the whole walk
 #define PPV_DIRTY_MAX       8
 #define PPV_NAME_MAX       16   ///< == the evaluator's varName[16]
+#define PPV_NIL          0xFF
 
-// precedence lattice, mirroring the equation grammar's own nesting:
-// expr(+-) < term(x/) < factor(^) < primary
-enum { PPV_PREC_ADD = 0, PPV_PREC_MUL = 1, PPV_PREC_POW = 2, PPV_PREC_ATOM = 3 };
+// AST kinds. The walk produces one of these trees; the back ends consume it.
+enum { PPA_FREE = 0, PPA_LIT, PPA_VAR, PPA_OP1, PPA_OP2, PPA_CONSTRUCT };
 
 #define PPV_F_OPAQUE 0x01   ///< a string literal: carryable, never printable
+#define PPV_F_SECOND 0x02   ///< CONSTRUCT: a second-order derivative
 
 // decline reasons; the number reaches the user through moreInfoOnError
 enum { PPV_D_OPCODE = 1, PPV_D_INDIRECT, PPV_D_LOCALLABEL, PPV_D_UNRESOLVED,
        PPV_D_DIRTY, PPV_D_NOLATCH, PPV_D_REGISTER, PPV_D_DEPTH, PPV_D_BUDGET,
        PPV_D_UNDERFLOW, PPV_D_OPAQUE, PPV_D_COLLISION, PPV_D_MEMORY,
-       PPV_D_NUMERAL, PPV_D_FRAGMENT, PPV_D_POOL, PPV_D_EMPTY, PPV_D_NAME };
+       PPV_D_NUMERAL, PPV_D_FRAGMENT, PPV_D_ARENA, PPV_D_EMPTY, PPV_D_NAME };
 
 typedef struct {
-  uint16_t off;     ///< into ctx->pool
-  uint16_t len;     ///< 0 for an opaque placeholder
-  uint8_t  prec;
-  uint8_t  flags;
-} ppvFrag_t;
+  uint8_t  kind;        ///< PPA_*
+  uint8_t  child[4];    ///< OP1 [a] · OP2 [a,b] · CONSTRUCT [body,from,to,step]
+  uint16_t item;        ///< OP1/OP2: the ITM id · CONSTRUCT: the operator's ITM id
+  uint16_t textOff;     ///< LIT/VAR: into ctx->pool
+  uint8_t  textLen;
+  uint8_t  flags;       ///< PPV_F_*
+  uint8_t  varOff;      ///< CONSTRUCT: the variable name, also in ctx->pool
+  uint8_t  varLen;
+} ppvAst_t;
 
 typedef struct {
-  ppvFrag_t frag[PPV_STACK_SLOTS];
-  uint8_t   depth;
-  bool_t    liftDisabled;   ///< ENTER latched: the next lifting read overwrites X
+  uint8_t ast[PPV_STACK_SLOTS];   ///< AST indices, PPV_NIL when empty
+  uint8_t depth;
+  bool_t  liftDisabled;   ///< ENTER latched: the next lifting read overwrites X
 } ppvStack_t;
 
 typedef struct {
   char     pool[PPV_POOL_BYTES];
+  ppvAst_t ast[PPV_AST_NODES];
   uint16_t poolUsed;
-  char     scratch[PPV_FRAG_MAX + 1];   ///< construct body, held across the rollback
+  uint8_t  astUsed;
   uint16_t latchedInt;                  ///< PGMINT target, labelList index; 0xFFFF = none
   uint16_t stepsWalked;
   uint16_t declineStep;
@@ -96,82 +103,99 @@ static void ppvDecline(ppvCtx_t *ctx, uint8_t reason) {
 }
 
 
-/* ==== fragments =========================================================
- * One linear pool plus 6-byte descriptors, not a buffer per stack slot:
- * eight 256-byte slots per frame would cost kilobytes of C stack at
- * depth. ENTER then costs a descriptor copy and no text at all.
+/* ==== the AST =========================================================
+ * The walk builds a small expression tree; ctx->pool holds only LEAF text
+ * (a literal as the program spells it, a variable's name). Structure is
+ * nodes, not brackets in a string — which is the point of PP18: whether
+ * something needs parentheses is decided ONCE, by ppfCombine1/ppfCombine2
+ * when the tree is turned into layout, and not a second time by a parser
+ * reading brackets back out of text.
  *
- * Reclamation is by construct-boundary rollback (ppvConstruct): every
- * descriptor alive when a body walk starts points below the mark taken
- * at that moment, so rolling the pool back to the mark afterwards frees
- * the whole body and leaves the surviving fragments intact. Within a
- * frame the pool is append-only — a binary op leaks its operands' bytes,
- * which the pool cap bounds with a clean decline. */
+ * Bump-allocated and thrown away per walk, like the layout pool; the
+ * capture engine's free list would be machinery for nothing here. */
 
-static bool_t ppvRoom(ppvCtx_t *ctx, uint16_t n) {
-  if((uint32_t)ctx->poolUsed + n > PPV_POOL_BYTES) {
-    ppvDecline(ctx, PPV_D_POOL);
+static uint8_t ppvAlloc(ppvCtx_t *ctx, uint8_t kind) {
+  if(ctx->astUsed >= PPV_AST_NODES) {
+    ppvDecline(ctx, PPV_D_ARENA);
+    return PPV_NIL;
+  }
+  uint8_t n = ctx->astUsed++;
+  ppvAst_t *a = &ctx->ast[n];
+  a->kind    = kind;
+  a->item    = 0;
+  a->textOff = 0;
+  a->textLen = 0;
+  a->flags   = 0;
+  a->varOff  = 0;
+  a->varLen  = 0;
+  for(uint8_t i = 0; i < 4; i++) {
+    a->child[i] = PPV_NIL;
+  }
+  return n;
+}
+
+// leaf text goes in the pool; the node keeps an offset and a length
+static bool_t ppvIntern(ppvCtx_t *ctx, const char *bytes, uint16_t len,
+                        uint16_t *offOut) {
+  if((uint32_t)ctx->poolUsed + len > PPV_POOL_BYTES) {
+    ppvDecline(ctx, PPV_D_ARENA);
     return false;
   }
+  *offOut = ctx->poolUsed;
+  xcopy(ctx->pool + ctx->poolUsed, (void *)bytes, len);
+  ctx->poolUsed = (uint16_t)(ctx->poolUsed + len);
   return true;
 }
 
-static bool_t ppvAppend(ppvCtx_t *ctx, const char *bytes, uint16_t n) {
-  if(!ppvRoom(ctx, n)) {
-    return false;
+static uint8_t ppvLeaf(ppvCtx_t *ctx, uint8_t kind, const char *text, uint16_t len,
+                       uint8_t flags) {
+  uint16_t off = 0;
+  if(len > 0 && !ppvIntern(ctx, text, len, &off)) {
+    return PPV_NIL;
   }
-  xcopy(ctx->pool + ctx->poolUsed, (void *)bytes, n);
-  ctx->poolUsed = (uint16_t)(ctx->poolUsed + n);
-  return true;
+  uint8_t n = ppvAlloc(ctx, kind);
+  if(n != PPV_NIL) {
+    ctx->ast[n].textOff = off;
+    ctx->ast[n].textLen = (uint8_t)len;
+    ctx->ast[n].flags   = flags;
+  }
+  return n;
 }
 
-static bool_t ppvAppendStr(ppvCtx_t *ctx, const char *s) {
-  return ppvAppend(ctx, s, (uint16_t)strlen(s));
-}
-
-static bool_t ppvPush(ppvCtx_t *ctx, ppvStack_t *stk, uint16_t off, uint16_t len,
-                      uint8_t prec, uint8_t flags) {
-  if(len > PPV_FRAG_MAX) {
-    ppvDecline(ctx, PPV_D_FRAGMENT);
+static bool_t ppvPush(ppvCtx_t *ctx, ppvStack_t *stk, uint8_t node) {
+  if(node == PPV_NIL) {
+    ppvDecline(ctx, PPV_D_ARENA);
     return false;
   }
   if(stk->depth == PPV_STACK_SLOTS) {
     // a full stack drops its bottom, exactly as the hardware one does
     for(uint8_t i = 0; i + 1 < PPV_STACK_SLOTS; i++) {
-      stk->frag[i] = stk->frag[i + 1];
+      stk->ast[i] = stk->ast[i + 1];
     }
     stk->depth--;
   }
-  stk->frag[stk->depth].off   = off;
-  stk->frag[stk->depth].len   = len;
-  stk->frag[stk->depth].prec  = prec;
-  stk->frag[stk->depth].flags = flags;
-  stk->depth++;
+  stk->ast[stk->depth++] = node;
   return true;
 }
 
 // A lifting read (literal or recall) after ENTER overwrites X instead of
 // pushing — fnRecall consults FLAG_ASLIFT for exactly this, and ENTER
 // clears it (recall.c). The latch is one-shot.
-static bool_t ppvPushLifting(ppvCtx_t *ctx, ppvStack_t *stk, uint16_t off,
-                             uint16_t len, uint8_t prec, uint8_t flags) {
+static bool_t ppvPushLifting(ppvCtx_t *ctx, ppvStack_t *stk, uint8_t node) {
+  if(node == PPV_NIL) {
+    ppvDecline(ctx, PPV_D_ARENA);
+    return false;
+  }
   if(stk->liftDisabled && stk->depth > 0) {
     stk->liftDisabled = false;
-    if(len > PPV_FRAG_MAX) {
-      ppvDecline(ctx, PPV_D_FRAGMENT);
-      return false;
-    }
-    stk->frag[stk->depth - 1].off   = off;
-    stk->frag[stk->depth - 1].len   = len;
-    stk->frag[stk->depth - 1].prec  = prec;
-    stk->frag[stk->depth - 1].flags = flags;
+    stk->ast[stk->depth - 1] = node;
     return true;
   }
   stk->liftDisabled = false;
-  return ppvPush(ctx, stk, off, len, prec, flags);
+  return ppvPush(ctx, stk, node);
 }
 
-static bool_t ppvPop(ppvCtx_t *ctx, ppvStack_t *stk, ppvFrag_t *out) {
+static bool_t ppvPop(ppvCtx_t *ctx, ppvStack_t *stk, uint8_t *out) {
   if(stk->depth == 0) {
     // the program reads state its caller never provided; a seeded body
     // frame provides exactly the construct variable, so this is the
@@ -179,78 +203,49 @@ static bool_t ppvPop(ppvCtx_t *ctx, ppvStack_t *stk, ppvFrag_t *out) {
     ppvDecline(ctx, PPV_D_UNDERFLOW);
     return false;
   }
-  *out = stk->frag[--stk->depth];
+  *out = stk->ast[--stk->depth];
   return true;
 }
 
-/* Copy a fragment out, wrapping it in parentheses when the context binds
- * tighter than the fragment does. Left operands may keep an equal
- * precedence (the grammar is left-associative); right operands may not,
- * so a-(b+c) and a/(b·c) never flatten into something that computes
- * differently. */
-static bool_t ppvAppendOperand(ppvCtx_t *ctx, const ppvFrag_t *f, uint8_t level, bool_t rightSide) {
-  bool_t wrap = rightSide ? (f->prec <= level) : (f->prec < level);
-  if(wrap && !ppvAppendStr(ctx, "(")) {
-    return false;
-  }
-  if(!ppvAppend(ctx, ctx->pool + f->off, f->len)) {
-    return false;
-  }
-  if(wrap && !ppvAppendStr(ctx, ")")) {
-    return false;
-  }
-  return true;
+static bool_t ppvIsOpaque(const ppvCtx_t *ctx, uint8_t n) {
+  return n != PPV_NIL && (ctx->ast[n].flags & PPV_F_OPAQUE) != 0;
 }
 
-static bool_t ppvEmitBinary(ppvCtx_t *ctx, ppvStack_t *stk, const char *op, uint8_t level) {
-  ppvFrag_t b, a;
+static bool_t ppvOp2(ppvCtx_t *ctx, ppvStack_t *stk, uint16_t item) {
+  uint8_t b, a;
   if(!ppvPop(ctx, stk, &b) || !ppvPop(ctx, stk, &a)) {   // X is the RIGHT operand
     return false;
   }
-  if(((a.flags | b.flags) & PPV_F_OPAQUE) != 0) {
+  if(ppvIsOpaque(ctx, a) || ppvIsOpaque(ctx, b)) {
     ppvDecline(ctx, PPV_D_OPAQUE);
     return false;
   }
-  uint16_t off = ctx->poolUsed;
-  if(!ppvAppendOperand(ctx, &a, level, false)
-      || !ppvAppendStr(ctx, op)
-      || !ppvAppendOperand(ctx, &b, level, true)) {
+  uint8_t n = ppvAlloc(ctx, PPA_OP2);
+  if(n == PPV_NIL) {
     return false;
   }
-  return ppvPush(ctx, stk, off, (uint16_t)(ctx->poolUsed - off), level, 0);
+  ctx->ast[n].item     = item;
+  ctx->ast[n].child[0] = a;
+  ctx->ast[n].child[1] = b;
+  return ppvPush(ctx, stk, n);
 }
 
-/* pre/post wrap a single operand: 1/x, -x, x^2, sqrt(x). `bracketed`
- * says the pre/post pair ALREADY encloses the argument (the radical's
- * own parentheses) — asking for precedence brackets on top of those
- * yields a valid but doubled sqrt((x)). */
-static bool_t ppvEmitMonadic(ppvCtx_t *ctx, ppvStack_t *stk, const char *pre,
-                             const char *post, uint8_t argLevel, uint8_t resultPrec,
-                             bool_t bracketed) {
-  ppvFrag_t a;
+static bool_t ppvOp1(ppvCtx_t *ctx, ppvStack_t *stk, uint16_t item) {
+  uint8_t a;
   if(!ppvPop(ctx, stk, &a)) {
     return false;
   }
-  if((a.flags & PPV_F_OPAQUE) != 0) {
+  if(ppvIsOpaque(ctx, a)) {
     ppvDecline(ctx, PPV_D_OPAQUE);
     return false;
   }
-  uint16_t off = ctx->poolUsed;
-  if(!ppvAppendStr(ctx, pre)) {
+  uint8_t n = ppvAlloc(ctx, PPA_OP1);
+  if(n == PPV_NIL) {
     return false;
   }
-  if(bracketed) {
-    if(!ppvAppend(ctx, ctx->pool + a.off, a.len)) {
-      return false;
-    }
-  }
-  else if(!ppvAppendOperand(ctx, &a, argLevel, true)) {
-    return false;
-  }
-  if(!ppvAppendStr(ctx, post)) {
-    return false;
-  }
-  return ppvPush(ctx, stk, off, (uint16_t)(ctx->poolUsed - off), resultPrec, 0);
+  ctx->ast[n].item     = item;
+  ctx->ast[n].child[0] = a;
+  return ppvPush(ctx, stk, n);
 }
 
 
@@ -348,7 +343,7 @@ static bool_t ppvNameInList(const char list[][PPV_NAME_MAX], uint8_t n, const ch
 static bool_t ppvLiteral(ppvCtx_t *ctx, ppvStack_t *stk, const uint8_t *pa) {
   uint8_t type = pa[0];
   if(type != STRING_LONG_INTEGER && type != STRING_REAL34) {
-    return ppvPushLifting(ctx, stk, 0, 0, PPV_PREC_ATOM, PPV_F_OPAQUE);
+    return ppvPushLifting(ctx, stk, ppvLeaf(ctx, PPA_LIT, "", 0, PPV_F_OPAQUE));
   }
   getStringLabelOrVariableName((uint8_t *)(pa + 1));
   const char *t = tmpStringLabelOrVariableName;
@@ -359,8 +354,8 @@ static bool_t ppvLiteral(ppvCtx_t *ctx, ppvStack_t *stk, const uint8_t *pa) {
   bool_t exponent = false;
   for(uint16_t i = (t[0] == '-') ? 1 : 0; t[i] != 0; i++) {
     if(t[i] == 'e' || t[i] == 'E') {
-      exponent = true;   // legitimate, just not spellable: ppqNumber has
-      break;             // no exponent arm, so it becomes opaque
+      exponent = true;   // legitimate, just not spellable: the numeral
+      break;             // grammar has no exponent arm, so it goes opaque
     }
     if(!((t[i] >= '0' && t[i] <= '9') || t[i] == '.')) {
       ppvDecline(ctx, PPV_D_NUMERAL);
@@ -368,16 +363,10 @@ static bool_t ppvLiteral(ppvCtx_t *ctx, ppvStack_t *stk, const uint8_t *pa) {
     }
   }
   if(exponent) {
-    return ppvPushLifting(ctx, stk, 0, 0, PPV_PREC_ATOM, PPV_F_OPAQUE);
+    return ppvPushLifting(ctx, stk, ppvLeaf(ctx, PPA_LIT, "", 0, PPV_F_OPAQUE));
   }
-  uint16_t off = ctx->poolUsed, len = (uint16_t)strlen(t);
-  if(!ppvAppend(ctx, t, len)) {
-    return false;
-  }
-  // a negative numeral is an expr-level term: the grammar's primary arm
-  // has no sign, so it must parenthesize wherever it is used as one
-  return ppvPushLifting(ctx, stk, off, len,
-                        (t[0] == '-') ? PPV_PREC_ADD : PPV_PREC_ATOM, 0);
+  return ppvPushLifting(ctx, stk,
+                        ppvLeaf(ctx, PPA_LIT, t, (uint16_t)strlen(t), 0));
 }
 
 
@@ -391,7 +380,8 @@ static void ppvWalk(ppvCtx_t *ctx, uint16_t labelIdx, ppvStack_t *stk);
  * stack with it, a programmed sum delivers its counter through the
  * filled stack alone. The body's one result is handed back in
  * ctx->scratch, which survives the caller's pool rollback. */
-static bool_t ppvBody(ppvCtx_t *ctx, uint16_t bodyIdx, const char *var, bool_t synthetic) {
+static bool_t ppvBody(ppvCtx_t *ctx, uint16_t bodyIdx, const char *var,
+                      bool_t synthetic, uint8_t *out) {
   if(ctx->bindingCount >= PPV_MAX_DEPTH) {
     ppvDecline(ctx, PPV_D_DEPTH);
     return false;
@@ -400,15 +390,14 @@ static bool_t ppvBody(ppvCtx_t *ctx, uint16_t bodyIdx, const char *var, bool_t s
   ctx->bindingSynth[ctx->bindingCount] = synthetic;
   ctx->bindingCount++;
 
-  uint16_t voff = ctx->poolUsed, vlen = (uint16_t)strlen(var);
-  if(!ppvAppend(ctx, var, vlen)) {
-    return false;
-  }
   ppvStack_t sub;
   sub.depth        = 0;
   sub.liftDisabled = false;
   for(uint8_t i = 0; i < PPV_STACK_SLOTS; i++) {
-    if(!ppvPush(ctx, &sub, voff, vlen, PPV_PREC_ATOM, 0)) {
+    // one shared VAR node on every level: the seeding is about what the
+    // program can READ, and it reads the same variable from all of them
+    uint8_t v = ppvLeaf(ctx, PPA_VAR, var, (uint16_t)strlen(var), 0);
+    if(!ppvPush(ctx, &sub, v)) {
       return false;
     }
   }
@@ -416,18 +405,41 @@ static bool_t ppvBody(ppvCtx_t *ctx, uint16_t bodyIdx, const char *var, bool_t s
   if(ctx->failed) {
     return false;
   }
-  ppvFrag_t body;
-  if(!ppvPop(ctx, &sub, &body)) {
+  if(!ppvPop(ctx, &sub, out)) {
     return false;
   }
-  if((body.flags & PPV_F_OPAQUE) != 0) {
+  if(ppvIsOpaque(ctx, *out)) {
     ppvDecline(ctx, PPV_D_OPAQUE);
     return false;
   }
-  xcopy(ctx->scratch, ctx->pool + body.off, body.len);
-  ctx->scratch[body.len] = 0;
   ctx->bindingCount--;
   return true;
+}
+
+// Build the construct node once its parts are known. The variable name
+// is interned alongside the leaves; the layout back end turns it into
+// the runs each shape needs.
+static bool_t ppvConstruct(ppvCtx_t *ctx, ppvStack_t *stk, uint16_t item,
+                           const char *var, uint8_t body, uint8_t from,
+                           uint8_t to, uint8_t step, bool_t second) {
+  uint16_t voff = 0;
+  uint16_t vlen = (uint16_t)strlen(var);
+  if(!ppvIntern(ctx, var, vlen, &voff)) {
+    return false;
+  }
+  uint8_t n = ppvAlloc(ctx, PPA_CONSTRUCT);
+  if(n == PPV_NIL) {
+    return false;
+  }
+  ctx->ast[n].item     = item;
+  ctx->ast[n].child[0] = body;
+  ctx->ast[n].child[1] = from;
+  ctx->ast[n].child[2] = to;
+  ctx->ast[n].child[3] = step;
+  ctx->ast[n].varOff   = (uint8_t)voff;
+  ctx->ast[n].varLen   = (uint8_t)vlen;
+  ctx->ast[n].flags    = second ? PPV_F_SECOND : 0;
+  return ppvPush(ctx, stk, n);
 }
 
 // INTEG: X = upper limit, Y = lower (fnIntegrateYX); the integrand is
@@ -444,11 +456,11 @@ static bool_t ppvIntegral(ppvCtx_t *ctx, ppvStack_t *stk, const uint8_t *pa) {
     return false;
   }
   uint16_t bodyIdx = ctx->latchedInt;
-  ppvFrag_t upper, lower;
+  uint8_t upper, lower;
   if(!ppvPop(ctx, stk, &upper) || !ppvPop(ctx, stk, &lower)) {
     return false;
   }
-  if(((upper.flags | lower.flags) & PPV_F_OPAQUE) != 0) {
+  if(ppvIsOpaque(ctx, upper) || ppvIsOpaque(ctx, lower)) {
     ppvDecline(ctx, PPV_D_OPAQUE);
     return false;
   }
@@ -456,36 +468,28 @@ static bool_t ppvIntegral(ppvCtx_t *ctx, ppvStack_t *stk, const uint8_t *pa) {
     ppvDecline(ctx, PPV_D_COLLISION);   // an inner d-variable shadowing an outer one
     return false;
   }
-  uint16_t mark = ctx->poolUsed;
-  if(!ppvBody(ctx, bodyIdx, v, false)) {
+  uint8_t body;
+  if(!ppvBody(ctx, bodyIdx, v, false, &body)) {
     return false;
   }
-  ctx->poolUsed = mark;   // the body text lives in scratch now
-  uint16_t off = ctx->poolUsed;
-  if(!ppvAppendStr(ctx, "INTEG(") || !ppvAppendStr(ctx, ctx->scratch)
-      || !ppvAppendStr(ctx, ";") || !ppvAppendStr(ctx, v)
-      || !ppvAppendStr(ctx, ";") || !ppvAppend(ctx, ctx->pool + lower.off, lower.len)
-      || !ppvAppendStr(ctx, ";") || !ppvAppend(ctx, ctx->pool + upper.off, upper.len)
-      || !ppvAppendStr(ctx, ")")) {
-    return false;
-  }
-  return ppvPush(ctx, stk, off, (uint16_t)(ctx->poolUsed - off), PPV_PREC_ATOM, 0);
+  return ppvConstruct(ctx, stk, ITM_INTEGRAL_YX, v, body, lower, upper,
+                      PPV_NIL, false);
 }
 
 // SUM/PROD: X = step, Y = to, Z = from (_programmableSumProd). The
 // counter has no name in RPN — it arrives in a filled stack — so the
-// text has to invent one, and any body that recalls a variable spelled
+// tree has to invent one, and any body that recalls a variable spelled
 // the same way declines rather than let the invented name shadow it.
 static bool_t ppvSumProd(ppvCtx_t *ctx, ppvStack_t *stk, const uint8_t *pa, bool_t isSum) {
   uint16_t bodyIdx;
   if(!ppvLabelIndex(ctx, pa, &bodyIdx)) {
     return false;
   }
-  ppvFrag_t stepF, toF, fromF;
-  if(!ppvPop(ctx, stk, &stepF) || !ppvPop(ctx, stk, &toF) || !ppvPop(ctx, stk, &fromF)) {
+  uint8_t stepN, toN, fromN;
+  if(!ppvPop(ctx, stk, &stepN) || !ppvPop(ctx, stk, &toN) || !ppvPop(ctx, stk, &fromN)) {
     return false;
   }
-  if(((stepF.flags | toF.flags | fromF.flags) & PPV_F_OPAQUE) != 0) {
+  if(ppvIsOpaque(ctx, stepN) || ppvIsOpaque(ctx, toN) || ppvIsOpaque(ctx, fromN)) {
     ppvDecline(ctx, PPV_D_OPAQUE);
     return false;
   }
@@ -501,30 +505,16 @@ static bool_t ppvSumProd(ppvCtx_t *ctx, ppvStack_t *stk, const uint8_t *pa, bool
     return false;
   }
   // a unit step is the evaluator's default and draws without the ,delta
-  // tail: omitting it gives the cleaner picture and identical arithmetic
-  bool_t unitStep = (stepF.len == 1 && ctx->pool[stepF.off] == '1');
-
-  uint16_t mark = ctx->poolUsed;
-  if(!ppvBody(ctx, bodyIdx, v, true)) {
+  // tail: dropping it gives the cleaner picture and identical arithmetic
+  const ppvAst_t *st = &ctx->ast[stepN];
+  bool_t unitStep = (st->kind == PPA_LIT && st->textLen == 1
+                     && ctx->pool[st->textOff] == '1');
+  uint8_t body;
+  if(!ppvBody(ctx, bodyIdx, v, true, &body)) {
     return false;
   }
-  ctx->poolUsed = mark;
-  uint16_t off = ctx->poolUsed;
-  if(!ppvAppendStr(ctx, isSum ? "SUM(" : "PROD(") || !ppvAppendStr(ctx, ctx->scratch)
-      || !ppvAppendStr(ctx, ";") || !ppvAppendStr(ctx, v)
-      || !ppvAppendStr(ctx, ";") || !ppvAppend(ctx, ctx->pool + fromF.off, fromF.len)
-      || !ppvAppendStr(ctx, ";") || !ppvAppend(ctx, ctx->pool + toF.off, toF.len)) {
-    return false;
-  }
-  if(!unitStep) {
-    if(!ppvAppendStr(ctx, ";") || !ppvAppend(ctx, ctx->pool + stepF.off, stepF.len)) {
-      return false;
-    }
-  }
-  if(!ppvAppendStr(ctx, ")")) {
-    return false;
-  }
-  return ppvPush(ctx, stk, off, (uint16_t)(ctx->poolUsed - off), PPV_PREC_ATOM, 0);
+  return ppvConstruct(ctx, stk, isSum ? ITM_SIGMAn : ITM_PIn, v, body,
+                      fromN, toN, unitStep ? PPV_NIL : stepN, false);
 }
 
 
@@ -575,8 +565,9 @@ static void ppvStep(ppvCtx_t *ctx, ppvStack_t *stk, uint16_t op, const uint8_t *
         ppvDecline(ctx, PPV_D_UNDERFLOW);
         return;
       }
-      ppvFrag_t top = stk->frag[stk->depth - 1];
-      if(ppvPush(ctx, stk, top.off, top.len, top.prec, top.flags)) {
+      // the dup shares the operand node; the tree is a DAG here and
+      // both back ends only ever read it
+      if(ppvPush(ctx, stk, stk->ast[stk->depth - 1])) {
         stk->liftDisabled = true;   // the next lifting read overwrites X
       }
       return;
@@ -587,14 +578,14 @@ static void ppvStep(ppvCtx_t *ctx, ppvStack_t *stk, uint16_t op, const uint8_t *
         ppvDecline(ctx, PPV_D_UNDERFLOW);
         return;
       }
-      ppvFrag_t t = stk->frag[stk->depth - 1];
-      stk->frag[stk->depth - 1] = stk->frag[stk->depth - 2];
-      stk->frag[stk->depth - 2] = t;
+      uint8_t t = stk->ast[stk->depth - 1];
+      stk->ast[stk->depth - 1] = stk->ast[stk->depth - 2];
+      stk->ast[stk->depth - 2] = t;
       break;
     }
 
     case ITM_DROP: {
-      ppvFrag_t d;
+      uint8_t d;
       ppvPop(ctx, stk, &d);
       break;
     }
@@ -604,7 +595,7 @@ static void ppvStep(ppvCtx_t *ctx, ppvStack_t *stk, uint16_t op, const uint8_t *
         ppvDecline(ctx, PPV_D_UNDERFLOW);
         return;
       }
-      stk->frag[stk->depth - 2] = stk->frag[stk->depth - 1];
+      stk->ast[stk->depth - 2] = stk->ast[stk->depth - 1];
       stk->depth--;
       break;
     }
@@ -614,29 +605,22 @@ static void ppvStep(ppvCtx_t *ctx, ppvStack_t *stk, uint16_t op, const uint8_t *
         ppvDecline(ctx, PPV_D_UNDERFLOW);
         return;
       }
-      ppvFrag_t t = stk->frag[stk->depth - 1];
+      uint8_t t = stk->ast[stk->depth - 1];
       for(uint8_t i = 0; i < PPV_STACK_SLOTS; i++) {
-        stk->frag[i] = t;
+        stk->ast[i] = t;
       }
       stk->depth = PPV_STACK_SLOTS;
       break;
     }
 
-    case ITM_ADD:  ppvEmitBinary(ctx, stk, "+",       PPV_PREC_ADD); break;
-    case ITM_SUB:  ppvEmitBinary(ctx, stk, "-",       PPV_PREC_ADD); break;
-    // multiplication typesets as the cross the evaluator and the renderer
-    // BOTH accept; '*' is accepted by neither
-    case ITM_MULT: ppvEmitBinary(ctx, stk, STD_CROSS, PPV_PREC_MUL); break;
-    case ITM_DIV:  ppvEmitBinary(ctx, stk, "/",       PPV_PREC_MUL); break;
+    case ITM_ADD: case ITM_SUB: case ITM_MULT: case ITM_DIV:
+      ppvOp2(ctx, stk, op);
+      break;
 
-    case ITM_SQUARE:      ppvEmitMonadic(ctx, stk, "", "^2", PPV_PREC_POW, PPV_PREC_POW, false); break;
-    case ITM_CUBE:        ppvEmitMonadic(ctx, stk, "", "^3", PPV_PREC_POW, PPV_PREC_POW, false); break;
-    case ITM_SQUAREROOTX: ppvEmitMonadic(ctx, stk, "\xa2\x1a" "(", ")", 0, PPV_PREC_ATOM, true);  break;
-    case ITM_1ONX:        ppvEmitMonadic(ctx, stk, "1/", "", PPV_PREC_MUL, PPV_PREC_MUL, false); break;
-    // negation binds looser than x and /, tighter than + and -: the
-    // grammar's leading sign takes a whole TERM, so -a/b needs no
-    // brackets while -(a+b) does
-    case ITM_CHS:         ppvEmitMonadic(ctx, stk, "-",  "", PPV_PREC_ADD, PPV_PREC_ADD, false); break;
+    case ITM_SQUARE: case ITM_CUBE: case ITM_SQUAREROOTX:
+    case ITM_1ONX:   case ITM_CHS:
+      ppvOp1(ctx, stk, op);
+      break;
 
     case ITM_LITERAL:
       ppvLiteral(ctx, stk, pa);
@@ -660,10 +644,8 @@ static void ppvStep(ppvCtx_t *ctx, ppvStack_t *stk, uint16_t op, const uint8_t *
           return;
         }
       }
-      uint16_t off = ctx->poolUsed, len = (uint16_t)strlen(nm);
-      if(ppvAppend(ctx, nm, len)) {
-        ppvPushLifting(ctx, stk, off, len, PPV_PREC_ATOM, 0);
-      }
+      ppvPushLifting(ctx, stk,
+                     ppvLeaf(ctx, PPA_VAR, nm, (uint16_t)strlen(nm), 0));
       return;
     }
 
@@ -716,9 +698,7 @@ static void ppvStep(ppvCtx_t *ctx, ppvStack_t *stk, uint16_t op, const uint8_t *
     default: {
       char fname[PPV_NAME_MAX];
       if(ppvMonadicName(op, fname)) {
-        char pre[PPV_NAME_MAX + 2];
-        snprintf(pre, sizeof(pre), "%s(", fname);
-        ppvEmitMonadic(ctx, stk, pre, ")", 0, PPV_PREC_ATOM, true);
+        ppvOp1(ctx, stk, op);   // the NAME comes from the item at build time
         break;
       }
       ppvDecline(ctx, PPV_D_OPCODE);
@@ -767,41 +747,212 @@ static void ppvWalk(ppvCtx_t *ctx, uint16_t labelIdx, ppvStack_t *stk) {
   ctx->callDepth--;
 }
 
-bool_t ppvTranspile(uint16_t labelIdx, char *out, uint16_t cap,
-                    uint8_t *reasonOut, uint16_t *stepOut) {
-  ppvCtx_t ctx;
-  ctx.poolUsed      = 0;
-  ctx.latchedInt    = 0xFFFF;
-  ctx.stepsWalked   = 0;
-  ctx.declineStep   = 0;
-  ctx.callDepth     = 0;
-  ctx.declineReason = 0;
-  ctx.failed        = false;
-  ctx.dirtyCount    = 0;
-  ctx.bindingCount  = 0;
+/* ==== the text back end ================================================
+ * Serializes the AST to equation-language text. This is what the pins
+ * assert, and (until PP18's next commit) what the drawing path parses.
+ *
+ * Precedence lives here ONLY because text has to carry it in brackets.
+ * The lattice mirrors the grammar's own nesting: a left operand keeps an
+ * equal precedence (the grammar is left-associative), a right operand
+ * does not, so a-(b+c) never flattens into a-b+c. */
+
+enum { PPV_PREC_ADD = 0, PPV_PREC_MUL = 1, PPV_PREC_POW = 2, PPV_PREC_ATOM = 3 };
+
+typedef struct {
+  char    *buf;
+  uint16_t cap, len;
+  bool_t   ovf;
+} ppvOut_t;
+
+static void ppvOutRaw(ppvOut_t *o, const char *b, uint16_t n) {
+  if((uint32_t)o->len + n + 1 > o->cap) {
+    o->ovf = true;
+    return;
+  }
+  xcopy(o->buf + o->len, (void *)b, n);
+  o->len = (uint16_t)(o->len + n);
+  o->buf[o->len] = 0;
+}
+
+static void ppvOutStr(ppvOut_t *o, const char *s) {
+  ppvOutRaw(o, s, (uint16_t)strlen(s));
+}
+
+static uint8_t ppvAstPrec(const ppvCtx_t *ctx, uint8_t n) {
+  const ppvAst_t *a = &ctx->ast[n];
+  switch(a->kind) {
+    case PPA_LIT:
+      // a negative numeral is an expr-level term: the grammar's primary
+      // arm has no sign, so it brackets wherever it is used as one
+      return (a->textLen > 0 && ctx->pool[a->textOff] == '-')
+               ? PPV_PREC_ADD : PPV_PREC_ATOM;
+    case PPA_OP2:
+      return (a->item == ITM_MULT || a->item == ITM_DIV)
+               ? PPV_PREC_MUL : PPV_PREC_ADD;
+    case PPA_OP1:
+      switch(a->item) {
+        case ITM_SQUARE: case ITM_CUBE: return PPV_PREC_POW;
+        case ITM_1ONX:                  return PPV_PREC_MUL;
+        case ITM_CHS:                   return PPV_PREC_ADD;
+        default:                        return PPV_PREC_ATOM;
+      }
+    default:
+      return PPV_PREC_ATOM;   // VAR, CONSTRUCT, and the radical/call forms
+  }
+}
+
+static void ppvSerialize(const ppvCtx_t *ctx, uint8_t n, ppvOut_t *o);
+
+static void ppvOperand(const ppvCtx_t *ctx, uint8_t n, ppvOut_t *o,
+                       uint8_t level, bool_t rightSide) {
+  uint8_t p = ppvAstPrec(ctx, n);
+  bool_t wrap = rightSide ? (p <= level) : (p < level);
+  if(wrap) {
+    ppvOutStr(o, "(");
+  }
+  ppvSerialize(ctx, n, o);
+  if(wrap) {
+    ppvOutStr(o, ")");
+  }
+}
+
+static void ppvSerialize(const ppvCtx_t *ctx, uint8_t n, ppvOut_t *o) {
+  if(n == PPV_NIL) {
+    o->ovf = true;
+    return;
+  }
+  const ppvAst_t *a = &ctx->ast[n];
+  switch(a->kind) {
+    case PPA_LIT:
+    case PPA_VAR:
+      ppvOutRaw(o, ctx->pool + a->textOff, a->textLen);
+      return;
+
+    case PPA_OP2: {
+      uint8_t level = (a->item == ITM_MULT || a->item == ITM_DIV)
+                        ? PPV_PREC_MUL : PPV_PREC_ADD;
+      // multiplication is the cross the evaluator and the renderer BOTH
+      // accept; '*' is accepted by neither
+      const char *sym = (a->item == ITM_ADD)  ? "+"
+                      : (a->item == ITM_SUB)  ? "-"
+                      : (a->item == ITM_MULT) ? STD_CROSS : "/";
+      ppvOperand(ctx, a->child[0], o, level, false);
+      ppvOutStr(o, sym);
+      ppvOperand(ctx, a->child[1], o, level, true);
+      return;
+    }
+
+    case PPA_OP1:
+      switch(a->item) {
+        case ITM_SQUARE:
+          ppvOperand(ctx, a->child[0], o, PPV_PREC_POW, true);
+          ppvOutStr(o, "^2");
+          return;
+        case ITM_CUBE:
+          ppvOperand(ctx, a->child[0], o, PPV_PREC_POW, true);
+          ppvOutStr(o, "^3");
+          return;
+        case ITM_SQUAREROOTX:
+          // the radical brings its own parentheses: asking for
+          // precedence brackets on top would give sqrt((x))
+          ppvOutStr(o, "\xa2\x1a" "(");
+          ppvSerialize(ctx, a->child[0], o);
+          ppvOutStr(o, ")");
+          return;
+        case ITM_1ONX:
+          ppvOutStr(o, "1/");
+          ppvOperand(ctx, a->child[0], o, PPV_PREC_MUL, true);
+          return;
+        case ITM_CHS:
+          // negation binds looser than x and /, tighter than + and -:
+          // the grammar's leading sign takes a whole TERM, so -a/b needs
+          // no brackets while -(a+b) does
+          ppvOutStr(o, "-");
+          ppvOperand(ctx, a->child[0], o, PPV_PREC_ADD, true);
+          return;
+        default: {
+          char fname[PPV_NAME_MAX];
+          if(!ppvMonadicName(a->item, fname)) {
+            o->ovf = true;
+            return;
+          }
+          ppvOutStr(o, fname);
+          ppvOutStr(o, "(");
+          ppvSerialize(ctx, a->child[0], o);
+          ppvOutStr(o, ")");
+          return;
+        }
+      }
+
+    case PPA_CONSTRUCT:
+      ppvOutStr(o, (a->item == ITM_INTEGRAL_YX) ? "INTEG("
+                 : (a->item == ITM_SIGMAn)      ? "SUM(" : "PROD(");
+      ppvSerialize(ctx, a->child[0], o);
+      ppvOutStr(o, ";");
+      ppvOutRaw(o, ctx->pool + a->varOff, a->varLen);
+      ppvOutStr(o, ";");
+      ppvSerialize(ctx, a->child[1], o);
+      ppvOutStr(o, ";");
+      ppvSerialize(ctx, a->child[2], o);
+      if(a->child[3] != PPV_NIL) {
+        ppvOutStr(o, ";");
+        ppvSerialize(ctx, a->child[3], o);
+      }
+      ppvOutStr(o, ")");
+      return;
+
+    default:
+      o->ovf = true;
+      return;
+  }
+}
+
+static uint8_t ppvRun(ppvCtx_t *ctx, uint16_t labelIdx) {
+  ctx->poolUsed      = 0;
+  ctx->astUsed       = 0;
+  ctx->latchedInt    = 0xFFFF;
+  ctx->stepsWalked   = 0;
+  ctx->declineStep   = 0;
+  ctx->callDepth     = 0;
+  ctx->declineReason = 0;
+  ctx->failed        = false;
+  ctx->dirtyCount    = 0;
+  ctx->bindingCount  = 0;
 
   ppvStack_t stk;
   stk.depth        = 0;
   stk.liftDisabled = false;
 
-  ppvWalk(&ctx, labelIdx, &stk);
+  ppvWalk(ctx, labelIdx, &stk);
+  if(ctx->failed) {
+    return PPV_NIL;
+  }
+  if(stk.depth == 0) {
+    ppvDecline(ctx, PPV_D_EMPTY);
+    return PPV_NIL;
+  }
+  uint8_t root = stk.ast[stk.depth - 1];
+  if(ppvIsOpaque(ctx, root)) {
+    ppvDecline(ctx, PPV_D_OPAQUE);
+    return PPV_NIL;
+  }
+  return root;
+}
 
-  if(!ctx.failed) {
-    if(stk.depth == 0) {
-      ppvDecline(&ctx, PPV_D_EMPTY);
-    }
-    else {
-      ppvFrag_t r = stk.frag[stk.depth - 1];
-      if((r.flags & PPV_F_OPAQUE) != 0) {
-        ppvDecline(&ctx, PPV_D_OPAQUE);
-      }
-      else if((uint32_t)r.len + 1 > cap) {
-        ppvDecline(&ctx, PPV_D_FRAGMENT);
-      }
-      else {
-        xcopy(out, ctx.pool + r.off, r.len);
-        out[r.len] = 0;
-      }
+bool_t ppvTranspile(uint16_t labelIdx, char *out, uint16_t cap,
+                    uint8_t *reasonOut, uint16_t *stepOut) {
+  ppvCtx_t ctx;
+  uint8_t root = ppvRun(&ctx, labelIdx);
+  if(root != PPV_NIL) {
+    ppvOut_t o;
+    o.buf = out;
+    o.cap = cap;
+    o.len = 0;
+    o.ovf = false;
+    out[0] = 0;
+    ppvSerialize(&ctx, root, &o);
+    if(o.ovf) {
+      ppvDecline(&ctx, PPV_D_FRAGMENT);
     }
   }
   if(reasonOut != NULL) {
