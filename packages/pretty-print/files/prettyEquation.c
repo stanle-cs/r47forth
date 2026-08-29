@@ -131,6 +131,27 @@ static uint8_t ppqName(ppqCtx_t *c, uint8_t font) {
   return ppNewRun(c->s + start, (uint16_t)(c->pos - start), font);
 }
 
+/* AUDIT PP18R3-3: a big operator used as an OPERAND needs brackets, and
+ * this parser is the THIRD producer of that shape — the walker
+ * (PP18-4) and the capture engine (R2-2) were fixed and this one was
+ * not, because there is no precedence value anywhere in ppqParse to
+ * correct. SUM(X;X;1;3)^2 drew the picture of 14 for an equation EQCALC
+ * returns 36. The body extends to the right of the stroke, so anything
+ * beside it binds into the body; the node KIND is enough to know. */
+static uint8_t ppqScopeOperand(ppqCtx_t *c, uint8_t n, uint8_t font) {
+  const ppNode_t *nd = ppNodeAt(n);
+  if(n == PP_NONE || nd == NULL || nd->kind != PP_BIGOP) {
+    return n;
+  }
+  uint8_t p = ppNewBox(PP_PAREN, font);
+  if(p == PP_NONE) {
+    c->failed = true;
+    return PP_NONE;
+  }
+  ppAppendChild(p, n);
+  return p;
+}
+
 uint8_t ppqUnwrapParen(uint8_t n) {
   const ppNode_t *nd = ppNodeAt(n);
   if(nd != NULL && nd->kind == PP_PAREN) {
@@ -575,6 +596,10 @@ static uint8_t ppqFactor(ppqCtx_t *c, uint8_t font, uint8_t tinyF) {
         c->failed = true;
         return PP_NONE;
       }
+      n = ppqScopeOperand(c, n, font);
+      if(n == PP_NONE) {
+        return PP_NONE;
+      }
       ppAppendChild(sup, n);
       ppAppendChild(sup, ppqUnwrapParen(exp));   // the raise scopes
       c->fracSeen = true;
@@ -591,6 +616,10 @@ static uint8_t ppqFactor(ppqCtx_t *c, uint8_t font, uint8_t tinyF) {
     uint8_t sup = ppNewRun(c->s + start, (uint16_t)(c->pos - start), font);
     if(box == PP_NONE || sup == PP_NONE) {
       c->failed = true;
+      return PP_NONE;
+    }
+    n = ppqScopeOperand(c, n, font);
+    if(n == PP_NONE) {
       return PP_NONE;
     }
     ppAppendChild(box, n);
@@ -647,6 +676,10 @@ static uint8_t ppqTerm(ppqCtx_t *c, uint8_t font, uint8_t tinyF) {
       uint8_t opRun = ppNewRun(STD_DOT, 2, font);
       if(box == PP_NONE || opRun == PP_NONE) {
         c->failed = true;
+        return PP_NONE;
+      }
+      n = ppqScopeOperand(c, n, font);
+      if(n == PP_NONE) {
         return PP_NONE;
       }
       ppAppendChild(box, n);

@@ -289,10 +289,14 @@ after restore.
 | MUT-124 | `varOff` back to `uint8_t` (PP18-7) | V70 |
 | MUT-125 | the counter checked only against enclosing constructs (PP18-9) | V71 |
 | MUT-126 | the lift latch survives XEQ again (PP18-5) | V72 |
-| MUT-127 | R2-1's regression restored: an MVAR-less body declines again | V63, V65 |
-| MUT-128 | `ppfBigop` reports ATOM again (R2-2, the neighbour) | B9 |
+| MUT-127 | PP18R2-1's regression restored: an MVAR-less body declines again | V63, V65 |
+| MUT-128 | `ppfBigop` reports ATOM again (PP18R2-2, the neighbour) | B9 |
 | MUT-129 | body seeding allocates one node per level again (PP18-8) | V77 |
-| MUT-130 | a seeded (bound) read counts as a collision (R2-4) | V77 |
+| MUT-130 | a seeded (bound) read counts as a collision (PP18R2-4) | V77 |
+| MUT-131 | an invented derivative name registered as real (PP18R3-1) | V78 |
+| MUT-132 | the mirror picks the first DRAWABLE declaration (PP18R3-2) | V79 |
+| MUT-133 | the EQN parser leaves a construct operand unbracketed (PP18R3-3) | EQ35 |
+| MUT-134 | the limit subtrees not scanned when inventing (PP18R3-5) | V80 |
 | MUT-108 | a stacked power's base left unbracketed | V51 |
 | MUT-109 | a construct body no longer scoped by precedence | V57 |
 | MUT-110 | the derivative reads PGMINT's latch when PGMDRV has none | V55 |
@@ -529,7 +533,7 @@ layout pass. `ppvTranspile` is the seam the string pins read through.
 
 AUDIT PP18-16 corrected this section, which used to call the string "the
 walker's whole product" and would have sent the next reader to the wrong
-oracle — and AUDIT R2-8 caught the correction being pasted in FRONT of
+oracle — and AUDIT PP18R2-8 caught the correction being pasted in FRONT of
 the sentence it was replacing, so the file asserted both readings at
 once. **A correction that does not delete what it corrects is not a
 correction**; it leaves the reader to guess which paragraph is current,
@@ -565,19 +569,38 @@ a hand-built array the walker might read differently from the calculator.
 | V42 | a monadic whose catalog spelling is glyphs (`e^x`) declines rather than emitting text that would neither draw nor compute |
 | V46-V51, V56, V57 | **the node tree the product paints** (`ppfTestExpect`), not the serialized text. V49 and V51 are the two places the node form differs from the text form: a fraction bar SCOPES so `a/(b+c)` needs no parentheses, and a stacked power DOES need its base bracketed. V57 pins that an additive construct body is still scoped — the parser sniffs runs for a `+`/`-`, the tree asks the precedence, and they must agree |
 | V52-V55 | derivatives: the point off the stack, the program from PGMDRV, the order from which item was used, and — V55 — that PGMINT's latch does NOT serve `f'`, because upstream keeps those slots apart on purpose |
-| V65 | **the differential oracle**, and the pin this battery most needed. Runs each program, evaluates the walker's OWN drawing, and requires them to agree — no expected string appears in it. It is the only pin here that fails because the picture MEANS the wrong thing rather than because it reads differently from what I typed, which is the class both PP18-1 and R2-1 belonged to. AUDIT R2-5 found it recorded as delivered in three places and never written: it was lost when a mutation runner reverted the tree, and nothing but prose referred to it, so nothing noticed |
+| V65 | **the differential oracle**, and the pin this battery most needed. Runs each program, evaluates the walker's OWN drawing, and requires them to agree — no expected string appears in it. It is the only pin here that fails because the picture MEANS the wrong thing rather than because it reads differently from what I typed, which is the class both PP18-1 and PP18R2-1 belonged to. AUDIT PP18R2-5 found it recorded as delivered in three places and never written: it was lost when a mutation runner reverted the tree, and nothing but prose referred to it, so nothing noticed |
 | V75, V76, V77 | the two lift-latch arms PP18-5 fixed but did not pin, and five DISJOINT sums that must all be free to use `n` |
 | B9 | the CAPTURE engine's big operator as an operand — the neighbour PP18-4 left behind, reached by every PSHOW and PHIST of a programmed sum |
 | V58 | **the REAL appnote-22 file** (`docs/appnotes/sources/AN0022/func.p47`) loaded through the official loader and transpiled. Every other fixture is one I wrote and hand-encoded, so they are a statement about my encoding as much as about the walker; this is Jaymos's own file. Its own driver, `prettyTestReal`, registered before `graphs_cov` — see below |
 | V44 | an emitted name COMPUTES (`LN(1)+2` = 2) — the round-trip through the evaluator's own resolution, checked end to end |
 | V24-V26 | the four monadics with a grammar spelling. **V24 and V26 were both written after a mutation survived**: `√` bracketed its argument twice (its `pre` already emits a parenthesis), and `1/x`'s argument level is only distinguishable from a looser one by a SAME-level operand — `1/a×b` is not `1/(a×b)` |
 
+**Three rounds, and each round's worst finding came from the previous
+round's fixes.** Round 1 found the shipped code's defects; round 2's two
+worst were repairs made in round 1; round 3's two worst were repairs made
+in round 2 — an invented derivative name registered as real, so the
+shadow guard that makes invention safe never armed, and a mirror that
+started picking the first DRAWABLE declaration instead of the first and
+so stopped mirroring the walk it is named after. **The rate has not
+fallen, exactly as CODE_AUDIT.md says it does not.** Neither was
+reachable through the pins that existed; both were reachable through
+V65's shape, and V65's five programs missed both by one letter.
+
+**The big-operator-as-operand class had THREE producers, not two.** The
+walker (PP18-4), the capture engine (PP18R2-2) and the EQN parser
+(PP18R3-3). Each was found only when something forced a look at that
+component: the walker by a wrong picture, the capture engine by asking
+what a fix did to its neighbours, and the parser by asking the same
+question one round later. A class fixed at the site where it was noticed
+is a class fixed once.
+
 **A fix's own regression, and the pin that would have caught it for
 free.** PP18-1's fix declined every derivative over a body declaring no
 `MVAR`, on the reasoning that upstream varies nothing there. It varies
 plenty: `fnFillStack` is unconditional and only the `STO` is guarded, so
 the ordinary stack-consuming RPN body differentiates correctly and the
-refusal was a regression against PP17 (R2-1). What makes this worth
+refusal was a regression against PP17 (PP18R2-1). What makes this worth
 recording is that **V65 catches it in one line and V65 was already
 written down as done** — it had been lost to a mutation runner's
 `git checkout` and only prose referred to it, so nothing failed. A pin

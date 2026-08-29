@@ -2,6 +2,54 @@
 
 Non-normative amendment trail. DESIGN.md is authoritative.
 
+## 2026-08-28 — PP18 audit round 3: pin vacuity, and a class with three producers
+
+Round 3 took round 2's fixes as its subject, on the axis neither earlier
+round had asked: (a) which pins would still pass if the behaviour they
+claim to test were deleted, and (b) round 2 had changed a SHIPPED
+surface — `ppfBigop` — to fix a defect found in a different component,
+so was that change right everywhere? Seven confirmed, four refuted.
+
+**Both worst findings were round 2's repairs.** `ppvDerivative` passed
+the INVENTED name to `ppvBody` with `synthetic = false`, so the shadow
+guard that makes invention safe never armed for a derivative and a body
+recalling a real `n` was drawn as the counter — the exact confusion V6
+and V71 forbid for sums, reintroduced at the one caller that did not say
+so. And round 2's own PP18R2-3 repair had added drawability as a
+conjunct to the `first` capture, so the mirror began picking the first
+DRAWABLE declaration instead of the first: it stopped mirroring the walk
+it is named after, and the picture named a variable upstream never
+varies. Drawability is a property of the name we END UP with, judged
+once, at the end.
+
+**That is three rounds in which the worst finding came from the previous
+round's fixes**, and the rate has not fallen — which is what
+CODE_AUDIT.md says happens and why the exit criterion refuses to close
+on a round containing fixes.
+
+**Axis (b) found the class had THREE producers.** The walker (PP18-4),
+the capture engine (PP18R2-2) and the EQN parser (PP18R3-3) all draw a
+big operator as an operand, and the parser has no precedence value
+anywhere to correct, which is why the one-line repair could not reach
+it: `SUM(X;X;1;3)^2` drew the picture of 14 for an equation EQCALC
+returns 36. There the node KIND decides. DESIGN-HISTORY's own claim of
+"two sites" was wrong and is corrected above. **A class fixed at the
+site where it was noticed is a class fixed once.**
+
+**Axis (a) verdict, and it is not the comfortable one.** No individual
+pin was vacuous — every deletion was named and checked. The BATTERY was:
+V65's five programs miss both of this round's regressions by one letter.
+A battery of non-vacuous pins can still be a battery that tests the
+wrong five things.
+
+Also fixed: a construct nested in another construct's LIMIT could be
+given the same counter name (PP18R2-4 was right that a closed sibling is
+reusable and wrong to stop looking at constructs at all — the
+distinction is "about to be drawn inside me", not "already built"); the
+mirror's name-length bound; and two namespace collisions the wave
+introduced — a second pin named `B9`, and three audit tags reused from
+an earlier round, now `PP18R2-*`.
+
 ## 2026-08-28 — PP18 audit round 2: the fixes audited, and one was a regression
 
 Round 2 took the FIX COMMITS as its subject, with the question axis
@@ -11,14 +59,16 @@ the fixes ADDED refusals — are those honest? Eight confirmed, four
 refuted.
 
 **Axis (a) answered clean and mechanically: the neighbours were not
-disturbed — one was left behind.** `ppfBigop`, the capture engine's
+disturbed — one was left behind.** (Round 3 corrected this: there were
+THREE producers of the shape, not two. The EQN parser is the third, and
+it has no precedence value to fix, so the node kind decides there.) `ppfBigop`, the capture engine's
 big-operator builder, still reported ATOM, so a captured or replayed sum
 took no brackets in PSHOW and PHIST while VISUAL bracketed it. PP18-4
 had been fixed at one of the two sites that share the defect. **Axis (b)
 did not answer clean: two of three new refusals refused programs that
 should draw.**
 
-**R2-1 is the one that matters, and it is my fix, not the original
+**PP18R2-1 is the one that matters, and it is my fix, not the original
 code.** PP18-1's repair declined every derivative over a body declaring
 no MVAR, reasoning that upstream varies nothing there. `fnFillStack` is
 UNCONDITIONAL — only the `STO` into the named variable is guarded — so
@@ -33,23 +83,23 @@ agreement — recommended by round 1, recorded as delivered in the commit
 message, DESIGN-HISTORY and TESTING.md, and **never written**. It was
 lost when a mutation runner reverted the tree mid-fix, and because only
 prose referred to it, nothing failed and nobody looked. It is written
-now, over five programs, and it caught R2-1 on its first run. **A pin
+now, over five programs, and it caught PP18R2-1 on its first run. **A pin
 that exists only in prose is worse than a missing one: it stops anyone
 looking for the gap.**
 
 Also fixed: the MVAR mirror aborting the whole picture over the
-drawability of a declaration it was not going to use (R2-3); the counter
+drawability of a declaration it was not going to use (PP18R2-3); the counter
 pool spent on CLOSED sibling scopes, so a fifth disjoint sum declined
-with nothing to collide with (R2-4); PP18-5 fixed at three arms and
-pinned at one (R2-6); and round 1's PP18-8, skipped at the time, which
-turned out to be what made R2-4's fixture exhaust the arena — the body
+with nothing to collide with (PP18R2-4); PP18-5 fixed at three arms and
+pinned at one (PP18R2-6); and round 1's PP18-8, skipped at the time, which
+turned out to be what made PP18R2-4's fixture exhaust the arena — the body
 seeding allocated eight nodes where its own comment said one.
 
 **Two documentation failures worth naming.** DESIGN.md still taught the
-retracted seeding rule as a measurement (R2-7) — the authoritative file
+retracted seeding rule as a measurement (PP18R2-7) — the authoritative file
 teaching the thing the code had already stopped doing. And the PP18-16
 correction had been pasted in FRONT of the sentence it was replacing, so
-TESTING.md asserted both readings at once (R2-8). **A correction that
+TESTING.md asserted both readings at once (PP18R2-8). **A correction that
 does not delete what it corrects is not a correction**, and the stale
 sentence reads the more confident of the two.
 

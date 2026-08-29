@@ -537,18 +537,55 @@ static bool_t ppvNameUsedInAst(const ppvCtx_t *ctx, const char *name) {
   return false;
 }
 
+/* Does this name occur inside ONE subtree — as a free variable, or as
+ * another construct's bound variable?
+ *
+ * AUDIT PP18R3-5: R2-4 was right that a CLOSED sibling's counter is
+ * reusable and wrong to drop the check altogether. A construct that ends
+ * up inside the next operator's LIMITS is not closed in any sense that
+ * matters: it is drawn within that operator's visual scope, which is the
+ * same reason PP18-9 counted the limits at all. The distinction is not
+ * "already built" but "about to be drawn inside me", and the limit
+ * operands are exactly the subtrees that will be. */
+static bool_t ppvNameInSubtree(const ppvCtx_t *ctx, uint8_t n, const char *name) {
+  if(n == PPV_NIL || n >= PPV_AST_NODES) {
+    return false;
+  }
+  const ppvAst_t *a = &ctx->ast[n];
+  uint16_t len = (uint16_t)strlen(name);
+  if(a->kind == PPA_VAR && (a->flags & PPV_F_BOUND) == 0
+      && a->textLen == len && memcmp(ctx->pool + a->textOff, name, len) == 0) {
+    return true;
+  }
+  if(a->kind == PPA_CONSTRUCT && a->varLen == len
+      && memcmp(ctx->pool + a->varOff, name, len) == 0) {
+    return true;
+  }
+  for(uint8_t c = 0; c < 4; c++) {
+    if(ppvNameInSubtree(ctx, a->child[c], name)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 /* A construct whose variable has no name in the program needs one
  * invented. Shared by SUM/PROD (whose counter arrives in a filled stack)
  * and, since AUDIT R2-1, by a derivative over a body that declares no
  * MVAR — the same situation for the same reason. NULL if all four
  * candidates are genuinely taken. */
-static const char *ppvInventName(const ppvCtx_t *ctx) {
+static const char *ppvInventName(const ppvCtx_t *ctx,
+                                 uint8_t r1, uint8_t r2, uint8_t r3) {
   static const char *const cands[] = { "n", "m", "k", "j" };
   for(uint8_t i = 0; i < 4; i++) {
-    if(!ppvNameInList(ctx->binding, ctx->bindingCount, cands[i])
-        && !ppvNameUsedInAst(ctx, cands[i])) {
-      return cands[i];
+    if(ppvNameInList(ctx->binding, ctx->bindingCount, cands[i])
+        || ppvNameUsedInAst(ctx, cands[i])
+        || ppvNameInSubtree(ctx, r1, cands[i])
+        || ppvNameInSubtree(ctx, r2, cands[i])
+        || ppvNameInSubtree(ctx, r3, cands[i])) {
+      continue;
     }
+    return cands[i];
   }
   return NULL;
 }
@@ -613,10 +650,20 @@ static bool_t ppvDerivVariable(ppvCtx_t *ctx, uint16_t bodyIdx,
       strcpy(out, nm);      // the match wins over the first, as upstream
       return true;
     }
-    if(first[0] == 0 && ppvNameIsDrawable(nm)) {
+    /* AUDIT PP18R3-2: record the first declaration WHATEVER it looks
+     * like. Making drawability a conjunct here skipped an undrawable
+     * declaration and picked the second — so the mirror stopped
+     * mirroring, and upstream differentiated the first while the picture
+     * named the second. Drawability is judged once, below, against the
+     * name we actually end up with. */
+    if(first[0] == 0) {
       strcpy(first, nm);
     }
     step = findNextStep(step);
+  }
+  if(first[0] != 0 && !ppvNameIsDrawable(first)) {
+    ppvDecline(ctx, PPV_D_NAME);   // upstream will vary THIS one; we cannot draw it
+    return false;
   }
   strcpy(out, first);   // "" when the body declares nothing: not an error
   return true;
@@ -654,20 +701,9 @@ static bool_t ppvDerivative(ppvCtx_t *ctx, ppvStack_t *stk, const uint8_t *pa,
     return false;
   }
   uint16_t bodyIdx = ctx->latchedDrv;
-  char sampled[PPV_NAME_MAX];
-  if(!ppvDerivVariable(ctx, bodyIdx, v, sampled)) {
-    return false;
-  }
-  if(sampled[0] == 0) {
-    // no MVAR: the body reads its argument off the filled stack, as a
-    // sum body does, so the picture invents a name rather than refuse
-    const char *inv = ppvInventName(ctx);
-    if(inv == NULL) {
-      ppvDecline(ctx, PPV_D_COLLISION);
-      return false;
-    }
-    strcpy(sampled, inv);
-  }
+  // the point comes off the stack first: an invented name must not
+  // collide with anything drawn inside this operator, and the point is
+  // drawn inside it (AUDIT PP18R3-5)
   uint8_t at;
   if(!ppvPop(ctx, stk, &at)) {
     return false;
@@ -676,12 +712,34 @@ static bool_t ppvDerivative(ppvCtx_t *ctx, ppvStack_t *stk, const uint8_t *pa,
     ppvDecline(ctx, PPV_D_OPAQUE);
     return false;
   }
+  char sampled[PPV_NAME_MAX];
+  if(!ppvDerivVariable(ctx, bodyIdx, v, sampled)) {
+    return false;
+  }
+  bool_t invented = false;
+  if(sampled[0] == 0) {
+    // no MVAR: the body reads its argument off the filled stack, as a
+    // sum body does, so the picture invents a name rather than refuse
+    const char *inv = ppvInventName(ctx, at, PPV_NIL, PPV_NIL);
+    if(inv == NULL) {
+      ppvDecline(ctx, PPV_D_COLLISION);
+      return false;
+    }
+    strcpy(sampled, inv);
+    invented = true;   // AUDIT PP18R3-1, see the ppvBody call below
+  }
   if(ppvNameInList(ctx->binding, ctx->bindingCount, sampled)) {
     ppvDecline(ctx, PPV_D_COLLISION);
     return false;
   }
   uint8_t body;
-  if(!ppvBody(ctx, bodyIdx, sampled, false, &body)) {
+  /* AUDIT PP18R3-1: `synthetic` is what arms the shadow guard in the RCL
+   * arm, and an INVENTED name is exactly the case it exists for. Passing
+   * false unconditionally meant a body recalling a real variable spelled
+   * like the invented counter was drawn as if it were the counter — the
+   * very confusion V6 and V71 forbid for sums. A name that came from the
+   * body's own MVAR is real and must NOT arm it. */
+  if(!ppvBody(ctx, bodyIdx, sampled, invented, &body)) {
     return false;
   }
   return ppvConstruct(ctx, stk, ITM_F1DRV, sampled, body, at, PPV_NIL, PPV_NIL, second);
@@ -704,7 +762,7 @@ static bool_t ppvSumProd(ppvCtx_t *ctx, ppvStack_t *stk, const uint8_t *pa, bool
     ppvDecline(ctx, PPV_D_OPAQUE);
     return false;
   }
-  const char *v = ppvInventName(ctx);
+  const char *v = ppvInventName(ctx, fromN, toN, stepN);
   if(v == NULL) {
     ppvDecline(ctx, PPV_D_COLLISION);
     return false;

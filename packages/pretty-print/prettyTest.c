@@ -1238,7 +1238,7 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
     }
   }
 
-  // T27 (AUDIT R2-1): a superseded formula must be RECALLABLE, not just
+  // T27 (AUDIT PP18R2-1): a superseded formula must be RECALLABLE, not just
   // truthful. R1-5 stopped the post-dispatch register being read as the
   // result; emitting with -1 fixed the lie but recorded no result at
   // all, so the browser's ENTER could never recall the entry. The emit
@@ -1277,7 +1277,7 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
     lastErrorCode = 0;
   }
 
-  // T28 (AUDIT R2-2): ppfBuildRow has two callers and only one can pan.
+  // T28 (AUDIT PP18R2-2): ppfBuildRow has two callers and only one can pan.
   // Widening acceptance for the browser turned the pager's honest
   // omission into a silent CLIP, which shows a formula that is not the
   // one the owner computed. The same wide row must be accepted for the
@@ -1745,7 +1745,7 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
       }
     }
 
-    /* B9 (AUDIT R2-2): the captured big operator used as an OPERAND,
+    /* B10 (AUDIT PP18R2-2): the captured big operator used as an OPERAND,
      * built through the CAPTURE ENGINE's own precedence threading rather
      * than a precedence this pin supplies. A big operator's body is
      * drawn to the RIGHT of the stroke, so a factor beside it binds INTO
@@ -1763,15 +1763,15 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
     ppcTestType("2");
     ppcTestOp(ITM_MULT);
     {
-      uint8_t rootB9;
+      uint8_t rootB10;
       ppReset();
-      if(!ppfBuildCurrent(PP_FONT_STANDARD, PP_FONT_TINY, &rootB9)) {
-        ppTestFail("B9 the captured product did not build");
+      if(!ppfBuildCurrent(PP_FONT_STANDARD, PP_FONT_TINY, &rootB10)) {
+        ppTestFail("B10 the captured product did not build");
       }
       else {
-        char wantB9[96];
-        sprintf(wantB9, "[P(B(P(n)|[n= 1]|10)) %s 2]", STD_DOT);
-        ppfTestExpect("B9 a captured sum brackets as an operand", rootB9, wantB9);
+        char wantB10[96];
+        sprintf(wantB10, "[P(B(P(n)|[n= 1]|10)) %s 2]", STD_DOT);
+        ppfTestExpect("B10 a captured sum brackets as an operand", rootB10, wantB10);
       }
     }
 
@@ -3302,6 +3302,33 @@ void prettyTestEquation(uint16_t unusedButMandatoryParameter) {
       }
     }
 
+    /* EQ35 (AUDIT PP18R3-3): the EQN parser is the third producer of the
+     * big-operator-as-operand defect. SUM(X;X;1;3)^2 is 36; drawn
+     * without brackets it is the picture of 1^2+2^2+3^2 = 14. The walker
+     * and the capture engine were fixed; this parser has no precedence
+     * value to correct, so the node KIND decides. */
+    {
+      uint8_t root;
+      ppReset();
+      if(!ppqParse("SUM(X;X;1;3)^2", PP_FONT_STANDARD, PP_FONT_STANDARD, &root)) {
+        ppTestFail("EQ35 a construct under a power did not parse");
+      }
+      else {
+        ppfTestExpect("EQ35 the EQN parser brackets a construct operand",
+                      root, "S(P(B(x|[x = 1]|3))|2)");
+      }
+      ppReset();
+      if(!ppqParse("SUM(X;X;1;3)" STD_CROSS "2", PP_FONT_STANDARD,
+                   PP_FONT_STANDARD, &root)) {
+        ppTestFail("EQ35 a construct times two did not parse");
+      }
+      else {
+        char w[96];
+        sprintf(w, "[P(B(x|[x = 1]|3)) %s 2]", STD_DOT);
+        ppfTestExpect("EQ35 the EQN parser brackets a product operand", root, w);
+      }
+    }
+
     // EQ27: an integral nests inside an integral — the new
     // double-exponential path never increments the engine counter, so
     // nothing upstream refuses it; the package's stack guard is the
@@ -4126,7 +4153,7 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
     };
     #undef PPV_DUP4
     #undef PPV_REC4
-    // AUDIT R2-1: a body that takes its argument off the STACK and
+    // AUDIT PP18R2-1: a body that takes its argument off the STACK and
     // declares no MVAR — the ordinary RPN function shape
     static const uint8_t pgmB5[] = {
       ITM_LBL, STRING_LABEL_VARIABLE, 3, 'V','B','5',
@@ -4139,6 +4166,47 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
       PPV2(ITM_F1DRV), STRING_LABEL_VARIABLE, 1, 'x',
       PPV2(ITM_END),
     };
+    // AUDIT PP18R3-1: no MVAR, and the body recalls a real 'n' — the
+    // name the inventor reaches for first
+    static const uint8_t pgmDN[] = {
+      ITM_LBL, STRING_LABEL_VARIABLE, 3, 'V','D','N',
+      PPV2(ITM_PGMDRV), STRING_LABEL_VARIABLE, 3, 'V','B','N',
+      ITM_LITERAL, STRING_LONG_INTEGER, 1, '3',
+      PPV2(ITM_F1DRV), STRING_LABEL_VARIABLE, 1, 'x',
+      PPV2(ITM_END),
+    };
+    // AUDIT PP18R3-2: the FIRST declaration is one we cannot draw
+    static const uint8_t pgmB6[] = {
+      ITM_LBL, STRING_LABEL_VARIABLE, 3, 'V','B','6',
+      PPV2(ITM_MVAR), STRING_LABEL_VARIABLE, 2, 'x','1',
+      PPV2(ITM_MVAR), STRING_LABEL_VARIABLE, 1, 'y',
+      ITM_ENTER, ITM_MULT, PPV2(ITM_END),
+    };
+    static const uint8_t pgmD7[] = {
+      ITM_LBL, STRING_LABEL_VARIABLE, 3, 'V','D','7',
+      PPV2(ITM_PGMDRV), STRING_LABEL_VARIABLE, 3, 'V','B','6',
+      ITM_LITERAL, STRING_LONG_INTEGER, 1, '3',
+      PPV2(ITM_F1DRV), STRING_LABEL_VARIABLE, 1, 'z',
+      PPV2(ITM_END),
+    };
+    // AUDIT PP18R3-5: a sum whose UPPER LIMIT is itself a sum. The inner
+    // one is closed by the time the outer chooses, but it is drawn
+    // INSIDE the outer's limit — not a sibling in any sense that matters.
+    static const uint8_t pgmNS[] = {
+      ITM_LBL, STRING_LABEL_VARIABLE, 3, 'V','N','S',
+      ITM_LITERAL, STRING_LONG_INTEGER, 1, '1',
+      ITM_LITERAL, STRING_LONG_INTEGER, 1, '1',
+      ITM_LITERAL, STRING_LONG_INTEGER, 1, '3',
+      ITM_LITERAL, STRING_LONG_INTEGER, 1, '1',
+      PPV2(ITM_SIGMAn), STRING_LABEL_VARIABLE, 3, 'V','N','B',
+      ITM_LITERAL, STRING_LONG_INTEGER, 1, '1',
+      PPV2(ITM_SIGMAn), STRING_LABEL_VARIABLE, 3, 'V','N','B',
+      PPV2(ITM_END),
+    };
+    ppcTestWriteAndLoadPgm(pgmNS, sizeof(pgmNS));
+    ppcTestWriteAndLoadPgm(pgmDN, sizeof(pgmDN));
+    ppcTestWriteAndLoadPgm(pgmB6, sizeof(pgmB6));
+    ppcTestWriteAndLoadPgm(pgmD7, sizeof(pgmD7));
     ppcTestWriteAndLoadPgm(pgmB5, sizeof(pgmB5));
     ppcTestWriteAndLoadPgm(pgmD6, sizeof(pgmD6));
     ppcTestWriteAndLoadPgm(pgmD5, sizeof(pgmD5));
@@ -4225,7 +4293,7 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
       ITM_MULT,
       PPV2(ITM_END),
     };
-    // AUDIT R2-6: PP18-5 cleared the latch at three arms and V72 pinned
+    // AUDIT PP18R2-6: PP18-5 cleared the latch at three arms and V72 pinned
     // one. The other two, same shape.
     static const uint8_t pgmXI[] = {          // ENTER then PGMINT
       ITM_LBL, STRING_LABEL_VARIABLE, 3, 'V','X','I',
@@ -4251,7 +4319,7 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
     ppcTestWriteAndLoadPgm(pgmXA, sizeof(pgmXA));
     ppcTestWriteAndLoadPgm(pgmXI, sizeof(pgmXI));
     ppcTestWriteAndLoadPgm(pgmXD, sizeof(pgmXD));
-    // AUDIT R2-4: five DISJOINT sums. Each closes before the next opens,
+    // AUDIT PP18R2-4: five DISJOINT sums. Each closes before the next opens,
     // so nothing can confuse their counters and all five may be 'n'.
     #define PPV_SUM1 ITM_LITERAL, STRING_LONG_INTEGER, 1, '1', \
                      ITM_LITERAL, STRING_LONG_INTEGER, 1, '3', \
@@ -4365,7 +4433,7 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
     // upstream's choice, so BOTH the body and the subscript become y
     sprintf(want, "DERIV(y%sy;y;3)", STD_CROSS);
     ppvTestExpect("V62 first when none match, stack-consuming body", "VD4", want);
-    // AUDIT R2-1. A body declaring no MVAR is still differentiated:
+    // AUDIT PP18R2-1. A body declaring no MVAR is still differentiated:
     // fnFillStack is unconditional, so a body reading the stack varies
     // correctly and the first fix's decline was a regression. With no
     // name in the program the picture invents one, exactly as a sum
@@ -4473,7 +4541,7 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
     char want[64];
     sprintf(want, "a%s(a+b)", STD_CROSS);
     ppvTestExpect("V72 the lift latch does not survive XEQ", "VXA", want);
-    // AUDIT R2-6: the same at the other two arms the fix touched
+    // AUDIT PP18R2-6: the same at the other two arms the fix touched
     ppvTestExpect("V75 nor PGMINT", "VXI", want);
     ppvTestExpect("V76 nor PGMDRV", "VXD", want);
   }
@@ -4528,7 +4596,7 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
     }
   }
 
-  /* V65 (AUDIT PP18-1's recommendation, and AUDIT R2-5: it was recorded
+  /* V65 (AUDIT PP18-1's recommendation, and AUDIT PP18R2-5: it was recorded
    * as delivered in three places and never written — lost when a
    * mutation runner reverted the tree, and the loss survived because
    * nothing but prose referred to it).
@@ -4598,7 +4666,7 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
     calcMode = savedMode;
   }
 
-  // V77 (AUDIT R2-4): the candidate pool was spent on CLOSED sibling
+  // V77 (AUDIT PP18R2-4): the candidate pool was spent on CLOSED sibling
   // scopes, so a fifth disjoint sum declined D12 with nothing to collide
   // with. A closed sibling's counter is out of scope and its name is
   // reusable; only free variables and ENCLOSING constructs collide.
@@ -4608,6 +4676,26 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
     snprintf(want, sizeof(want), "%s+%s+%s+%s+%s", one, one, one, one, one);
     ppvTestExpect("V77 five disjoint sums may all use n", "VSIB", want);
   }
+
+  // V80 (AUDIT PP18R3-5): the inner sum is CLOSED when the outer picks
+  // its counter, but it is drawn inside the outer's upper limit, so the
+  // two must not share a name. R2-4 was right that a closed sibling is
+  // reusable and wrong to stop looking at constructs entirely — the
+  // distinction is not "already built" but "about to be drawn inside me".
+  ppvTestExpect("V80 a construct inside a limit is not a sibling", "VNS",
+                "SUM(m;m;1;SUM(n;n;1;3))");
+
+  // V78 (AUDIT PP18R3-1): an INVENTED derivative name is synthetic, and
+  // that flag is what arms the shadow guard. Passing false meant a body
+  // recalling a real 'n' was drawn as if it were the counter — the exact
+  // confusion V6 and V71 forbid for sums, reintroduced at the one caller
+  // that did not say so.
+  ppvTestDecline("V78 an invented derivative name cannot shadow", "VDN", 12);
+  // V79 (AUDIT PP18R3-2): upstream varies the FIRST declaration whether
+  // or not we can draw it. Skipping an undrawable one and picking the
+  // second stopped mirroring the walk this function exists to mirror,
+  // so the picture named a variable upstream never varies.
+  ppvTestDecline("V79 an undrawable first declaration declines", "VD7", 18);
 
   // V54: only a latch set during the walk counts
   ppvTestDecline("V54 derivative with no PGMDRV", "VDNL", 6);

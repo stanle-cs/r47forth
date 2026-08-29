@@ -632,7 +632,7 @@ none; `ppvDerivVariable` mirrors that walk. Seeding by the parameter drew
 a picture meaning a different number from the one `XEQ` returns
 (AUDIT PP18-1).
 
-**And "none declared" is not a refusal** — AUDIT R2-1, the first fix's
+**And "none declared" is not a refusal** — AUDIT PP18R2-1, the first fix's
 own regression. `_differentiatorIteration`'s `fnFillStack` is
 UNCONDITIONAL; only the `STO` into the named variable is guarded. A body
 that takes its argument off the stack, the ordinary RPN function shape,
