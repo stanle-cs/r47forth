@@ -623,15 +623,26 @@ D13 malformed program memory · D14 unreadable numeral · D15 fragment cap ·
 D16 pool exhausted · D17 nothing to show · D18 name the grammar cannot
 spell.
 
-**Derivatives (PP18).** `PGMDRV` latches the program, `f'`/`f"` pop the
-point and name the variable. The seeding rule is the integrator's, and
-that is a measurement rather than an analogy: `_differentiatorIteration`
-(differentiate.c) fills every stack level with the sample point AND
-stores it into the named variable — *"feed both channels: the stack for a
-program that consumes X, the variable for one that recalls its MVAR"* —
-which is what `DEI_xeq_user` does for an integral. So a body frame seeded
-with the variable name on all levels reproduces what the engine actually
-offers a program.
+**Derivatives (PP18, corrected twice — read the whole paragraph).**
+`PGMDRV` latches the program, `f'`/`f"` pop the point. **The variable is
+NOT the `f'` parameter.** `calcDeriv` asks `deriv_pgm_variable(label)`,
+which walks the BODY program's own leading `MVAR` declarations and
+returns the one matching the parameter, else the first declared, else
+none; `ppvDerivVariable` mirrors that walk. Seeding by the parameter drew
+a picture meaning a different number from the one `XEQ` returns
+(AUDIT PP18-1).
+
+**And "none declared" is not a refusal** — AUDIT R2-1, the first fix's
+own regression. `_differentiatorIteration`'s `fnFillStack` is
+UNCONDITIONAL; only the `STO` into the named variable is guarded. A body
+that takes its argument off the stack, the ordinary RPN function shape,
+is differentiated correctly, so the picture invents a name exactly as
+`SUM` does for its counter. Refusing it was a regression against PP17.
+
+The integral is genuinely simpler, and the two must not be reasoned
+about together: `DEI_xeq_user` writes into `regist`, and `_fnIntegrate`
+sets `regist = labelOrVariable` — the integral's own parameter. **INTEG's
+seeding by parameter name is exact; DERIV's cannot be.**
 
 `PGMDRV` is a **separate latch** from `PGMINT`, because it is separate
 upstream: *"a slot of its own so that taking a derivative does not

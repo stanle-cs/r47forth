@@ -313,7 +313,14 @@ static void ppfLabelName(uint16_t param, char *out) {
 static uint8_t ppfBigop(uint16_t item, uint16_t label, const uint8_t *stepBytes,
                         uint8_t fromN, uint8_t toN,
                         uint8_t ctxFont, uint8_t childFont, int *outPrec) {
-  *outPrec = PPF_PREC_ATOM;
+  /* AUDIT R2-2: a big operator is not an atom here either. Its body is
+   * drawn to the RIGHT of the stroke, so a factor or exponent beside it
+   * binds INTO the body — the same defect PP18-4 fixed in the walker,
+   * left standing at the neighbour that shares this file. A captured or
+   * replayed Sigma took no brackets in PSHOW/PHIST while VISUAL drew
+   * them. ADD brackets it under x, / and ^ and leaves it bare as the
+   * left operand of a +, which is where convention already scopes it. */
+  *outPrec = PPF_PREC_ADD;
   bool_t isInt = (item == ITM_INTEGRAL_YX);
   uint8_t big = ppNewBox(PP_BIGOP, ctxFont);
   if(big == PP_NONE || fromN == PP_NONE || toN == PP_NONE) {

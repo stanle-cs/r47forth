@@ -1745,6 +1745,35 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
       }
     }
 
+    /* B9 (AUDIT R2-2): the captured big operator used as an OPERAND,
+     * built through the CAPTURE ENGINE's own precedence threading rather
+     * than a precedence this pin supplies. A big operator's body is
+     * drawn to the RIGHT of the stroke, so a factor beside it binds INTO
+     * the body unless it brackets. That is PP18-4's defect, fixed in the
+     * walker and left standing at the neighbour — where every PSHOW and
+     * PHIST of a programmed sum reaches the very same builder. Its own
+     * capture, so it disturbs nothing above it. */
+    ppcTestReset();
+    ppcTestType("1");
+    ppcTestOp(ITM_ENTER);
+    ppcTestType("10");
+    ppcTestOp(ITM_ENTER);
+    ppcTestType("1");
+    ppcTestOpParam(ITM_SIGMAn, (uint16_t)bigLbl);
+    ppcTestType("2");
+    ppcTestOp(ITM_MULT);
+    {
+      uint8_t rootB9;
+      ppReset();
+      if(!ppfBuildCurrent(PP_FONT_STANDARD, PP_FONT_TINY, &rootB9)) {
+        ppTestFail("B9 the captured product did not build");
+      }
+      else {
+        char wantB9[96];
+        sprintf(wantB9, "[P(B(P(n)|[n= 1]|10)) %s 2]", STD_DOT);
+        ppfTestExpect("B9 a captured sum brackets as an operand", rootB9, wantB9);
+      }
+    }
 
     currentSolverStatus   = savedSolverStatus;
     currentSolverProgram  = savedSolverProgram;
@@ -4097,6 +4126,21 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
     };
     #undef PPV_DUP4
     #undef PPV_REC4
+    // AUDIT R2-1: a body that takes its argument off the STACK and
+    // declares no MVAR — the ordinary RPN function shape
+    static const uint8_t pgmB5[] = {
+      ITM_LBL, STRING_LABEL_VARIABLE, 3, 'V','B','5',
+      ITM_ENTER, ITM_MULT, PPV2(ITM_END),
+    };
+    static const uint8_t pgmD6[] = {
+      ITM_LBL, STRING_LABEL_VARIABLE, 3, 'V','D','6',
+      PPV2(ITM_PGMDRV), STRING_LABEL_VARIABLE, 3, 'V','B','5',
+      ITM_LITERAL, STRING_LONG_INTEGER, 1, '3',
+      PPV2(ITM_F1DRV), STRING_LABEL_VARIABLE, 1, 'x',
+      PPV2(ITM_END),
+    };
+    ppcTestWriteAndLoadPgm(pgmB5, sizeof(pgmB5));
+    ppcTestWriteAndLoadPgm(pgmD6, sizeof(pgmD6));
     ppcTestWriteAndLoadPgm(pgmD5, sizeof(pgmD5));
     // AUDIT PP18-4: a construct used as an OPERAND. The body is empty, so
     // it returns the seeded counter and the picture stays small enough to
@@ -4181,8 +4225,48 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
       ITM_MULT,
       PPV2(ITM_END),
     };
+    // AUDIT R2-6: PP18-5 cleared the latch at three arms and V72 pinned
+    // one. The other two, same shape.
+    static const uint8_t pgmXI[] = {          // ENTER then PGMINT
+      ITM_LBL, STRING_LABEL_VARIABLE, 3, 'V','X','I',
+      ITM_RCL, STRING_LABEL_VARIABLE, 1, 'a',
+      ITM_ENTER,
+      PPV2(ITM_PGMINT), STRING_LABEL_VARIABLE, 3, 'V','N','B',
+      ITM_RCL, STRING_LABEL_VARIABLE, 1, 'b',
+      ITM_ADD,
+      ITM_MULT,
+      PPV2(ITM_END),
+    };
+    static const uint8_t pgmXD[] = {          // ENTER then PGMDRV
+      ITM_LBL, STRING_LABEL_VARIABLE, 3, 'V','X','D',
+      ITM_RCL, STRING_LABEL_VARIABLE, 1, 'a',
+      ITM_ENTER,
+      PPV2(ITM_PGMDRV), STRING_LABEL_VARIABLE, 3, 'V','N','B',
+      ITM_RCL, STRING_LABEL_VARIABLE, 1, 'b',
+      ITM_ADD,
+      ITM_MULT,
+      PPV2(ITM_END),
+    };
     ppcTestWriteAndLoadPgm(pgmXB, sizeof(pgmXB));
     ppcTestWriteAndLoadPgm(pgmXA, sizeof(pgmXA));
+    ppcTestWriteAndLoadPgm(pgmXI, sizeof(pgmXI));
+    ppcTestWriteAndLoadPgm(pgmXD, sizeof(pgmXD));
+    // AUDIT R2-4: five DISJOINT sums. Each closes before the next opens,
+    // so nothing can confuse their counters and all five may be 'n'.
+    #define PPV_SUM1 ITM_LITERAL, STRING_LONG_INTEGER, 1, '1', \
+                     ITM_LITERAL, STRING_LONG_INTEGER, 1, '3', \
+                     ITM_LITERAL, STRING_LONG_INTEGER, 1, '1', \
+                     PPV2(ITM_SIGMAn), STRING_LABEL_VARIABLE, 3, 'V','N','B'
+    static const uint8_t pgmSIB[] = {
+      ITM_LBL, STRING_LABEL_VARIABLE, 4, 'V','S','I','B',
+      PPV_SUM1, PPV_SUM1, ITM_ADD,
+      PPV_SUM1, ITM_ADD,
+      PPV_SUM1, ITM_ADD,
+      PPV_SUM1, ITM_ADD,
+      PPV2(ITM_END),
+    };
+    #undef PPV_SUM1
+    ppcTestWriteAndLoadPgm(pgmSIB, sizeof(pgmSIB));
     ppcTestWriteAndLoadPgm(pgmCOL, sizeof(pgmCOL));
     ppcTestWriteAndLoadPgm(pgmNB, sizeof(pgmNB));
     ppcTestWriteAndLoadPgm(pgmSQ, sizeof(pgmSQ));
@@ -4281,9 +4365,19 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
     // upstream's choice, so BOTH the body and the subscript become y
     sprintf(want, "DERIV(y%sy;y;3)", STD_CROSS);
     ppvTestExpect("V62 first when none match, stack-consuming body", "VD4", want);
-    // no MVAR at all -> upstream varies nothing and returns 0 for any
-    // body. There is no picture for that; decline.
-    ppvTestDecline("V63 body declares no MVAR", "VD5", 19);
+    // AUDIT R2-1. A body declaring no MVAR is still differentiated:
+    // fnFillStack is unconditional, so a body reading the stack varies
+    // correctly and the first fix's decline was a regression. With no
+    // name in the program the picture invents one, exactly as a sum
+    // does. VD5's body RCLs 'v', which upstream never varies, so the
+    // slope really is 0 and d/dn(v*v) is the honest picture.
+    {
+      char w2[64];
+      sprintf(w2, "DERIV(v%sv;n;3)", STD_CROSS);
+      ppvTestExpect("V63 body declares no MVAR, reads a variable", "VD5", w2);
+      sprintf(w2, "DERIV(n%sn;n;3)", STD_CROSS);
+      ppvTestExpect("V63b body declares no MVAR, reads the stack", "VD6", w2);
+    }
   }
 
   // V66 (AUDIT PP18-3): ENTER shares its operand node, so the tree is a
@@ -4379,6 +4473,9 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
     char want[64];
     sprintf(want, "a%s(a+b)", STD_CROSS);
     ppvTestExpect("V72 the lift latch does not survive XEQ", "VXA", want);
+    // AUDIT R2-6: the same at the other two arms the fix touched
+    ppvTestExpect("V75 nor PGMINT", "VXI", want);
+    ppvTestExpect("V76 nor PGMDRV", "VXD", want);
   }
 
   // V73 (AUDIT PP18-13): the node signature prints every PP_BIGOP as
@@ -4429,6 +4526,88 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
     else if(!ppTreeHasRun(root, "d" "\xa1\x62")) {
       ppTestFail("V74 the drawn second derivative lost its superscript");
     }
+  }
+
+  /* V65 (AUDIT PP18-1's recommendation, and AUDIT R2-5: it was recorded
+   * as delivered in three places and never written — lost when a
+   * mutation runner reverted the tree, and the loss survived because
+   * nothing but prose referred to it).
+   *
+   * The differential oracle: run the program, then evaluate the walker's
+   * OWN drawing, and require the two to agree. No expected string
+   * appears here. It is the only pin in this file that can fail because
+   * the picture MEANS the wrong thing rather than because it reads
+   * differently from what I typed — which is the entire class PP18-1
+   * belonged to, and the class R2-1 belonged to as well. */
+  {
+    static const char *const oracle[] = { "VD1", "VD2", "VD6", "VDBL", "VS1" };
+    uint8_t savedMode = calcMode;
+    for(unsigned k = 0; k < 5; k++) {
+      calcRegister_t id = findNamedLabel(oracle[k], GLOBAL_LABELS);
+      char produced[256], what[64];
+      uint8_t reason = 0;
+      uint16_t atStep = 0;
+      real34_t viaProgram, viaPicture, diff, tol;
+      sprintf(what, "V65 %s: the picture and the program", oracle[k]);
+      if(id == INVALID_VARIABLE) {
+        ppTestFail(what);
+        continue;
+      }
+      calcMode = CM_NORMAL;
+      programRunStop = PGM_STOPPED;
+      dynamicMenuItem = -1;
+      lastErrorCode = ERROR_NONE;
+      fnExecute(id);
+      if(lastErrorCode != ERROR_NONE || getRegisterDataType(REGISTER_X) != dtReal34) {
+        lastErrorCode = ERROR_NONE;
+        ppTestFail(what);
+        continue;
+      }
+      real34Copy(REGISTER_REAL34_DATA(REGISTER_X), &viaProgram);
+      if(!ppvTranspile((uint16_t)(id - FIRST_LABEL), produced, sizeof(produced),
+                       &reason, &atStep)) {
+        ppTestFailures++;
+        printf("prettyPrint test FAIL: %s (the walker drew nothing: D%u)\n",
+               what, (unsigned)reason);
+        continue;
+      }
+      if(numberOfFormulae == 0) {
+        fnEqNew(NOPARAM);
+      }
+      calcMode = CM_NORMAL;
+      aimBuffer[0] = 0;
+      nimNumberPart = NP_EMPTY;
+      setEquation(currentFormula, produced);
+      lastErrorCode = ERROR_NONE;
+      fnEqCalc(NOPARAM);
+      if(lastErrorCode != ERROR_NONE || getRegisterDataType(REGISTER_X) != dtReal34) {
+        lastErrorCode = ERROR_NONE;
+        ppTestFailures++;
+        printf("prettyPrint test FAIL: %s (the drawing did not evaluate)\n", what);
+        continue;
+      }
+      real34Copy(REGISTER_REAL34_DATA(REGISTER_X), &viaPicture);
+      real34Subtract(&viaPicture, &viaProgram, &diff);
+      real34SetPositiveSign(&diff);
+      stringToReal34("1e-6", &tol);
+      if(!real34CompareLessThan(&diff, &tol)) {
+        ppTestFail(what);
+      }
+      lastErrorCode = ERROR_NONE;
+    }
+    calcMode = savedMode;
+  }
+
+  // V77 (AUDIT R2-4): the candidate pool was spent on CLOSED sibling
+  // scopes, so a fifth disjoint sum declined D12 with nothing to collide
+  // with. A closed sibling's counter is out of scope and its name is
+  // reusable; only free variables and ENCLOSING constructs collide.
+  {
+    char want[256];
+    char one[64];
+    sprintf(one, "SUM(n;n;1;3)");
+    sprintf(want, "%s+%s+%s+%s+%s", one, one, one, one, one);
+    ppvTestExpect("V77 five disjoint sums may all use n", "VSIB", want);
   }
 
   // V54: only a latch set during the walk counts

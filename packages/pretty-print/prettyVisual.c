@@ -58,13 +58,14 @@ enum { PPA_FREE = 0, PPA_LIT, PPA_VAR, PPA_OP1, PPA_OP2, PPA_CONSTRUCT };
 
 #define PPV_F_OPAQUE 0x01   ///< a string literal: carryable, never printable
 #define PPV_F_SECOND 0x02   ///< CONSTRUCT: a second-order derivative
+#define PPV_F_BOUND  0x04   ///< VAR: a seeded construct variable, not a free one
 
 // decline reasons; the number reaches the user through moreInfoOnError
 enum { PPV_D_OPCODE = 1, PPV_D_INDIRECT, PPV_D_LOCALLABEL, PPV_D_UNRESOLVED,
        PPV_D_DIRTY, PPV_D_NOLATCH, PPV_D_REGISTER, PPV_D_DEPTH, PPV_D_BUDGET,
        PPV_D_UNDERFLOW, PPV_D_OPAQUE, PPV_D_COLLISION, PPV_D_MEMORY,
        PPV_D_NUMERAL, PPV_D_FRAGMENT, PPV_D_ARENA, PPV_D_EMPTY, PPV_D_NAME,
-       PPV_D_DERIVVAR, PPV_D_TOOBIG };
+       PPV_D_TOOBIG };
 
 typedef struct {
   uint8_t  kind;        ///< PPA_*
@@ -419,11 +420,17 @@ static bool_t ppvBody(ppvCtx_t *ctx, uint16_t bodyIdx, const char *var,
   ppvStack_t sub;
   sub.depth        = 0;
   sub.liftDisabled = false;
+  /* ONE shared VAR node on every level, which is what this comment
+   * always claimed and what the code did not do (AUDIT PP18-8): the
+   * allocation sat inside the loop and spent eight of the 48 arena
+   * nodes per construct body. Five disjoint sums exhausted the arena and
+   * declined a formula the walker can draw perfectly well. The seeding
+   * is about what the program can READ, and it reads the same variable
+   * from every level, so one node is not an optimisation — it is the
+   * accurate model. */
+  uint8_t seed = ppvLeaf(ctx, PPA_VAR, var, (uint16_t)strlen(var), PPV_F_BOUND);
   for(uint8_t i = 0; i < PPV_STACK_SLOTS; i++) {
-    // one shared VAR node on every level: the seeding is about what the
-    // program can READ, and it reads the same variable from all of them
-    uint8_t v = ppvLeaf(ctx, PPA_VAR, var, (uint16_t)strlen(var), 0);
-    if(!ppvPush(ctx, &sub, v)) {
+    if(!ppvPush(ctx, &sub, seed)) {
       return false;
     }
   }
@@ -502,6 +509,50 @@ static bool_t ppvIntegral(ppvCtx_t *ctx, ppvStack_t *stk, const uint8_t *pa) {
                       PPV_NIL, false);
 }
 
+/* Is this name already a variable somewhere in the tree we have built?
+ *
+ * AUDIT PP18-9: the counter was checked only against ENCLOSING constructs,
+ * which is empty at top level — so a program whose loop count lives in a
+ * variable called `n` drew SUM(n x n; n; 1; n), with the free variable
+ * sitting in the upper-limit slot of the operator that binds it. Nothing
+ * on screen told the two `n`s apart. The rule DESIGN.md states is about
+ * shadowing in the drawn formula; the limits are inside the operator's
+ * visual scope, so they are part of it. */
+static bool_t ppvNameUsedInAst(const ppvCtx_t *ctx, const char *name) {
+  uint16_t len = (uint16_t)strlen(name);
+  for(uint8_t i = 0; i < ctx->astUsed; i++) {
+    const ppvAst_t *a = &ctx->ast[i];
+    /* AUDIT R2-4: only FREE variables collide. A seeded read carries
+     * PPV_F_BOUND and a closed sibling construct's counter is out of
+     * scope by the time we are choosing again — counting either spent
+     * the four-name pool on scopes nobody can confuse, and a fifth
+     * disjoint sum declined with nothing to collide with. Enclosing
+     * constructs are handled separately, by ctx->binding. */
+    if(a->kind == PPA_VAR && (a->flags & PPV_F_BOUND) == 0
+        && a->textLen == len
+        && memcmp(ctx->pool + a->textOff, name, len) == 0) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/* A construct whose variable has no name in the program needs one
+ * invented. Shared by SUM/PROD (whose counter arrives in a filled stack)
+ * and, since AUDIT R2-1, by a derivative over a body that declares no
+ * MVAR — the same situation for the same reason. NULL if all four
+ * candidates are genuinely taken. */
+static const char *ppvInventName(const ppvCtx_t *ctx) {
+  static const char *const cands[] = { "n", "m", "k", "j" };
+  for(uint8_t i = 0; i < 4; i++) {
+    if(!ppvNameInList(ctx->binding, ctx->bindingCount, cands[i])
+        && !ppvNameUsedInAst(ctx, cands[i])) {
+      return cands[i];
+    }
+  }
+  return NULL;
+}
+
 /* Which variable does the derivative actually vary?
  *
  * NOT the f' parameter — that was AUDIT PP18-1, and the picture it drew
@@ -511,10 +562,16 @@ static bool_t ppvIntegral(ppvCtx_t *ctx, ppvStack_t *stk, const uint8_t *pa) {
  * the f' parameter, else the FIRST declared, else INVALID_VARIABLE. This
  * mirrors that walk, including REM transparency.
  *
- * When upstream returns INVALID_VARIABLE it varies nothing: every sample
- * is the same point and the derivative is 0 whatever the body says.
- * There is no honest picture for that, so the walk declines rather than
- * draw a slope nobody computed.
+ * When no MVAR is declared the function returns "none" rather than an
+ * error, and the CALLER invents a name. AUDIT R2-1: the first version of
+ * this fix declined instead, on the reasoning that upstream varies
+ * nothing — which is false. _differentiatorIteration's fnFillStack is
+ * UNCONDITIONAL; only the STO into the named variable is guarded. So a
+ * body that takes its argument off the stack, the ordinary RPN function
+ * shape, is differentiated correctly and returns 6 while the decline
+ * refused to draw it at all. The stack IS a channel, and a body reading
+ * it positionally is in exactly the position a SUM body is in: no name
+ * in the program, so the picture invents one.
  *
  * The REM arm is NOT pinned: a REM step's tail is sized through
  * literalTailBytes, and a hand-built fixture byte cannot reach the shape
@@ -544,25 +601,25 @@ static bool_t ppvDerivVariable(ppvCtx_t *ctx, uint16_t bodyIdx,
     char nm[PPV_NAME_MAX];
     xcopy(nm, step + 4, len);
     nm[len] = 0;
-    if(!ppvNameIsDrawable(nm)) {
-      ppvDecline(ctx, PPV_D_NAME);
-      return false;
-    }
+    /* AUDIT R2-3: drawability is a property of the name we END UP with,
+     * not of every declaration we walk past. Refusing here aborted the
+     * whole picture over a declaration the scan was not going to use —
+     * upstream's own walk has no such notion and does not stop. */
     if(strcmp(nm, param) == 0) {
+      if(!ppvNameIsDrawable(nm)) {
+        ppvDecline(ctx, PPV_D_NAME);
+        return false;
+      }
       strcpy(out, nm);      // the match wins over the first, as upstream
       return true;
     }
-    if(first[0] == 0) {
+    if(first[0] == 0 && ppvNameIsDrawable(nm)) {
       strcpy(first, nm);
     }
     step = findNextStep(step);
   }
-  if(first[0] != 0) {
-    strcpy(out, first);
-    return true;
-  }
-  ppvDecline(ctx, PPV_D_DERIVVAR);
-  return false;
+  strcpy(out, first);   // "" when the body declares nothing: not an error
+  return true;
 }
 
 /* DERIV: the point comes off the stack, the program from PGMDRV.
@@ -601,6 +658,16 @@ static bool_t ppvDerivative(ppvCtx_t *ctx, ppvStack_t *stk, const uint8_t *pa,
   if(!ppvDerivVariable(ctx, bodyIdx, v, sampled)) {
     return false;
   }
+  if(sampled[0] == 0) {
+    // no MVAR: the body reads its argument off the filled stack, as a
+    // sum body does, so the picture invents a name rather than refuse
+    const char *inv = ppvInventName(ctx);
+    if(inv == NULL) {
+      ppvDecline(ctx, PPV_D_COLLISION);
+      return false;
+    }
+    strcpy(sampled, inv);
+  }
   uint8_t at;
   if(!ppvPop(ctx, stk, &at)) {
     return false;
@@ -624,31 +691,6 @@ static bool_t ppvDerivative(ppvCtx_t *ctx, ppvStack_t *stk, const uint8_t *pa,
 // counter has no name in RPN — it arrives in a filled stack — so the
 // tree has to invent one, and any body that recalls a variable spelled
 // the same way declines rather than let the invented name shadow it.
-/* Is this name already a variable somewhere in the tree we have built?
- *
- * AUDIT PP18-9: the counter was checked only against ENCLOSING constructs,
- * which is empty at top level — so a program whose loop count lives in a
- * variable called `n` drew SUM(n x n; n; 1; n), with the free variable
- * sitting in the upper-limit slot of the operator that binds it. Nothing
- * on screen told the two `n`s apart. The rule DESIGN.md states is about
- * shadowing in the drawn formula; the limits are inside the operator's
- * visual scope, so they are part of it. */
-static bool_t ppvNameUsedInAst(const ppvCtx_t *ctx, const char *name) {
-  uint16_t len = (uint16_t)strlen(name);
-  for(uint8_t i = 0; i < ctx->astUsed; i++) {
-    const ppvAst_t *a = &ctx->ast[i];
-    if(a->kind == PPA_VAR && a->textLen == len
-        && memcmp(ctx->pool + a->textOff, name, len) == 0) {
-      return true;
-    }
-    if(a->kind == PPA_CONSTRUCT && a->varLen == len
-        && memcmp(ctx->pool + a->varOff, name, len) == 0) {
-      return true;
-    }
-  }
-  return false;
-}
-
 static bool_t ppvSumProd(ppvCtx_t *ctx, ppvStack_t *stk, const uint8_t *pa, bool_t isSum) {
   uint16_t bodyIdx;
   if(!ppvLabelIndex(ctx, pa, &bodyIdx)) {
@@ -662,14 +704,7 @@ static bool_t ppvSumProd(ppvCtx_t *ctx, ppvStack_t *stk, const uint8_t *pa, bool
     ppvDecline(ctx, PPV_D_OPAQUE);
     return false;
   }
-  static const char *const cands[] = { "n", "m", "k", "j" };
-  const char *v = NULL;
-  for(uint8_t i = 0; i < 4 && v == NULL; i++) {
-    if(!ppvNameInList(ctx->binding, ctx->bindingCount, cands[i])
-        && !ppvNameUsedInAst(ctx, cands[i])) {
-      v = cands[i];
-    }
-  }
+  const char *v = ppvInventName(ctx);
   if(v == NULL) {
     ppvDecline(ctx, PPV_D_COLLISION);
     return false;

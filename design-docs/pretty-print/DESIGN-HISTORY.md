@@ -2,6 +2,61 @@
 
 Non-normative amendment trail. DESIGN.md is authoritative.
 
+## 2026-08-28 — PP18 audit round 2: the fixes audited, and one was a regression
+
+Round 2 took the FIX COMMITS as its subject, with the question axis
+rotated off round 1's: (a) the fixes touched code SHARED with the capture
+engine and the EQN surfaces — did they disturb the neighbours? and (b)
+the fixes ADDED refusals — are those honest? Eight confirmed, four
+refuted.
+
+**Axis (a) answered clean and mechanically: the neighbours were not
+disturbed — one was left behind.** `ppfBigop`, the capture engine's
+big-operator builder, still reported ATOM, so a captured or replayed sum
+took no brackets in PSHOW and PHIST while VISUAL bracketed it. PP18-4
+had been fixed at one of the two sites that share the defect. **Axis (b)
+did not answer clean: two of three new refusals refused programs that
+should draw.**
+
+**R2-1 is the one that matters, and it is my fix, not the original
+code.** PP18-1's repair declined every derivative over a body declaring
+no MVAR, reasoning that upstream varies nothing there. `fnFillStack` is
+UNCONDITIONAL — only the `STO` into the named variable is guarded — so
+the ordinary stack-consuming RPN function body is differentiated
+correctly, returns 6, and PP17 drew it. The fix refused it. The body
+reads its argument positionally exactly as a SUM body does, so the
+picture now invents a name, which is what SUM has always done.
+
+**And V65 would have caught it in one line.** V65 is the differential
+oracle — run the program, evaluate the walker's own drawing, require
+agreement — recommended by round 1, recorded as delivered in the commit
+message, DESIGN-HISTORY and TESTING.md, and **never written**. It was
+lost when a mutation runner reverted the tree mid-fix, and because only
+prose referred to it, nothing failed and nobody looked. It is written
+now, over five programs, and it caught R2-1 on its first run. **A pin
+that exists only in prose is worse than a missing one: it stops anyone
+looking for the gap.**
+
+Also fixed: the MVAR mirror aborting the whole picture over the
+drawability of a declaration it was not going to use (R2-3); the counter
+pool spent on CLOSED sibling scopes, so a fifth disjoint sum declined
+with nothing to collide with (R2-4); PP18-5 fixed at three arms and
+pinned at one (R2-6); and round 1's PP18-8, skipped at the time, which
+turned out to be what made R2-4's fixture exhaust the arena — the body
+seeding allocated eight nodes where its own comment said one.
+
+**Two documentation failures worth naming.** DESIGN.md still taught the
+retracted seeding rule as a measurement (R2-7) — the authoritative file
+teaching the thing the code had already stopped doing. And the PP18-16
+correction had been pasted in FRONT of the sentence it was replacing, so
+TESTING.md asserted both readings at once (R2-8). **A correction that
+does not delete what it corrects is not a correction**, and the stale
+sentence reads the more confident of the two.
+
+Exit criterion still NOT met: this round found real defects, so the count
+resets again, and the rule against closing on a round that contains fixes
+stands.
+
 ## 2026-08-28 — PP18 audit round 1: sixteen findings, and the one that lied
 
 A cross-model round over the five PP18 commits: eight blind finder
