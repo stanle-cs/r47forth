@@ -4603,10 +4603,9 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
   // with. A closed sibling's counter is out of scope and its name is
   // reusable; only free variables and ENCLOSING constructs collide.
   {
-    char want[256];
-    char one[64];
-    sprintf(one, "SUM(n;n;1;3)");
-    sprintf(want, "%s+%s+%s+%s+%s", one, one, one, one, one);
+    char want[128];
+    const char *one = "SUM(n;n;1;3)";
+    snprintf(want, sizeof(want), "%s+%s+%s+%s+%s", one, one, one, one, one);
     ppvTestExpect("V77 five disjoint sums may all use n", "VSIB", want);
   }
 
