@@ -1688,16 +1688,12 @@ endReturnTrue:
         }
       }
     }
-    // AUDIT R1-12. The browser must resolve its OWN keys. Both gates
-    // that admitted calcMode 20 lived in sibling packages (forth-core's
-    // rewritten range on the condition above, undo-history's case
-    // lists), so a solo pretty-print build fell straight through to the
-    // bug screen on every key inside PHIST — and EXIT, being a key,
-    // came back into it. This arm is deliberately placed here rather
-    // than added to the condition above: forth-core rewrites that exact
-    // line, and two packages editing one line cannot compose. In the
-    // combined build this is unreachable (the sibling's range catches
-    // 20 first) and correct either way.
+    // The browser must resolve its own keys, or a solo build falls
+    // through to the bug screen on every key inside PHIST. A separate
+    // arm rather than an edit to the condition above: forth-core
+    // rewrites that exact line, and two packages editing one line
+    // cannot compose. Unreachable in the combined build, correct in
+    // both.
     else if(calcMode == CM_PRETTY_BROWSER) {
       result = shiftF ? key->fShifted :
                shiftG ? key->gShifted :
@@ -2792,30 +2788,16 @@ RELEASE_END:
             }
           }
 
-          // AUDIT R3-7. A2's fix opened the RESOLUTION door
-          // (determineItem now resolves keys in calcMode 20) but not the
-          // CONTAINMENT one: the switch below decides whether a resolved
-          // item may EXECUTE, and with no arm for the browser every key
-          // that is not one of its own ran its item UNDERNEATH the
-          // browser in a solo build. Written as a guard rather than a
-          // `case CM_PRETTY_BROWSER:` because undo-history already adds
-          // `case 20:` to that switch — two packages contributing the
-          // same label is a duplicate-case compile error in the combined
-          // build (caught by the gate). A guard is idempotent: it simply
-          // fires first wherever the sibling is absent. The browser's
-          // OWN keys are handled in the fnKeyXxx functions, exactly as
-          // the flag and font browsers handle theirs.
+          // Containment: without this, a key that is not the browser's
+          // own runs its item underneath the browser. A guard rather
+          // than a `case CM_PRETTY_BROWSER:` because undo-history adds
+          // `case 20:` to the same switch, and two packages contributing
+          // one label is a duplicate-case error in the combined build.
           //
-          // AUDIT R3-10 — the exemption is load-bearing, and the first
-          // version of this guard did not have it. UP and DOWN are
-          // matched earlier in this same chain (`item == ITM_DOWN_ARROW
-          // || item == ITM_UP_ARROW`), and ENTER, EXIT and BACKSPACE
-          // have their own `case ITM_...` blocks upstream of it — but
-          // `.d` has NEITHER, so a bare guard swallowed the pan key and
-          // made prettyBrowserPan() unreachable from the keyboard. That
-          // is precisely the "pan cannot engage" finding round 2
-          // reported, and this guard would have turned it from
-          // conditional into certain.
+          // The .d exemption is load-bearing: UP and DOWN are matched
+          // earlier in this chain, and ENTER, EXIT and BACKSPACE have
+          // their own cases above, but .d has neither — a bare guard
+          // swallows the pan key and makes prettyBrowserPan unreachable.
           else if(calcMode == CM_PRETTY_BROWSER && item != ITM_dotD) {
             keyActionProcessed = true;
           }
@@ -2832,7 +2814,7 @@ RELEASE_END:
                   //printf("XXXXXXXX @@@@@@ temporaryInformation=%u calcmode=%u showRegis=%u\n", temporaryInformation, calcMode, showRegis);
                   if(item == ITM_RCL) {
                     keyActionProcessed = true;
-                    ppcShadowInvalidate();   // AUDIT PP18RR2-2: fnRecall direct, no item dispatch, so no capture hook runs
+                    ppcShadowInvalidate();   // fnRecall direct: no item dispatch, so no capture hook runs
                     fnRecall(showRegis);
                     setSystemFlag(FLAG_ASLIFT);
                     temporaryInformation = TI_COPY_FROM_SHOW;
@@ -3021,12 +3003,10 @@ RELEASE_END:
                 else if(item == ITM_RCL) {
                   rbr1stDigit = true;
                   calcMode = previousCalcMode;
-                  /* AUDIT PP18RR2-2. Both arms below call fnRecall directly,
-                   * so neither capture hook runs; with FLAG_ASLIFT set,
-                   * fnRecall rolls the whole register stack up and the shadow
-                   * would go on describing registers that moved. This is the
-                   * class ppcShadowInvalidate exists for — the package's own
-                   * browser already calls it at the same kind of site. */
+                  /* Both arms below call fnRecall directly, so neither
+                   * capture hook runs; with FLAG_ASLIFT set fnRecall rolls
+                   * the whole register stack and the shadow would go on
+                   * describing registers that moved. */
                   ppcShadowInvalidate();
                   if(rbrMode == RBR_GLOBAL || rbrMode == RBR_LOCAL) {
                     fnRecall(currentRegisterBrowserScreen);

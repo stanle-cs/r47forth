@@ -45,7 +45,7 @@ static char     ppcNimText[32];
 static bool_t   ppcNimTextValid;
 static bool_t   ppcInited = false;
 
-/* AUDIT R1-3. The two hooks wrap ONE dispatch, but a dispatch can run a
+/* The two hooks wrap ONE dispatch, but a dispatch can run a
  * user program whose every step comes back through them — so the hooks
  * nest. STAGE was made re-entrancy-safe in PP12; DONE never was, and it
  * consumed the stage on the FIRST nested step instead of on its own
@@ -87,7 +87,7 @@ static uint8_t ppcTopSlot(void) {
   return (uint8_t)(getStackTop() - REGISTER_X);
 }
 
-/* AUDIT PP18RR2-6. ppcTopSlot is the LIVE stack height and is the right
+/* ppcTopSlot is the LIVE stack height and is the right
  * bound for iterating the stack (lifts, drops, wipes). It is the wrong bound
  * for asking "is this register one of my slots?": ppcSlot is indexed by
  * ABSOLUTE offset — slot k mirrors REGISTER_X + k in both stack sizes, and
@@ -248,7 +248,7 @@ static uint8_t ppcValLeafFromRegister(calcRegister_t regist) {
   ppcArena[n].item = ppcAllocParamOf(regist);
   xcopy(ppcArena[n].payload, getRegisterDataPointer(regist),
         (bytes > head) ? head : bytes);
-  /* AUDIT PP18RR2-10. A payload wider than one node continues into a
+  /* A payload wider than one node continues into a
    * PPN_VAL2 on child[0] — the PPN_LIT/PPN_LIT2 shape. A complex34 is 32
    * bytes against a 16-byte node, so before this every complex operand
    * became OPAQUE and silently withheld the whole formula. Costs two of the
@@ -362,7 +362,7 @@ static uint16_t ppcSerializeNode(uint8_t n, uint8_t *out, uint16_t off, uint16_t
     case PPN_VAL: {
       uint8_t bytes = nd->pad[1];
       const uint8_t head = (uint8_t)sizeof(nd->payload);
-      /* AUDIT PP18RR2-OOF-1: the write below is kind + dataType + tag +
+      /* the write below is kind + dataType + tag +
        * allocParam(2) + len = SIX bytes plus the payload; the guard used to
        * reserve seven, so a token landing exactly on the cap was refused. */
       if(off + 6 + bytes > cap) {
@@ -374,7 +374,7 @@ static uint16_t ppcSerializeNode(uint8_t n, uint8_t *out, uint16_t off, uint16_t
       out[off++] = (uint8_t)(nd->item & 0xff);    // allocParam
       out[off++] = (uint8_t)(nd->item >> 8);
       out[off++] = bytes;
-      /* AUDIT PP18RR2-10: a payload wider than one node continues into the
+      /* a payload wider than one node continues into the
        * PPN_VAL2 on child[0]. Copying `bytes` straight out of nd->payload
        * would read past the array for a 32-byte complex. The stream stays
        * one flat TKV — only the arena is split — so the reader is unchanged. */
@@ -477,8 +477,7 @@ static void ppcEmit(uint8_t root, calcRegister_t resultReg) {
   if(resultReg >= 0) {
     uint32_t dt = getRegisterDataType(resultReg);
     uint32_t bytes = TO_BYTES((uint32_t)getRegisterFullSizeInBlocks(resultReg));
-    /* AUDIT PP18RR2-OOF-1 (six-byte header, not seven) and PP18RR2-10 (a
-     * complex result snapshot now fits, since the stream is flat). */
+    /* Six-byte header, not seven; a split payload writes flat. */
     if(dt != dtReal34Matrix && dt != dtComplex34Matrix
         && bytes <= PPC_VAL_CAPACITY && off + 6 + bytes <= sizeof(buf)) {
       buf[off++] = PPT_TKRES;
@@ -523,25 +522,13 @@ static void ppcDisplaced(uint8_t slot, bool_t registerStillLive) {
 
 static void ppcInvalidate(bool_t emitCurrent) {
   if(emitCurrent && ppcCurrent != PPC_NIL) {
-    // AUDIT R1-5 (bug class: result snapshot taken on the wrong side of
-    // the dispatch). Every OTHER emit-with-register site in this file
-    // runs at STAGE, before the dispatch, where the register genuinely
-    // still holds the formula's value. This one runs at DONE — the
-    // PPC_INVALIDATE arm is deliberately deferred there because the
-    // dispatch may error — so by now the register holds the NEW item's
-    // output. Reading it filed lies permanently: `2 ENTER 3 . 7 +` then
-    // IP recorded `2 + 3.7 = 5.` in the history, and the browser
-    // recalled that 5.
-    //
-    // AUDIT R2-1 refined it further. Emitting with -1 is truthful but
-    // records NO result, and the browser's ENTER can then never recall
-    // the entry — truthful and useless. The classifier's INVALIDATE arm
-    // now emits at STAGE instead, where the register genuinely still
-    // holds this formula's value, which is where every other
-    // emit-with-register in this file already happens. By the time we
-    // get here the node is normally already marked EMITTED and ppcEmit
-    // refuses it; -1 remains as the truthful last resort for any caller
-    // that reaches invalidation without having staged.
+    // -1 means "no result snapshot". This runs at DONE, where the
+    // register already holds the NEW item's output, so reading it would
+    // file a wrong result permanently. The classifier's INVALIDATE arm
+    // emits at STAGE instead, where the register still holds this
+    // formula's value; by the time we get here the node is normally
+    // already EMITTED and ppcEmit refuses it. -1 is the truthful last
+    // resort for a caller that reaches invalidation without staging.
     ppcEmit(ppcCurrent, (calcRegister_t)-1);
   }
   for(int i = 0; i < 8; i++) {
@@ -615,12 +602,12 @@ static uint8_t ppcClassify(int16_t func) {
     case ITM_UNDO:
       return PPC_DISCARD;   // the user revoked the current formula
 
-    // AUDIT R1-7. R/S resumes a stopped program, which then rewrites the
+    // R/S resumes a stopped program, which then rewrites the
     // stack with every step out of scope — so nothing tells the shadow.
     // XEQ is the same operation reached by the other key and is
     // US_ENABLED, so the default rule already covers it; R/S is
     // US_UNCHANGED and was not.
-    // AUDIT PP18RR2-5. SST is the third member of that set and was not
+    // SST is the third member of that set and was not
     // enumerated: fnSst only sets PGM_SINGLE_STEP, and the key handler then
     // runs one program step with PGM_RUNNING, so every nested hook fails
     // ppcScopeOk and returns without mirroring OR invalidating. The step's
@@ -645,7 +632,7 @@ static uint8_t ppcClassify(int16_t func) {
   // are display/mode chatter — ignore. Upstream maintains US_STATUS for
   // its own undo correctness, so it maintains our predicate too.
   uint32_t us = indexOfItems[func].status & US_STATUS;
-  // AUDIT R1-6. US_CANCEL belongs on the invalidate side, not the ignore
+  // US_CANCEL belongs on the invalidate side, not the ignore
   // side: upstream's own header defines it as "the command cancels the
   // last UNDO data" — the machine moved beyond what undo can describe —
   // against US_UNCHANGED, "leaves the existing UNDO data as is". LOAD
@@ -719,7 +706,7 @@ static void ppcSupersedeCurrent(void) {
 }
 
 void prettyNoteFunction(int16_t func, uint16_t param) {
-  // AUDIT R2-4. The counter used to saturate at 255 on the way up while
+  // The counter used to saturate at 255 on the way up while
   // decrementing unconditionally on the way down, so a 256-deep nesting
   // would desynchronise it PERMANENTLY and every later DONE would pair
   // with the wrong STAGE. 256 levels of program-within-program is not
@@ -787,7 +774,7 @@ void prettyNoteFunction(int16_t func, uint16_t param) {
         ppcDisplaced(k, true);
       }
       break;
-    /* AUDIT PP18RR2-3. FILL overwrites Y..top with X — displacement by
+    /* FILL overwrites Y..top with X — displacement by
      * DESIGN.md's segmentation rule, exactly like the CLSTK wipe above — but
      * it had no STAGE arm at all, so nothing was filed while the registers
      * were still pre-op. Its DONE arm then freed those slots, and
@@ -800,7 +787,7 @@ void prettyNoteFunction(int16_t func, uint16_t param) {
         ppcDisplaced(k, true);
       }
       break;
-    /* AUDIT PP18RR2-4. This ran at DONE, where fnStore has ALREADY copied X
+    /* At DONE fnStore has ALREADY copied X
      * into the target, so ppcEmit read the post-store register and the ring
      * recorded "2+3 = 9" for a formula whose value is 5 — permanently, and
      * the browser's ENTER recalls that 9. ppcEmit's contract is that
@@ -837,7 +824,7 @@ void prettyNoteFunction(int16_t func, uint16_t param) {
     case PPC_XSWAPREG:
       // the tree's value still sits in register X at STAGE
       ppcDisplaced(0, true);
-      // AUDIT R3-5. x<> to a STACK register swaps X with that slot's
+      // x<> to a STACK register swaps X with that slot's
       // register, so the PARTNER slot's tree stops describing it — the
       // same hole R1-8 closed for STO, at the hand exception next door.
       {
@@ -921,7 +908,7 @@ void prettyNoteFunction(int16_t func, uint16_t param) {
       // applied at DONE (the dispatch may still error out)
       break;
     case PPC_INVALIDATE:
-      // AUDIT R2-1. R1-5 stopped this from reading a POST-dispatch
+      // R1-5 stopped this from reading a POST-dispatch
       // register as the formula's result — correct, but emitting with
       // -1 records no result at all, and the browser's ENTER can then
       // never recall the entry: truthful and useless. The register is
@@ -945,7 +932,7 @@ void prettyNoteFunctionDone(void) {
   if(ppcDispatchDepth > 0) {
     ppcDispatchDepth--;
   }
-  // only the dispatch that staged it may apply it (AUDIT R1-3)
+  // only the dispatch that staged it may apply it
   if(!ppcStage.valid || ppcStage.depth != myDepth) {
     return;
   }
@@ -1085,29 +1072,20 @@ void prettyNoteFunctionDone(void) {
       break;
     }
     case PPC_STO_NOP: {
-      // AUDIT R1-8. "register-side only: the stack does not move" is true
-      // about MOTION and irrelevant to the invariant, which is about
-      // VALUES. `STO Y` overwrites register Y while the shadow goes on
-      // showing Y's old tree, so `7 ENTER 2 ENTER 3 + STO Y x` displayed
-      // 7·(2+3) = 25 for a product that is really 25 of something else.
-      // The hand exception is what created the hole: ITM_STO is
-      // undo-enabled, so without it the default rule would have been
-      // safe. A stack target degrades that slot to UNKNOWN, which
-      // re-materialises truthfully from the register on next use.
-      // AUDIT R3-2, R3-3, R3-4 — three corrections to R1-8.
+      // The invariant is about VALUES, not motion: STO overwrites its
+      // target while the shadow still shows that slot's old tree. Four
+      // cases, all handled at STAGE (see the arm there):
+      //  * a STACK target degrades that slot to UNKNOWN, which
+      //    re-materialises truthfully from the register on next use;
       //  * STO X writes X with what X already holds, so it changes no
-      //    value and must not disturb the shadow at all.
-      //  * The tree being dropped may be a FINISHED formula. Every other
-      //    wipe site in this file displaces it (emits it with the
-      //    register that still holds its value) before freeing; this one
-      //    freed it, so the owner's formula vanished from the history
-      //    instead of being filed.
+      //    value and must not disturb the shadow at all;
+      //  * the tree being dropped may be a FINISHED formula, so it is
+      //    displaced (emitted with the register that still holds its
+      //    value) before being freed;
       //  * REGISTER_L is a shadow slot too — ppcSlotL caches the LASTx
-      //    tree — and STO L left it describing the overwritten value.
-      // AUDIT PP18RR2-4: the whole arm moved to STAGE, where the target
-      // register still holds the formula's value. Nothing is left to do
-      // here; an errored dispatch costs only granularity, which the
-      // invariant permits, and is what PPC_XSWAPREG already accepts.
+      //    tree — so STO L must clear it.
+      // Nothing is left to do here. An errored dispatch costs only
+      // granularity, which the invariant permits.
       break;
     }
     case PPC_RCLCLS: {
@@ -1250,7 +1228,7 @@ void prettyNoteNimText(const char *aim) {
     s++;
   }
   size_t n = strlen(s);
-  // AUDIT R1-14. The gate was sizeof(ppcNimText) = 32, but the LEAF that
+  // The gate was sizeof(ppcNimText) = 32, but the LEAF that
   // ultimately stores this text holds two 15-byte payloads = 30. Length
   // 31 was therefore the one value admitted and then silently truncated
   // — `aux` recorded 15, so nothing downstream could tell, and the

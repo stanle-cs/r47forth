@@ -1910,16 +1910,10 @@ static bool_t ppEqDelegate(uint8_t kind, uint16_t order, uint16_t bodySlot,
 
   bool_t ok = false;
   bool_t wasRefused = false;
-  // AUDIT R1-2 (bug class: stale global read as this call's verdict).
-  // Only the INTEG branch used to clear engineNestingWasRefused, and
-  // NOTHING on the derivative path clears it — solve.c's
-  // engineNestingRefused() is the only writer of `false` in the tree.
-  // So one earlier refused nesting left the flag standing and every
-  // later DERIV construct discarded a correct answer as "refused",
-  // until some integral or solve happened to clear it. programRunStop
-  // had the same shape: a pre-existing PGM_WAITING was read as this
-  // call's refusal AND then overwritten. Both are now established
-  // before the call and the caller's run state is put back after.
+  // Establish both globals BEFORE the call and restore the caller's run
+  // state after. engineNestingWasRefused has one writer of `false` in
+  // the tree, so a stale `true` from an earlier refusal would be read as
+  // THIS call's verdict; programRunStop has the same shape.
   uint16_t savedRunStop = programRunStop;
   engineNestingWasRefused = false;
   if(ppEqStackExceeded()) {
@@ -2105,15 +2099,12 @@ static int16_t ppEqBigopIntercept(const char *strPtr, uint16_t parseMode, char *
     // the bound variable's own value is kept and put back (the
     // differentiate.c probe idiom); binding is a DIRECT register write —
     // no dispatch runs inside the evaluation
-    // AUDIT R1-1 (bug class: save-test narrower than the save). The test
-    // here used to be getRegisterAsRealQuiet(), copied from
-    // differentiate.c — but that function REFUSES a complex with a
-    // non-zero imaginary part, while saveRegisterSnapshot handles one
-    // perfectly well. So a bound variable holding 7+4i took no snapshot
-    // and was then overwritten by the counter and never put back: the
-    // owner's value silently destroyed by a sum that had no business
-    // touching it. Ask what the SNAPSHOT covers, not what converts to a
-    // real; and when it covers nothing, refuse rather than clobber.
+    // The test must ask what saveRegisterSnapshot COVERS, not what
+    // converts to a real: a narrower test (getRegisterAsRealQuiet
+    // refuses a complex with a non-zero imaginary part) leaves a bound
+    // variable unsnapshotted, and the counter then overwrites a value
+    // that is never put back. Where nothing covers it, refuse rather
+    // than clobber.
     snap_t savedVarSnap;
     uint32_t varType = getRegisterDataType(var);
     bool_t restoreVar = (varType == dtReal34 || varType == dtComplex34
@@ -2232,12 +2223,10 @@ static int16_t ppEqBigopIntercept(const char *strPtr, uint16_t parseMode, char *
       }
     }
     else if(ok) {
-      // AUDIT R3-1. R1-1 refuses a loop variable it cannot snapshot by
-      // setting ok = false — but this arm never read it, so DERIV/INTEG
-      // ran anyway and ppEqDelegate's own `reallocateRegister(var, ...)`
-      // destroyed the very value the refusal existed to protect. A
-      // refusal that does not stop the work is not a refusal. (The
-      // SUM/PROD arm above was already safe: its loop is `while(ok)`.)
+      // The snapshot refusal above sets ok = false; this arm must READ
+      // it, or DERIV/INTEG runs anyway and reallocateRegister destroys
+      // the value the refusal exists to protect. (The SUM/PROD arm is
+      // already safe: its loop is `while(ok)`.)
       char bodyText[PPEQ_WORD_BYTES];
       if(argLen[0] == 0 || argLen[0] >= sizeof(bodyText)) {
         ppEqSyntaxError("big-operator body too long");

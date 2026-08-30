@@ -45,7 +45,7 @@ static void pbPaint(void) {
     return;
   }
 
-  /* AUDIT R4-4. A row that will not build used to be `continue`d out of
+  /* A row that will not build must not be `continue`d out of
    * both passes — so it occupied no space, and if it was the SELECTED row
    * the `selPage = page` assignment was skipped with it. selPage kept its
    * initialiser, pass 2 painted page 0, and no selection marker appeared
@@ -99,7 +99,7 @@ static void pbPaint(void) {
       }
       if(row == pbSelection) {
         const ppNode_t *n = ppNodeAt(root);
-        // AUDIT R1-10. This used to be the only place a wide row was
+        // This used to be the only place a wide row was
         // handled, but the row builder rejected everything wider than
         // 392 px, leaving a 4 px band in which pan could engage at all —
         // and a 60 px step wrapped it to 0 on the next paint. Rows are
@@ -198,7 +198,7 @@ static const uint8_t *pbFindResult(const uint8_t *entry, uint8_t *dataType, uint
       case PPT_TKO2:
         off += 2;
         break;
-      // AUDIT R1-9. Two decoders read this one stream: ppfBuildEntry
+      // Two decoders read this one stream: ppfBuildEntry
       // knows all eight tokens and rendered the row, while this one knew
       // seven and bailed on the eighth — BEFORE reaching the TKRES that
       // follows it. So every history entry containing a big operator

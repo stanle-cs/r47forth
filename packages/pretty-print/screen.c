@@ -1272,11 +1272,9 @@ return res;
           if(x2 > 0) {
             x2--;
           }
-          /* AUDIT PP18RR3-3 (pretty-print): y is recovered from its wrap and
-           * clamped two lines up; x never was. The browser's pan produces a
-           * negative x, which as uint32 is a huge value, and both simulator
-           * HALs reject it while the device ROM's bitblt24 has no bounds
-           * contract. Clamp x where y is already clamped. */
+          /* y is recovered from its wrap and clamped two lines up; x is
+           * not. A negative x is a huge uint32, which the simulator HALs
+           * reject and the device ROM's bitblt24 does not. */
           if(x1 < SCREEN_WIDTH) {
             setPixel(x1, y1);
             if(boldString == 1 && x1 + 1 < SCREEN_WIDTH) {
@@ -5874,10 +5872,9 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
         }
 
         if(calcMode == CM_NORMAL && screenUpdatingMode != SCRUPD_AUTO && temporaryInformation == TI_SHOWNOTHING) {
-          /* AUDIT PP18RR3-2 (pretty-print): this return is TOTAL, skipping
-           * the menu and status bar as well as the stack. A caller that did
-           * not set SCRUPD_MANUAL_MENU never asked to manage the menu, so it
-           * still gets one; callers that set the bit are unaffected. */
+          /* This return is TOTAL: it skips the menu and status bar as
+           * well as the stack. A caller that did not set
+           * SCRUPD_MANUAL_MENU never asked to manage the menu. */
           if((screenUpdatingMode & SCRUPD_MANUAL_MENU) == 0) {
             showSoftmenuCurrentPart();
             refreshStatusBar();

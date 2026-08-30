@@ -262,7 +262,7 @@ bool_t ppParseExponent(const char *src, uint8_t ctxFont, uint8_t childFont, uint
       else if(code == PP_SUP_MINUS_CODE && !expDigitSeen) {
         // leading exponent sign, fine
       }
-      /* AUDIT PP18RR2-1. supNumberToDisplayString's last act is
+      /* supNumberToDisplayString's last act is
        * strcat(STD_SPACE_HAIR) — every exponent string the builder produces
        * ends with one, and nothing in src/c47 ever strips it. Refusing it
        * here declined every real with a displayed ten-exponent, so PP2's
@@ -292,7 +292,7 @@ bool_t ppParseExponent(const char *src, uint8_t ctxFont, uint8_t childFont, uint
   if(baseLen + 3 > (int16_t)sizeof(ppSpanA)) {
     return false;
   }
-  /* AUDIT PP18RR2-13. Read the exponent out of src BEFORE writing ppSpanA:
+  /* Read the exponent out of src BEFORE writing ppSpanA:
    * ppParseComplex hands its own ppSpanA in as src, and the base rebuild
    * below lands its '1','0','\0' exactly on expOff, so extracting after the
    * write returned the digits of a buffer this function had just clobbered.
@@ -859,13 +859,13 @@ bool_t prettyTryRegisterLine(calcRegister_t regist, int16_t baseY, int16_t *line
  * the ordinary SHOW so the user always gets a result. */
 void fnPrettyShow(uint16_t unusedButMandatoryParameter) {
   (void)unusedButMandatoryParameter;
-  // AUDIT R1-13. The inline surface declines under checkHP because HP
+  // The inline surface declines under checkHP because HP
   // layout DOUBLES glyph rows and our metrics assume it off; this
   // surface used numericFont through the same engine and had no such
   // guard. stringWidth compensates horizontally, so ppMeasure succeeded
   // and the fnC47Show fallback never fired — the owner got a garbled
   // screen at roughly twice the budgeted height, ink outside the band.
-  // AUDIT R3-6. Folding checkHP into the error guard made PSHOW run the
+  // Folding checkHP into the error guard made PSHOW run the
   // ordinary SHOW while an error was still pending — the original guard
   // returned silently. An error takes precedence over everything.
   if(lastErrorCode != ERROR_NONE) {

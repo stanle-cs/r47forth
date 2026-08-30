@@ -32,7 +32,7 @@ typedef struct {
   bool_t failed;
 } ppqCtx_t;
 
-/* AUDIT PP18RR3-11: 0xa16a is STD_SUP_PLUS, the twin of the 0xa16b minus
+/* 0xa16a is STD_SUP_PLUS, the twin of the 0xa16b minus
  * already listed. _showExponent emits both — it has an explicit '+' arm — so
  * admitting only the minus made one glyph decide whether the whole equation
  * kept its 2D strip. Same class as ppqNumber's comma: an acceptor alphabet
@@ -82,7 +82,7 @@ static uint8_t ppqNumber(ppqCtx_t *c, uint8_t font) {
   bool_t any = false;
   while(c->pos < c->len) {
     uint16_t code = ppqPeek(c, &next);
-    /* AUDIT PP18RR3-6. The comma is a radix mark here, not a separator:
+    /* The comma is a radix mark here, not a separator:
      * upstream's own tokenizer counts ',' toward numericCount exactly as it
      * counts '.' and the digits (solver/equation.c), and _parseWord then
      * rewrites every ',' in a NUMERIC token to '.' before stringToReal34 —
@@ -147,7 +147,7 @@ static uint8_t ppqName(ppqCtx_t *c, uint8_t font) {
   return ppNewRun(c->s + start, (uint16_t)(c->pos - start), font);
 }
 
-/* AUDIT PP18R3-3: a big operator used as an OPERAND needs brackets, and
+/* a big operator used as an OPERAND needs brackets, and
  * this parser is the THIRD producer of that shape — the walker
  * (PP18-4) and the capture engine (R2-2) were fixed and this one was
  * not, because there is no precedence value anywhere in ppqParse to
@@ -933,7 +933,7 @@ uint8_t ppqFrameDerivative(uint8_t eq, bool_t second) {
  * ellipsis — upstream's own shape for this problem (solver/equation.c packs
  * to (strWidth + glyphWidth) <= SCREEN_WIDTH - 2 - X_OFF and writes
  * STD_ELLIPSIS). Separate from the paint so the fit can be asserted
- * directly rather than inferred from pixels. AUDIT PP18RR3-5. */
+ * directly rather than inferred from pixels. */
 void ppqFitWithEllipsis(const char *src, char *out, uint16_t cap) {
   const int16_t budget = (int16_t)(SCREEN_WIDTH - 4
                                    - stringWidth(STD_ELLIPSIS, &standardFont, false, true));
@@ -1000,11 +1000,11 @@ bool_t ppqShowRender(const char *src) {
                  94 - 8, vmNormal, false, true);
     }
     else {
-      /* AUDIT PP18RR3-5. This measured w and then painted `src` anyway:
+      /* Measuring w and then painting `src` anyway is a lie by truncation:
        * showString passes NO_LF, so x ran past 400 and every glyph beyond
        * the edge was dropped by bitblt24 with nothing marking the cut — the
        * owner read a truncated equation as the whole one. That is the lie
-       * the sibling pager refuses under AUDIT R2-2. Its remedy (omit the
+       * the sibling pager refuses that. Its remedy (omit the
        * row) does not transfer, because this fallback exists to avoid a
        * blank band and EQ9 pins that; so mark the cut instead, which is
        * what the surface EQSHW improves on already does. */

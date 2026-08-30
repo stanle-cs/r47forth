@@ -80,7 +80,7 @@ int16_t         ppPreferredBase(int16_t baseY);   ///< baseY + numericFont box a
 
 enum { PPN_FREE = 0, PPN_OP1, PPN_OP2, PPN_LIT, PPN_LIT2, PPN_VAL,
        PPN_RCL, PPN_CONST, PPN_OPAQUE, PPN_BIGOP, PPN_VAL2 };
-// PPN_VAL2 (AUDIT PP18RR2-10): a VAL whose raw payload exceeds the 16-byte
+// PPN_VAL2: a VAL whose raw payload exceeds the 16-byte
 // node carries the remainder in one continuation hung off child[0], the same
 // shape PPN_LIT/PPN_LIT2 already use for long typed literals. This is what
 // DESIGN.md 3 has always promised for complex ("complex via a two-child
@@ -116,7 +116,7 @@ typedef struct {
 // prettyEquation.c — EQN display-string -> 2D strip layout
 bool_t ppqParse(const char *src, uint8_t ctxFont, uint8_t childFont, uint8_t *rootOut);
 bool_t ppqShowRender(const char *src);
-void   ppqFitWithEllipsis(const char *src, char *out, uint16_t cap);   ///< AUDIT PP18RR3-5
+void   ppqFitWithEllipsis(const char *src, char *out, uint16_t cap);   ///< fit a line to the screen, marking any cut
 uint8_t ppqFrameIntegral(uint8_t eq);                    ///< PP13: ∫ with real ULIM/LLIM limits + d<var>; bare PP_INT without them
 uint8_t ppqFrameDerivative(uint8_t eq, bool_t second);   ///< PP13: d/dx (d²/dx²) framing
 
@@ -174,13 +174,13 @@ const uint8_t   *ppcHistoryEntry(uint8_t idx, uint16_t *lenOut, uint16_t *seqOut
 void             ppcHistoryClear(void);
 void             ppcShadowInvalidate(void);   ///< dispatch-bypassing mutations (browser recall)
 uint8_t          ppcTestCurrentRaw(void);   ///< test only: the current root BEFORE the opaque screen, so a pin can tell a truthful degradation from a total invalidation
-uint8_t          ppcTestSlotRaw(uint8_t k);   ///< test only: slot k's raw arena index, so a pin can assert a slot was degraded (AUDIT PP18RR2-6)
+uint8_t          ppcTestSlotRaw(uint8_t k);   ///< test only: slot k's raw arena index, so a pin can assert a slot was degraded
 void             ppcTestDeinit(void);         ///< test only: re-arm the cold-start path so FV16 can prove lazy init leaves the FLAGS alone
 
 // prettyFormula.c — the browser reuses the pager's packed row builder
 // canPan: the BROWSER can scroll a row sideways, so it accepts any
 // width; the full-screen pager cannot, and for it an over-wide row must
-// be refused rather than silently clipped (AUDIT R2-2).
+// be refused rather than silently clipped.
 bool_t ppfBuildRow(uint8_t row, uint8_t haveCurrent, bool_t canPan, uint8_t *rootOut, int16_t *ascOut, int16_t *hOut);
 
 // prettyValue.c — converters and the toggle's test hook
