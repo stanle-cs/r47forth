@@ -1277,27 +1277,24 @@ return res;
           if(x2 > 0) {
             x2--;
           }
-          /* y is recovered from its wrap and clamped two lines up; x is
-           * not. A negative x is a huge uint32, which the simulator HALs
-           * reject and the device ROM's bitblt24 does not. */
-          /* Each write is screened by ITS OWN column. Gating the whole
-           * block on x1 also hid x2, which is x1-1: a glyph column landing
-           * exactly on SCREEN_WIDTH has an on-screen twin at 399 that the
-           * doubled path draws, and the glyph's own pre-clear blanks 399
-           * first — so the outer guard turned a wrapped-x fix into a lost
-           * pixel at the right edge. */
+          /* y is recovered from its wrap and clamped; x is not, and a
+           * negative x is a huge uint32 the device ROM's bitblt24 accepts.
+           * Each write is screened by its OWN column: x2 is x1-1, so one
+           * guard over both would blank a real pixel at the right edge.
+           * The enclosed upstream lines keep their own indentation so the
+           * patch does not carry whitespace-only hunks. */
           if(x1 < SCREEN_WIDTH) {
-            setPixel(x1, y1);
-            if(boldString == 1 && x1 + 1 < SCREEN_WIDTH) {
-              setPixel(x1+1, y1);
-            }
+          setPixel(x1, y1);
+          if(boldString == 1 && x1 + 1 < SCREEN_WIDTH) {
+            setPixel(x1+1, y1);
+          }
           }
           if(numDouble && x2 < SCREEN_WIDTH) {
             setPixel(x2, y1);
           }
           if(rep_enlarge) {
             if(x1 < SCREEN_WIDTH) {
-              setPixel(x1, y2);
+            setPixel(x1, y2);
             }
             if(numDouble && x2 < SCREEN_WIDTH) {
               setPixel(x2, y2);
