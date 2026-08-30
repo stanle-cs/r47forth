@@ -5873,9 +5873,19 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
 
         if(calcMode == CM_NORMAL && screenUpdatingMode != SCRUPD_AUTO && temporaryInformation == TI_SHOWNOTHING) {
           /* This return is TOTAL: it skips the menu and status bar as
-           * well as the stack. A caller that did not set
-           * SCRUPD_MANUAL_MENU never asked to manage the menu. */
-          if((screenUpdatingMode & SCRUPD_MANUAL_MENU) == 0) {
+           * well as the stack. Repaint them only for a caller that took
+           * the stack alone.
+           *
+           * MANUAL_MENU cannot answer that on its own: popSoftmenu clears
+           * it as routine bookkeeping, so a surface that DID claim the
+           * whole screen looks the same as one that never asked. A caller
+           * managing the shift status is managing the chrome, and that bit
+           * survives the teardown — which is the difference between the
+           * two VISUAL surfaces: the Z/T window takes MANUAL_STACK alone
+           * and wants its menu back, the full-screen view takes all three
+           * and paints over the softkey band itself. */
+          if((screenUpdatingMode
+              & (SCRUPD_MANUAL_MENU | SCRUPD_MANUAL_SHIFT_STATUS)) == 0) {
             showSoftmenuCurrentPart();
             refreshStatusBar();
           }

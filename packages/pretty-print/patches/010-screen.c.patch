@@ -1,5 +1,5 @@
 diff --git a/src/c47/screen.c b/src/c47/screen.c
-index d2ac868bd18f9f4c20608f5dc90d5652844afcc6..b5ef0694ca8e13fedbf3c9b390a9c8750153b2e3 100644
+index d2ac868bd18f9f4c20608f5dc90d5652844afcc6..b3949b1990d73ce32f170d655e3c8f70a65498b3 100644
 --- a/src/c47/screen.c
 +++ b/src/c47/screen.c
 @@ -1272,17 +1272,22 @@ return res;
@@ -49,21 +49,31 @@ index d2ac868bd18f9f4c20608f5dc90d5652844afcc6..b5ef0694ca8e13fedbf3c9b390a9c875
  /*Main type dtReal34 FLAG_FRACT*/
          else if(getSystemFlag(FLAG_FRACT)
                      && (    getRegisterDataType(regist) == dtReal34
-@@ -5861,6 +5872,13 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
+@@ -5861,6 +5872,23 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
          }
  
          if(calcMode == CM_NORMAL && screenUpdatingMode != SCRUPD_AUTO && temporaryInformation == TI_SHOWNOTHING) {
 +          /* This return is TOTAL: it skips the menu and status bar as
-+           * well as the stack. A caller that did not set
-+           * SCRUPD_MANUAL_MENU never asked to manage the menu. */
-+          if((screenUpdatingMode & SCRUPD_MANUAL_MENU) == 0) {
++           * well as the stack. Repaint them only for a caller that took
++           * the stack alone.
++           *
++           * MANUAL_MENU cannot answer that on its own: popSoftmenu clears
++           * it as routine bookkeeping, so a surface that DID claim the
++           * whole screen looks the same as one that never asked. A caller
++           * managing the shift status is managing the chrome, and that bit
++           * survives the teardown — which is the difference between the
++           * two VISUAL surfaces: the Z/T window takes MANUAL_STACK alone
++           * and wants its menu back, the full-screen view takes all three
++           * and paints over the softkey band itself. */
++          if((screenUpdatingMode
++              & (SCRUPD_MANUAL_MENU | SCRUPD_MANUAL_SHIFT_STATUS)) == 0) {
 +            showSoftmenuCurrentPart();
 +            refreshStatusBar();
 +          }
            goto RETURN_NORMAL;
          }
  
-@@ -6160,6 +6178,13 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
+@@ -6160,6 +6188,13 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
          force_refresh(force);
          break;
  
