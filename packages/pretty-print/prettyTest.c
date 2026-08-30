@@ -154,7 +154,13 @@ void prettyTestMeasure(uint16_t unusedButMandatoryParameter) {
   // M6: exponent form — mantissa ·₁₀⁴⁰ becomes SUP(base "…·10", exp "40").
   ppReset();
   {
-    static const char expForm[] = "1.5" "\x80\xb7" "\xa4\x7d" "\xa1\x64" "\xa1\x60";
+    /* AUDIT PP18RR2-1. This fixture was hand-fed WITHOUT the trailing hair
+     * space, so it exercised an alphabet the builder never emits and five
+     * audit rounds read past a parser that rejected every real string.
+     * supNumberToDisplayString ends with strcat(STD_SPACE_HAIR) = a0 0a,
+     * unconditionally; carry it, as the sibling ppParseIrfrac fixture
+     * already carries its own trailing spaces. */
+    static const char expForm[] = "1.5" "\x80\xb7" "\xa4\x7d" "\xa1\x64" "\xa1\x60" "\xa0\x0a";
     static const char expBase[] = "1.5" "\x80\xb7" "10";
     if(!ppParseExponent(expForm, PP_FONT_NUMERIC, PP_FONT_STANDARD, &root)) {
       ppTestFail("M6 parse");
@@ -243,6 +249,98 @@ void prettyTestMeasure(uint16_t unusedButMandatoryParameter) {
   static const char supAfter[] = "\xa1\x63" "/" "\xa1\x63";
   if(ppParseFraction(supAfter, PP_FONT_NUMERIC, PP_FONT_STANDARD, &root)) {
     ppTestFail("M4 sup after slash accepted");
+  }
+
+  /* M8 (AUDIT PP18RR3-1) — the substituted-glyph class. The engine derives
+   * every metric from &numericFont, clears exactly the box it measured, and
+   * paints with noPreClear; upstream's showGlyphCode may substitute a glyph
+   * from ANOTHER table for the same code. Where the substitute's row metrics
+   * differ, ink lands outside the cleared box.
+   *
+   * This is the R1-13 class (checkHP, which doubles glyph rows) at its
+   * sibling flag. The rule the class needs: for every substitution this
+   * engine's fonts can undergo, either the package declines, or the measured
+   * box contains the substitute's ink. checkHP takes the decline arm;
+   * FLAG_BOLD was ruled on 2026-08-29 to keep DISPLAYING, so the paint
+   * entries suppress the substitution instead and the plain face is used
+   * throughout.
+   *
+   * Part 1 pins WHY the suppression is needed, against the live font tables
+   * rather than a remembered number — if a future font makes the two tables
+   * agree, this assertion fires and the suppression can go. Part 2 pins the
+   * consequence: the drawn output is identical with the flag set or clear. */
+  {
+    // the same probes showGlyphCode itself makes: findGlyph for the
+    // measured font, findGlyphExact for the bold substitution (a miss
+    // returns -1 so it can never alias glyph index 0)
+    int16_t pi = findGlyph(&numericFont, '0');
+    int16_t bi = findGlyphExact(&numericFontBold, '0');
+    const glyph_t *plain = (pi < 0) ? NULL : &numericFont.glyphs[pi];
+    const glyph_t *bold  = (bi < 0) ? NULL : &numericFontBold.glyphs[bi];
+    if(plain == NULL || bold == NULL) {
+      ppTestFail("M8 '0' missing from a numeric font table");
+    }
+    else if(plain->rowsAboveGlyph == bold->rowsAboveGlyph
+            && plain->rowsGlyph == bold->rowsGlyph) {
+      ppTestFail("M8 bold and plain row metrics now agree — the FLAG_BOLD suppression is obsolete, re-derive the class");
+    }
+
+    /* The property, after the 2026-08-29 ruling that BOLD must still draw:
+     * pretty print's output does not depend on FLAG_BOLD. Paint suppresses
+     * the substitution so the plain face is used throughout, which is what
+     * keeps paint on the same font table the metrics were derived from.
+     * Comparing the two renderings pins that directly — before the fix the
+     * bold glyphs changed the pixels (and spilled outside the cleared box);
+     * a regression that reinstates the substitution reddens this. */
+    bool_t  hadFract = getSystemFlag(FLAG_FRACT);
+    bool_t  boldWas  = getSystemFlag(FLAG_BOLD);
+    uint8_t modeWas  = calcMode;
+    calcMode             = CM_NORMAL;
+    temporaryInformation = TI_NO_INFO;
+    lastErrorCode        = 0;
+    setSystemFlag(FLAG_FRACT);
+    prettySetEnabled(true);
+    ppTestSetRealX("1.5");
+
+    const uint32_t bandTop = (uint32_t)(Y_POSITION_OF_REGISTER_X_LINE - 4);
+    uint32_t sumPlain = 0, sumBold = 0, litPlain = 0, litBold = 0;
+    int16_t w = 0;
+    bool_t drewPlain, drewBold;
+
+    clearSystemFlag(FLAG_BOLD);
+    lcd_fill_rect(0, bandTop, SCREEN_WIDTH, 43, LCD_SET_VALUE);
+    drewPlain = prettyTryRegisterLine(REGISTER_X, Y_POSITION_OF_REGISTER_X_LINE, &w);
+    for(uint32_t r = 0; r < 43; r++) {
+      for(uint32_t x = 0; x < SCREEN_WIDTH; x++) {
+        if(lcd_buffer_pixel_on(x, bandTop + r)) { litPlain++; sumPlain += r * 401 + x; }
+      }
+    }
+
+    setSystemFlag(FLAG_BOLD);
+    lcd_fill_rect(0, bandTop, SCREEN_WIDTH, 43, LCD_SET_VALUE);
+    drewBold = prettyTryRegisterLine(REGISTER_X, Y_POSITION_OF_REGISTER_X_LINE, &w);
+    for(uint32_t r = 0; r < 43; r++) {
+      for(uint32_t x = 0; x < SCREEN_WIDTH; x++) {
+        if(lcd_buffer_pixel_on(x, bandTop + r)) { litBold++; sumBold += r * 401 + x; }
+      }
+    }
+
+    if(!drewPlain) {
+      ppTestFail("M8 setup: the inline surface declines with BOLD off — pin cannot reach its state");
+    }
+    else if(!drewBold) {
+      ppTestFail("M8 the inline surface declined under FLAG_BOLD; the 2026-08-29 ruling is that BOLD must still display");
+    }
+    else if(litPlain == 0) {
+      ppTestFail("M8 setup: nothing was painted with BOLD off — pin proves nothing");
+    }
+    else if(litBold != litPlain || sumBold != sumPlain) {
+      ppTestFailInt("M8 BOLD changed the pretty output (lit pixels)", (int32_t)litPlain, (int32_t)litBold);
+    }
+
+    if(!boldWas)  clearSystemFlag(FLAG_BOLD);
+    if(!hadFract) clearSystemFlag(FLAG_FRACT);
+    calcMode = modeWas;
   }
 
   ppTestWriteLonI(REGISTER_X, ppTestFailures);
@@ -2598,6 +2696,112 @@ void prettyTestEquation(uint16_t unusedButMandatoryParameter) {
   if(ppqParse("1/X" "\xa0\x1b", PP_FONT_STANDARD, PP_FONT_TINY, &root)) ppTestFail("EQ4 ellipsis accepted");
   ppReset();
   if(ppqParse("\x83\xc0" "/2", PP_FONT_STANDARD, PP_FONT_TINY, &root))  ppTestFail("EQ4 unknown glyph accepted");
+
+  /* EQ4b (AUDIT PP18RR3-6) — radix parity. The evaluator treats ',' and '.'
+   * as the same radix mark, so an acceptor whose verdict changes between the
+   * two for identical mathematics is a defect by definition. Both forms must
+   * parse AND draw the same picture; the dot form is the control, so a
+   * regression that breaks both still reddens this. */
+  {
+    char sigDot[192], sigComma[192];
+    uint8_t dotRoot = PP_NONE, commaRoot = PP_NONE;
+    sigDot[0] = sigComma[0] = 0;
+
+    ppReset();
+    if(!ppqParse("1.5/X", PP_FONT_STANDARD, PP_FONT_TINY, &dotRoot)) {
+      ppTestFail("EQ4b control: the dot radix form does not parse at all");
+    }
+    else {
+      ppfTestSigNode(dotRoot, sigDot, sizeof(sigDot));
+    }
+    ppReset();
+    if(!ppqParse("1,5/X", PP_FONT_STANDARD, PP_FONT_TINY, &commaRoot)) {
+      ppTestFail("EQ4b the comma radix form declined; the evaluator reads 1,5 as exactly 1.5");
+    }
+    else {
+      ppfTestSigNode(commaRoot, sigComma, sizeof(sigComma));
+    }
+
+    /* Assert the PROPERTY, not a signature literal: the drawing keeps the
+     * owner's own radix spelling, so normalise that one character and the
+     * two pictures must be identical. A literal here would only enshrine
+     * whatever the code happens to emit. */
+    for(char *q = sigComma; *q != 0; q++) {
+      if(*q == ',') {
+        *q = '.';
+      }
+    }
+    if(sigDot[0] == 0 || strcmp(sigDot, sigComma) != 0) {
+      ppTestFailures++;
+      printf("prettyPrint test FAIL: EQ4b radix parity (dot '%s' vs comma-normalised '%s')\n",
+             sigDot, sigComma);
+    }
+  }
+
+  /* EQ4c (AUDIT PP18RR3-11) — exponent-sign parity. The equation builder
+   * emits BOTH signs (_showExponent writes STD_SUP_PLUS for an explicit '+'),
+   * but PPQ_IS_SUP admitted only STD_SUP_MINUS, so one glyph decided whether
+   * the whole equation kept its 2D strip. Same class as EQ4b's radix: the
+   * acceptor's alphabet was narrower than the producer's emit-set.
+   * The minus form is the control — it parsed before the fix and must keep
+   * parsing, so a regression that breaks both still reddens this. */
+  {
+    char sigMinus[192], sigPlus[192];
+    uint8_t mRoot = PP_NONE, pRoot = PP_NONE;
+    sigMinus[0] = sigPlus[0] = 0;
+
+    ppReset();
+    if(!ppqParse("1" "\x80\xb7" "\xa4\x7d" "\xa1\x6b" "\xa1\x65" "/X",
+                 PP_FONT_STANDARD, PP_FONT_TINY, &mRoot)) {
+      ppTestFail("EQ4c control: the sup-MINUS exponent form does not parse");
+    }
+    else {
+      ppfTestSigNode(mRoot, sigMinus, sizeof(sigMinus));
+    }
+    ppReset();
+    if(!ppqParse("1" "\x80\xb7" "\xa4\x7d" "\xa1\x6a" "\xa1\x65" "/X",
+                 PP_FONT_STANDARD, PP_FONT_TINY, &pRoot)) {
+      ppTestFail("EQ4c the sup-PLUS exponent form declined; the builder emits it too");
+    }
+    else {
+      ppfTestSigNode(pRoot, sigPlus, sizeof(sigPlus));
+    }
+    if(sigMinus[0] == 0 || sigPlus[0] == 0 || strlen(sigPlus) != strlen(sigMinus)) {
+      ppTestFail("EQ4c the two signed-exponent forms do not draw the same shape");
+    }
+  }
+
+  /* EQ9b (AUDIT PP18RR3-5) — the linear fallback must not lie by truncation.
+   * An equation with no fraction, radical or script is refused by the 2D
+   * grammar by construction, so it lands on the fallback; if it is wider
+   * than the screen, showString's NO_LF arm paints past the edge and
+   * bitblt24 drops the tail silently. The sibling pager refuses that shape
+   * outright (AUDIT R2-2), but this surface exists to avoid a blank band, so
+   * the honest answer is a marker — upstream's own answer at the same shape.
+   * Asserted on the fit itself rather than on pixels. */
+  {
+    static const char wide[] = "AREA=LENGTH+WIDTH+CORRECTION+OFFSET+FACTOR+MARGIN";
+    char cut[256];
+    if(stringWidth(wide, &standardFont, false, true) <= SCREEN_WIDTH - 4) {
+      ppTestFail("EQ9b setup: the fixture is not wider than the screen — pin proves nothing");
+    }
+    ppqFitWithEllipsis(wide, cut, sizeof(cut));
+    if(stringWidth(cut, &standardFont, false, true) > SCREEN_WIDTH - 4) {
+      ppTestFail("EQ9b the fitted line still overruns the screen");
+    }
+    if(strlen(cut) >= strlen(wide)) {
+      ppTestFail("EQ9b the fitted line was not shortened");
+    }
+    if(strstr(cut, STD_ELLIPSIS) == NULL) {
+      ppTestFail("EQ9b the truncation carries no marker — a lie by truncation");
+    }
+    /* A line that already fits must be returned whole and unmarked. */
+    char keep[256];
+    ppqFitWithEllipsis("A+B", keep, sizeof(keep));
+    if(strcmp(keep, "A+B") != 0) {
+      ppTestFail("EQ9b a line that fits was altered");
+    }
+  }
 
   // EQ5: the strip render paints the bar in the equation's own row
   {

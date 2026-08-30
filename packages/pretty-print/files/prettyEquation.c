@@ -32,7 +32,13 @@ typedef struct {
   bool_t failed;
 } ppqCtx_t;
 
-#define PPQ_IS_SUP(code)  (((code) >= 0xa160 && (code) <= 0xa169) || (code) == 0xa16b)
+/* AUDIT PP18RR3-11: 0xa16a is STD_SUP_PLUS, the twin of the 0xa16b minus
+ * already listed. _showExponent emits both — it has an explicit '+' arm — so
+ * admitting only the minus made one glyph decide whether the whole equation
+ * kept its 2D strip. Same class as ppqNumber's comma: an acceptor alphabet
+ * narrower than the producer's emit-set. */
+#define PPQ_IS_SUP(code)  (((code) >= 0xa160 && (code) <= 0xa169) \
+                           || (code) == 0xa16a || (code) == 0xa16b)
 #define PPQ_IS_SUB(code)  ((code) >= 0xa080 && (code) <= 0xa089)
 #define PPQ_IS_PROD(code) ((code) == 0x80b7 || (code) == 0x80d7)
 #define PPQ_IS_SPACE(code) (((code) >= 0xa000 && (code) <= 0xa00f) || (code) == ' ')
@@ -76,7 +82,17 @@ static uint8_t ppqNumber(ppqCtx_t *c, uint8_t font) {
   bool_t any = false;
   while(c->pos < c->len) {
     uint16_t code = ppqPeek(c, &next);
-    if((code >= '0' && code <= '9') || code == '.') {
+    /* AUDIT PP18RR3-6. The comma is a radix mark here, not a separator:
+     * upstream's own tokenizer counts ',' toward numericCount exactly as it
+     * counts '.' and the digits (solver/equation.c), and _parseWord then
+     * rewrites every ',' in a NUMERIC token to '.' before stringToReal34 —
+     * so "1,5" IS 1.5. showEquation copies the comma through verbatim, and
+     * for a comma-radix owner the radix key emits ITM_COMMA, so refusing it
+     * here declined the 2D strip for every equation containing a decimal.
+     * There is no separator to confuse it with: this grammar's bigops use
+     * ';' and ppqFunctionCall takes exactly one argument.
+     * Class: acceptor alphabet narrower than the producer's emit-set. */
+    if((code >= '0' && code <= '9') || code == '.' || code == ',') {
       any = true;
       c->pos = next;
     }
@@ -913,6 +929,43 @@ uint8_t ppqFrameDerivative(uint8_t eq, bool_t second) {
   return hb;
 }
 
+/* Pack glyph by glyph until the next would not fit, then append the
+ * ellipsis — upstream's own shape for this problem (solver/equation.c packs
+ * to (strWidth + glyphWidth) <= SCREEN_WIDTH - 2 - X_OFF and writes
+ * STD_ELLIPSIS). Separate from the paint so the fit can be asserted
+ * directly rather than inferred from pixels. AUDIT PP18RR3-5. */
+void ppqFitWithEllipsis(const char *src, char *out, uint16_t cap) {
+  const int16_t budget = (int16_t)(SCREEN_WIDTH - 4
+                                   - stringWidth(STD_ELLIPSIS, &standardFont, false, true));
+  uint16_t o = 0;
+  int16_t used = 0, pos = 0;
+  out[0] = 0;
+  while(src[pos] != 0) {
+    const uint16_t n = ((uint8_t)src[pos] >= 0x80) ? 2u : 1u;
+    char one[3];
+    if((uint16_t)(o + n + sizeof(STD_ELLIPSIS)) >= cap) {
+      break;
+    }
+    one[0] = src[pos];
+    one[1] = (n == 2) ? src[pos + 1] : 0;
+    one[2] = 0;
+    const int16_t gw = stringWidth(one, &standardFont, true, true);
+    if(used + gw > budget) {
+      break;
+    }
+    out[o++] = one[0];
+    if(n == 2) {
+      out[o++] = one[1];
+    }
+    used = (int16_t)(used + gw);
+    pos  = (int16_t)(pos + n);
+  }
+  out[o] = 0;
+  if(src[pos] != 0) {
+    strcat(out, STD_ELLIPSIS);   // only when something was actually cut
+  }
+}
+
 bool_t ppqShowRender(const char *src) {
   lcd_fill_rect(0, 16, SCREEN_WIDTH, SCREEN_HEIGHT - 16, LCD_SET_VALUE);
   drawSinglePixelFullWidthLine(20);
@@ -942,8 +995,23 @@ bool_t ppqShowRender(const char *src) {
   if(!pretty) {
     // always show SOMETHING: the linear line, centered-ish
     int16_t w = stringWidth(src, &standardFont, false, true);
-    int16_t x = (w < SCREEN_WIDTH - 4) ? (int16_t)((SCREEN_WIDTH - w) / 2) : 2;
-    showString(src, &standardFont, x, 94 - 8, vmNormal, false, true);
+    if(w < SCREEN_WIDTH - 4) {
+      showString(src, &standardFont, (int16_t)((SCREEN_WIDTH - w) / 2),
+                 94 - 8, vmNormal, false, true);
+    }
+    else {
+      /* AUDIT PP18RR3-5. This measured w and then painted `src` anyway:
+       * showString passes NO_LF, so x ran past 400 and every glyph beyond
+       * the edge was dropped by bitblt24 with nothing marking the cut — the
+       * owner read a truncated equation as the whole one. That is the lie
+       * the sibling pager refuses under AUDIT R2-2. Its remedy (omit the
+       * row) does not transfer, because this fallback exists to avoid a
+       * blank band and EQ9 pins that; so mark the cut instead, which is
+       * what the surface EQSHW improves on already does. */
+      char cut[256];
+      ppqFitWithEllipsis(src, cut, sizeof(cut));
+      showString(cut, &standardFont, 2, 94 - 8, vmNormal, false, true);
+    }
   }
 
   screenUpdatingMode |= SCRUPD_MANUAL_STACK | SCRUPD_MANUAL_MENU | SCRUPD_MANUAL_SHIFT_STATUS;

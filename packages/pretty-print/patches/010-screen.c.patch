@@ -1,8 +1,44 @@
 diff --git a/src/c47/screen.c b/src/c47/screen.c
-index d2ac868bd18f9f4c20608f5dc90d5652844afcc6..a8ba2e5ca7aad8eb776e7fe8a7006c1ecdf0e87f 100644
+index d2ac868bd18f9f4c20608f5dc90d5652844afcc6..630945c110a1811a80ec4616ffc136062cfc6202 100644
 --- a/src/c47/screen.c
 +++ b/src/c47/screen.c
-@@ -3933,6 +3933,12 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
+@@ -1272,17 +1272,24 @@ return res;
+           if(x2 > 0) {
+             x2--;
+           }
+-          setPixel(x1, y1);
+-          if(boldString == 1) {
+-            setPixel(x1+1, y1);
+-          }
+-          if(numDouble) {
+-            setPixel(x2, y1);
+-          }
+-          if(rep_enlarge) {
+-            setPixel(x1, y2);
+-            if(numDouble) {
+-              setPixel(x2, y2);
++          /* AUDIT PP18RR3-3 (pretty-print): y is recovered from its wrap and
++           * clamped two lines up; x never was. The browser's pan produces a
++           * negative x, which as uint32 is a huge value, and both simulator
++           * HALs reject it while the device ROM's bitblt24 has no bounds
++           * contract. Clamp x where y is already clamped. */
++          if(x1 < SCREEN_WIDTH) {
++            setPixel(x1, y1);
++            if(boldString == 1 && x1 + 1 < SCREEN_WIDTH) {
++              setPixel(x1+1, y1);
++            }
++            if(numDouble && x2 < SCREEN_WIDTH) {
++              setPixel(x2, y1);
++            }
++            if(rep_enlarge) {
++              setPixel(x1, y2);
++              if(numDouble && x2 < SCREEN_WIDTH) {
++                setPixel(x2, y2);
++              }
+             }
+           }
+         }
+@@ -3933,6 +3940,12 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
  
  
  
@@ -15,7 +51,7 @@ index d2ac868bd18f9f4c20608f5dc90d5652844afcc6..a8ba2e5ca7aad8eb776e7fe8a7006c1e
  /*Main type dtReal34 FLAG_FRACT*/
          else if(getSystemFlag(FLAG_FRACT)
                      && (    getRegisterDataType(regist) == dtReal34
-@@ -5861,6 +5867,14 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
+@@ -5861,6 +5874,14 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
          }
  
          if(calcMode == CM_NORMAL && screenUpdatingMode != SCRUPD_AUTO && temporaryInformation == TI_SHOWNOTHING) {
@@ -30,7 +66,7 @@ index d2ac868bd18f9f4c20608f5dc90d5652844afcc6..a8ba2e5ca7aad8eb776e7fe8a7006c1e
            goto RETURN_NORMAL;
          }
  
-@@ -6160,6 +6174,13 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
+@@ -6160,6 +6181,13 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
          force_refresh(force);
          break;
  

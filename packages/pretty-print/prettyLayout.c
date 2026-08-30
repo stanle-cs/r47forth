@@ -289,6 +289,17 @@ bool_t ppMeasure(uint8_t n, uint8_t depth) {
         if(idxAsc > nd->ascent) {
           nd->ascent = idxAsc;
         }
+        /* AUDIT PP18RR1-1. The descent dual of the line above. The index
+         * tucks above the baseline, but its own ink bottom sits at
+         * relBase + descent, which for an index that has a descent at all —
+         * any b/a fraction — falls below a box that only ever grew upward.
+         * Every band check downstream trusts ascent + descent, so acceptance
+         * was granted for a box the index tail exits and the paint pass drew
+         * it there. Class: one-sided bounding-box aggregation. */
+        int16_t idxDesc = (int16_t)(ppPool[index].relBase + ppPool[index].descent);
+        if(idxDesc > nd->descent) {
+          nd->descent = idxDesc;
+        }
       }
       return true;
     }
@@ -818,9 +829,40 @@ void ppSetFontDeep(uint8_t n, uint8_t fontId) {
   }
 }
 
+/* AUDIT PP18RR3-1. Every glyph this engine paints goes through here or
+ * through ppRenderRightAligned, so this is the one place the substitution
+ * can be suppressed. showGlyphCode swaps in a numericFontBold glyph whenever
+ * FLAG_BOLD is set and the font is &numericFont, and advances by the BOLD
+ * glyph's rows — while ppMetricsInit, stringWidth and ppRunInk all measured
+ * the PLAIN table, and the node has already cleared exactly the box those
+ * metrics promised. Suppressing the flag for the duration of the paint keeps
+ * paint and measure on the same table, so pretty print still draws for a
+ * BOLD owner; it just draws in the plain numeric face for now. Making the
+ * metrics bold-aware instead would put cached state behind a runtime flag,
+ * which is a separate decision.
+ *
+ * The flag is restored on the single exit path of each wrapper — there is no
+ * early return between the save and the restore, and systemFlagAction has no
+ * FLAG_BOLD arm, so this is a bit flip with no side effect. */
+static bool_t ppSuppressBold(void) {
+  bool_t was = getSystemFlag(FLAG_BOLD);
+  if(was) {
+    clearSystemFlag(FLAG_BOLD);
+  }
+  return was;
+}
+
+static void ppRestoreBold(bool_t was) {
+  if(was) {
+    setSystemFlag(FLAG_BOLD);
+  }
+}
+
 void ppPaintAt(uint8_t root, int16_t x, int16_t baseline) {
   if(root < ppNodeCount && ppMetricsOk()) {
+    bool_t boldWas = ppSuppressBold();
     ppPaint(root, x, baseline);
+    ppRestoreBold(boldWas);
   }
 }
 
@@ -842,6 +884,8 @@ bool_t ppRenderRightAligned(uint8_t root, int16_t xRight,
   int16_t base = preferredBase;
   if(base < lo) base = lo;
   if(base > hi) base = hi;
+  bool_t boldWas = ppSuppressBold();
   ppPaint(root, xRight - r->width, base);
+  ppRestoreBold(boldWas);
   return true;
 }

@@ -108,6 +108,7 @@ typedef struct {
 // prettyEquation.c — EQN display-string -> 2D strip layout
 bool_t ppqParse(const char *src, uint8_t ctxFont, uint8_t childFont, uint8_t *rootOut);
 bool_t ppqShowRender(const char *src);
+void   ppqFitWithEllipsis(const char *src, char *out, uint16_t cap);   ///< AUDIT PP18RR3-5
 uint8_t ppqFrameIntegral(uint8_t eq);                    ///< PP13: ∫ with real ULIM/LLIM limits + d<var>; bare PP_INT without them
 uint8_t ppqFrameDerivative(uint8_t eq, bool_t second);   ///< PP13: d/dx (d²/dx²) framing
 

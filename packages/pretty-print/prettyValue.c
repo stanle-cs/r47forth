@@ -228,7 +228,7 @@ bool_t ppParseFraction(const char *src, uint8_t ctxFont, uint8_t childFont, uint
 
 bool_t ppParseExponent(const char *src, uint8_t ctxFont, uint8_t childFont, uint8_t *rootOut) {
   int16_t len = (int16_t)strlen(src);
-  int16_t markOff = -1, expOff = -1;
+  int16_t markOff = -1, expOff = -1, expEnd = -1;
   bool_t expDigitSeen = false;
 
   int16_t pos = 0, next;
@@ -254,10 +254,26 @@ bool_t ppParseExponent(const char *src, uint8_t ctxFont, uint8_t childFont, uint
     }
     else {
       if(PP_IS_SUP_DIGIT(code)) {
+        if(expEnd >= 0) {
+          return false;   // a digit after the terminator is not this shape
+        }
         expDigitSeen = true;
       }
       else if(code == PP_SUP_MINUS_CODE && !expDigitSeen) {
         // leading exponent sign, fine
+      }
+      /* AUDIT PP18RR2-1. supNumberToDisplayString's last act is
+       * strcat(STD_SPACE_HAIR) — every exponent string the builder produces
+       * ends with one, and nothing in src/c47 ever strips it. Refusing it
+       * here declined every real with a displayed ten-exponent, so PP2's
+       * raised form had never once rendered on a register value. DESIGN.md's
+       * decline condition is "no marker", not "the marker's own terminator".
+       * Tolerate a trailing space RUN and remember where it starts, so the
+       * digit extraction below stops before it. */
+      else if(PP_IS_SPACE(code) && expDigitSeen) {
+        if(expEnd < 0) {
+          expEnd = pos;
+        }
       }
       else {
         return false;   // second marker or stray glyph after the exponent
@@ -268,27 +284,37 @@ bool_t ppParseExponent(const char *src, uint8_t ctxFont, uint8_t childFont, uint
   if(markOff < 0 || !expDigitSeen) {
     return false;
   }
+  if(expEnd < 0) {
+    expEnd = len;
+  }
 
-  // base = mantissa + the original product glyph + plain "10"
   int16_t baseLen = markOff + 2;
   if(baseLen + 3 > (int16_t)sizeof(ppSpanA)) {
     return false;
   }
-  xcopy(ppSpanA, src, baseLen);
-  ppSpanA[baseLen]     = '1';
-  ppSpanA[baseLen + 1] = '0';
-  ppSpanA[baseLen + 2] = 0;
-
-  // exponent digits, sup -> plain ('⁻' -> '-')
+  /* AUDIT PP18RR2-13. Read the exponent out of src BEFORE writing ppSpanA:
+   * ppParseComplex hands its own ppSpanA in as src, and the base rebuild
+   * below lands its '1','0','\0' exactly on expOff, so extracting after the
+   * write returned the digits of a buffer this function had just clobbered.
+   * Coupled to PP18RR2-1 by construction — the aliasing path is only
+   * reachable once exponents parse at all. */
+  // exponent digits, sup -> plain ('⁻' -> '-'); stops before the builder's
+  // trailing space run, which would otherwise map to ':' via ('0' + 0xa)
   char expd[24];
   uint16_t o = 0;
   pos = expOff;
-  while(pos < len && (size_t)(o + 1) < sizeof(expd)) {
+  while(pos < expEnd && (size_t)(o + 1) < sizeof(expd)) {
     uint16_t code = ppGlyphAt(src, pos, &next);
     expd[o++] = (code == PP_SUP_MINUS_CODE) ? '-' : (char)('0' + (code & 0x000F));
     pos = next;
   }
   expd[o] = 0;
+
+  // base = mantissa + the original product glyph + plain "10"
+  xcopy(ppSpanA, src, baseLen);
+  ppSpanA[baseLen]     = '1';
+  ppSpanA[baseLen + 1] = '0';
+  ppSpanA[baseLen + 2] = 0;
 
   uint8_t sup = ppNewBox(PP_SUP, ctxFont);
   uint8_t base = ppNewRun(ppSpanA, (uint16_t)strlen(ppSpanA), ctxFont);

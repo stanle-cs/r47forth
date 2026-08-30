@@ -1272,17 +1272,24 @@ return res;
           if(x2 > 0) {
             x2--;
           }
-          setPixel(x1, y1);
-          if(boldString == 1) {
-            setPixel(x1+1, y1);
-          }
-          if(numDouble) {
-            setPixel(x2, y1);
-          }
-          if(rep_enlarge) {
-            setPixel(x1, y2);
-            if(numDouble) {
-              setPixel(x2, y2);
+          /* AUDIT PP18RR3-3 (pretty-print): y is recovered from its wrap and
+           * clamped two lines up; x never was. The browser's pan produces a
+           * negative x, which as uint32 is a huge value, and both simulator
+           * HALs reject it while the device ROM's bitblt24 has no bounds
+           * contract. Clamp x where y is already clamped. */
+          if(x1 < SCREEN_WIDTH) {
+            setPixel(x1, y1);
+            if(boldString == 1 && x1 + 1 < SCREEN_WIDTH) {
+              setPixel(x1+1, y1);
+            }
+            if(numDouble && x2 < SCREEN_WIDTH) {
+              setPixel(x2, y1);
+            }
+            if(rep_enlarge) {
+              setPixel(x1, y2);
+              if(numDouble && x2 < SCREEN_WIDTH) {
+                setPixel(x2, y2);
+              }
             }
           }
         }
