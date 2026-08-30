@@ -820,8 +820,11 @@ void ppSetFontDeep(uint8_t n, uint8_t fontId) {
  * drawing, in the plain numeric face.
  *
  * Restored on the single exit path of each wrapper; there is no early
- * return between save and restore, and systemFlagAction has no FLAG_BOLD
- * arm, so this is a bit flip with no side effect. */
+ * return between save and restore. It is NOT side-effect free: FLAG_BOLD
+ * is in refreshStateFlags[], so each flip runs fnRefreshState and raises
+ * doRefreshSoftMenu — twice per paint. Harmless today (a menu repaint
+ * request the next refresh consumes) but real, and the reason to prefer
+ * bold-aware metrics if this surface ever grows a cost it cannot pay. */
 static bool_t ppSuppressBold(void) {
   bool_t was = getSystemFlag(FLAG_BOLD);
   if(was) {
