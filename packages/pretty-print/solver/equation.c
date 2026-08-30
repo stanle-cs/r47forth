@@ -688,9 +688,11 @@ void showEquation(uint16_t equationId, uint16_t startAt, uint16_t cursorAt, bool
 
     if((!dryRun) && (*cursorShown || cursorAt == EQUATION_NO_CURSOR)) {
       /* pretty-print package: 2D strip rendering when not editing; a
-       * false return paints nothing and the linear line runs unchanged */
+       * false return paints nothing and the linear line runs unchanged.
+       * The enclosed upstream line keeps its own indentation so the patch
+       * carries no whitespace-only hunk. */
       if(cursorAt != EQUATION_NO_CURSOR || !prettyTryEquation(tmpString, (int16_t)(1 + X_OFF))) {
-        showString(tmpString, &standardFont, 1 + X_OFF, SCREEN_HEIGHT - SOFTMENU_HEIGHT * 3 + 2 , vmNormal, true, true);
+      showString(tmpString, &standardFont, 1 + X_OFF, SCREEN_HEIGHT - SOFTMENU_HEIGHT * 3 + 2 , vmNormal, true, true);
       }
     }
   }
