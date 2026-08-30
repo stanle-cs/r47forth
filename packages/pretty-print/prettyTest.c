@@ -135,6 +135,46 @@ void prettyTestMeasure(uint16_t unusedButMandatoryParameter) {
     }
   }
 
+  /* M9 (PP18RR4-7) — the PP_RAD index descent, which shipped with nothing
+   * asserting it: deleting the guard left the whole suite green. M5 builds
+   * a one-child radical and never enters the indexed arm; FV8 is the only
+   * indexed root and asserts a signature string, which reads no metrics.
+   *
+   * xth-root of 8 by 1/2: radicand 8 is ascent 12 / descent 0, the FRAC
+   * index is ascent 20 / descent 8 at relBase -2, so the index's ink
+   * bottom is 6 rows below the baseline and the box must say so. Without
+   * the guard the box reports descent 0 and every band check downstream
+   * accepts a box the index leaves. */
+  ppReset();
+  {
+    uint8_t rad = ppNewBox(PP_RAD, PP_FONT_STANDARD);
+    uint8_t arg = ppNewRun("8", 1, PP_FONT_STANDARD);
+    uint8_t idx = ppNewBox(PP_FRAC, PP_FONT_STANDARD);
+    uint8_t n1  = ppNewRun("1", 1, PP_FONT_STANDARD);
+    uint8_t d2  = ppNewRun("2", 1, PP_FONT_STANDARD);
+    ppAppendChild(idx, n1);
+    ppAppendChild(idx, d2);
+    ppAppendChild(rad, arg);
+    ppAppendChild(rad, idx);
+    if(rad == PP_NONE || arg == PP_NONE || idx == PP_NONE || !ppMeasure(rad, 0)) {
+      ppTestFail("M9 build/measure");
+    }
+    else {
+      const ppNode_t *r = ppNodeAt(rad);
+      const ppNode_t *i = ppNodeAt(idx);
+      if(i->descent == 0) {
+        ppTestFail("M9 setup: the index has no descent, so this pin cannot see the defect");
+      }
+      /* The property, not the number: the box must contain the index's
+       * ink bottom. Stated this way it survives a font change. */
+      int16_t idxBottom = (int16_t)(i->relBase + i->descent);
+      if(r->descent < idxBottom) {
+        ppTestFailInt("M9 the box does not cover the index's ink bottom",
+                      idxBottom, r->descent);
+      }
+    }
+  }
+
   // M5: radical over a numeric digit — the standalone-√2 shape.
   ppReset();
   {
