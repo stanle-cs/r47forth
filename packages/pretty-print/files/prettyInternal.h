@@ -80,18 +80,13 @@ int16_t         ppPreferredBase(int16_t baseY);   ///< baseY + numericFont box a
 
 enum { PPN_FREE = 0, PPN_OP1, PPN_OP2, PPN_LIT, PPN_LIT2, PPN_VAL,
        PPN_RCL, PPN_CONST, PPN_OPAQUE, PPN_BIGOP, PPN_VAL2 };
-// PPN_VAL2: a VAL whose raw payload exceeds the 16-byte
-// node carries the remainder in one continuation hung off child[0], the same
-// shape PPN_LIT/PPN_LIT2 already use for long typed literals. This is what
-// DESIGN.md 3 has always promised for complex ("complex via a two-child
-// header"); before it existed, a complex operand became PPN_OPAQUE, which
-// poisons the whole tree — the T line went blank and nothing was filed, with
-// no error anywhere. 32 bytes of complex34 fit in 16 + 16.
+// PPN_VAL2: a VAL whose payload exceeds one node continues into a
+// continuation on child[0], the shape PPN_LIT/PPN_LIT2 already use.
+// A complex34 is 32 bytes, so it fits in 16 + 16.
 #define PPC_VAL_CAPACITY 32
-// PPN_BIGOP (PP12): a captured Σₙ/∏ₙ/∫YX dispatch. item = the ITM id,
-// pad[0..1] = the label param (LE), payload = the step real34 (sums;
-// zeros for ∫), child[0] = from-limit VAL, child[1] = to-limit VAL.
-// Its VALUE is the result the dispatch left in X — chains continue.
+// PPN_BIGOP: item = ITM id, pad[0..1] = label param (LE), payload = the
+// step real34 (zeros for the integral), child[0]/child[1] = the limits.
+// Its VALUE is the result the dispatch left in X, so chains continue.
 
 // postfix stream tokens (history entries: 6-byte header {totalBytes u16,
 // seq u16, nTokens u8, flags u8} then tokens; TKRES trails when present)
@@ -120,12 +115,9 @@ void   ppqFitWithEllipsis(const char *src, char *out, uint16_t cap);   ///< fit 
 uint8_t ppqFrameIntegral(uint8_t eq);                    ///< PP13: ∫ with real ULIM/LLIM limits + d<var>; bare PP_INT without them
 uint8_t ppqFrameDerivative(uint8_t eq, bool_t second);   ///< PP13: d/dx (d²/dx²) framing
 
-/* prettyFormula.c — the shared 2D node builders. These were the capture
- * engine's private back end until PP18; the program walker now feeds them
- * too, so that precedence and parenthesisation are decided in ONE place
- * instead of once per front-end. There is deliberately no POW level: a
- * PP_SUP scopes itself geometrically, so only ADD and MUL ever need
- * brackets. A caller stacking powers must bracket the base itself. */
+/* prettyFormula.c — the shared 2D node builders, fed by both the capture
+ * engine and the walker so precedence is decided in one place. No POW
+ * level: PP_SUP scopes itself, so only ADD and MUL need brackets. */
 #define PPF_PREC_ADD  1
 #define PPF_PREC_MUL  2
 #define PPF_PREC_ATOM 3
@@ -147,10 +139,9 @@ uint8_t ppqBuildBigop (uint8_t kind, uint16_t tag, uint8_t body,
                        bool_t secondOrder, uint8_t ctxFont);
 uint8_t ppqBuildCall  (const char *name, uint16_t len, uint8_t arg, uint8_t font);
 
-// prettyVisual.c — the walker's TEST seam: serializes the expression
-// tree it built to equation-language text, so a pin can assert something
-// readable and one pin can evaluate it. Not in the device build — the
-// drawing path builds nodes and never makes text.
+// prettyVisual.c — the walker's TEST seam: serializes the tree to
+// equation-language text so a pin can read or evaluate it. Not in the
+// device build; the drawing path builds nodes and never makes text.
 #if defined(PC_BUILD) || defined(TESTSUITE_BUILD)
 bool_t ppvTranspile(uint16_t labelIdx, char *out, uint16_t cap,
                     uint8_t *reasonOut, uint16_t *stepOut);

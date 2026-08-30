@@ -254,11 +254,9 @@ bool_t ppMeasure(uint8_t n, uint8_t depth) {
       if(index != PP_NONE && !ppMeasure(index, depth + 1)) {
         return false;
       }
-      // Short radicands use the raised font glyph; taller ones get a
-      // synthesized stroke sign spanning the full height (PP6). An
-      // INDEXED root always synthesizes — the raised glyph's own hook
-      // collides with the tucked index (seen in the PP6 capture). The
-      // paint pass recomputes this same test.
+      // Short radicands use the raised font glyph, taller ones a
+      // synthesized stroke. An INDEXED root always synthesizes: the
+      // glyph's hook collides with the tucked index. Paint repeats this.
       bool_t synth = (ppPool[child].ascent + ppPool[child].descent > m->radInk + 3)
                      || (index != PP_NONE);
       int16_t signW = synth ? 10 : m->radAdvance;
@@ -289,11 +287,9 @@ bool_t ppMeasure(uint8_t n, uint8_t depth) {
         if(idxAsc > nd->ascent) {
           nd->ascent = idxAsc;
         }
-        /* The descent dual of the line above. The index tucks above the
-         * baseline, but its ink bottom is at relBase + descent, which for
-         * an index with any descent of its own falls below the box. Every
-         * band check downstream trusts ascent + descent, so the box must
-         * cover both edges. */
+        /* The descent dual of the line above: the index tucks above the
+         * baseline, but its ink bottom at relBase + descent can fall below
+         * the box, and every band check downstream trusts both edges. */
         int16_t idxDesc = (int16_t)(ppPool[index].relBase + ppPool[index].descent);
         if(idxDesc > nd->descent) {
           nd->descent = idxDesc;
@@ -475,11 +471,9 @@ bool_t ppMeasure(uint8_t n, uint8_t depth) {
       if(!ppMeasure(num, depth + 1) || !ppMeasure(den, depth + 1)) {
         return false;
       }
-      // Bar rows: [B + barTopRel, B + barTopRel + barThick - 1].
-      // Clearance is fracGap+1 on BOTH sides: descent counts rows
-      // at/below a baseline while ascent counts strictly above, so the
-      // denominator needs the extra row the numerator gets for free
-      // (the bar read as cutting the denominator's top without it).
+      // Bar rows: [B + barTopRel, B + barTopRel + barThick - 1]. Clearance
+      // is fracGap+1 both sides: descent counts rows at/below the baseline
+      // and ascent strictly above, so the denominator needs the extra row.
       ppPool[num].relBase = m->barTopRel - m->fracGap - ppPool[num].descent;
       ppPool[den].relBase = m->barTopRel + m->barThick + m->fracGap + 1 + ppPool[den].ascent;
 

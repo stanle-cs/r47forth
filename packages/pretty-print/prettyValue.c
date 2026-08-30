@@ -292,12 +292,9 @@ bool_t ppParseExponent(const char *src, uint8_t ctxFont, uint8_t childFont, uint
   if(baseLen + 3 > (int16_t)sizeof(ppSpanA)) {
     return false;
   }
-  /* Read the exponent out of src BEFORE writing ppSpanA:
-   * ppParseComplex hands its own ppSpanA in as src, and the base rebuild
-   * below lands its '1','0','\0' exactly on expOff, so extracting after the
-   * write returned the digits of a buffer this function had just clobbered.
-   * Coupled to PP18RR2-1 by construction — the aliasing path is only
-   * reachable once exponents parse at all. */
+  /* Read the exponent BEFORE writing ppSpanA: ppParseComplex passes its
+   * own ppSpanA in as src, and the base rebuild below lands '1','0','\0'
+   * exactly on expOff. */
   // exponent digits, sup -> plain ('⁻' -> '-'); stops before the builder's
   // trailing space run, which would otherwise map to ':' via ('0' + 0xa)
   char expd[24];
@@ -900,14 +897,9 @@ void fnPrettyShow(uint16_t unusedButMandatoryParameter) {
 
     screenUpdatingMode |= SCRUPD_MANUAL_STACK | SCRUPD_MANUAL_MENU | SCRUPD_MANUAL_SHIFT_STATUS;
     screenHoldsDrawnPixels = true;
-    // Upstream's matrix SHOW paints its own screen and then declares it
-    // one (display.c: temporaryInformation = TI_SHOWNOTHING, "then tell
-    // the system it is in show nothing mode"). That declaration is what
-    // EXIT dismisses on: its arm needs temporaryInformation != TI_NO_INFO
-    // or the showScreenDismissed latch, and SHOWMODE feeds the latch.
-    // Without it EXIT fell through to the menu arm and left the pixels up
-    // (owner report 2026-08-27, reported against EQSHW; PSHOW had it too,
-    // masked because the fallback arm below reaches the real SHOW).
+    // A self-painted screen must declare itself one, as upstream's matrix
+    // SHOW does, or EXIT falls through to the menu arm and leaves the
+    // pixels up: its arm needs TI_SHOWNOTHING or the dismissal latch.
     temporaryInformation = TI_SHOWNOTHING;
     return;
   }

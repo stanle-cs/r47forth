@@ -75,12 +75,9 @@ typedef struct {
   uint8_t  textLen;
   uint8_t  flags;       ///< PPV_F_*
   uint16_t varOff;      ///< CONSTRUCT: the variable name, also in ctx->pool.
-                        ///< uint16_t, not uint8_t: the pool is 512 bytes and
-                        ///< a name interned past offset 255 was read back
-                        ///< from 256 lower — another leaf's text, in bounds,
-                        ///< so the integral drew a d-variable the program
-                        ///< never integrates over, with no decline and no
-                        ///< D-number
+                        ///< uint16_t, not uint8_t: the pool is 512 bytes,
+                        ///< so an offset past 255 would wrap into another
+                        ///< leaf's text and silently draw the wrong name
   uint8_t  varLen;
 } ppvAst_t;
 
@@ -110,11 +107,9 @@ typedef struct {
   char     binding[PPV_MAX_DEPTH][PPV_NAME_MAX];    ///< construct variables in scope
   bool_t   bindingSynth[PPV_MAX_DEPTH];             ///< true = an invented sum counter
   uint8_t  bindingCount;
-  /* ENTER pushes the same node twice, so the tree is a DAG: laying it out
-   * naively visits a shared child once per path, 2^k for k dups. Pool
-   * exhaustion does not stop that on its own, because ppNewBox returns
-   * PP_NONE per call without latching. layoutFull is that latch.
-   * layoutVisits is counted so a test can assert the bound. */
+  /* ENTER shares a node, so the tree is a DAG and a naive layout visits
+   * a shared child 2^k times. ppNewBox returns PP_NONE per call without
+   * latching, so layoutFull is the latch; layoutVisits pins the bound. */
   bool_t   layoutFull;
   uint32_t layoutVisits;
 } ppvCtx_t;
@@ -436,10 +431,8 @@ static bool_t ppvBody(ppvCtx_t *ctx, uint16_t bodyIdx, const char *var,
   sub.depth        = 0;
   sub.liftDisabled = false;
   sub.saturated    = false;
-  /* One shared VAR node on every level, not one per level. The seeding
-   * models what the body can READ, and it reads the same variable from
-   * every level, so sharing is the accurate model rather than a saving —
-   * and it keeps a construct body to one arena node instead of eight. */
+  /* One shared VAR node on every level: the body reads the same variable
+   * from every level, so sharing is the accurate model, not a saving. */
   uint8_t seed = ppvLeaf(ctx, PPA_VAR, var, (uint16_t)strlen(var), PPV_F_BOUND);
   for(uint8_t i = 0; i < PPV_STACK_SLOTS; i++) {
     if(!ppvPush(ctx, &sub, seed)) {
@@ -1000,11 +993,9 @@ static void ppvStepArm(ppvCtx_t *ctx, ppvStack_t *stk, uint16_t op, const uint8_
 
     case ITM_XEQ: {
       uint16_t idx;
-      /* This clear is about ORDER, not about reaching the epilogue: it
-       * runs BEFORE the nested walk, so a callee never inherits an ENTER
-       * latch armed in its caller. The epilogue cannot do that job — it
-       * runs after the arm returns. Without it, an armed latch makes the
-       * callee's next lifting read overwrite the dup instead of pushing. */
+      /* Order, not reach: this runs BEFORE the nested walk so a callee
+       * never inherits an ENTER latch armed in its caller. The epilogue
+       * runs after the arm returns and so cannot do it. */
       stk->liftDisabled = false;
       if(ppvLabelIndex(ctx, pa, &idx)) {
         ppvWalk(ctx, idx, stk);   // a subroutine shares its caller's stack
@@ -1158,16 +1149,9 @@ static uint8_t ppvAstToNodes(ppvCtx_t *ctx, uint8_t n,
         ctx->layoutFull = true;   // every operand is checked, `step` included
         return PP_NONE;
       }
-      // The parser scopes an additive body by sniffing its runs for a
-      // +/- joiner, because a parse has no precedence to consult. We do,
-      // so we ask the real question.
-      //
-      // A nested CONSTRUCT body is the exception, and it is why the
-      // ADD precedence below is about operand context only: an inner
-      // integral is terminated by the outer's own " d<var>", exactly as
-      // the notation intends, and INTEG(INTEG(...)) is written without
-      // brackets in every textbook. What needs a bracket is a construct
-      // with an operator beside it, where nothing terminates the body.
+      // A nested construct body needs no bracket: the inner integral is
+      // terminated by the outer's own " d<var>". What needs one is a
+      // construct with an operator beside it, where nothing terminates it.
       body = ppfWrapIf(body,
                        (ctx->ast[a->child[0]].kind == PPA_CONSTRUCT)
                          ? PPF_PREC_ATOM : pBody,
@@ -1187,12 +1171,9 @@ static uint8_t ppvAstToNodes(ppvCtx_t *ctx, uint8_t n,
       uint8_t kind = isInt ? PPQ_BIG_INTEG
                    : isDrv ? PPQ_BIG_DERIV
                    : ((a->item == ITM_SIGMAn) ? PPQ_BIG_SUM : PPQ_BIG_PROD);
-      /* A big operator is NOT an atom. Its body is drawn to the RIGHT of
-       * the stroke and extends as far as the body goes, so a factor or an
-       * exponent beside it binds INTO the body: `SUM n x 2` reads as
-       * SUM(n x 2). Reporting ADD makes ppfBuildOp bracket it under x, /
-       * and ^, and leaves it bare as the left operand of a +, which is
-       * the one place convention already scopes it. */
+      /* A big operator is not an atom: its body extends right of the
+       * stroke, so a neighbour would bind into it. ADD brackets it under
+       * x, / and ^, and leaves it bare left of a +. */
       *outPrec = PPF_PREC_ADD;
       return ppqBuildBigop(kind, a->item, body, varTiny, varCtx,
                            from, to, step,
@@ -1631,11 +1612,8 @@ void fnPrettyVisual(uint16_t label) {
     return;
   }
 
-  // Nothing downstream reads the solver session any more — the drawing
-  // is built from the tree, not framed by ppqShowRender — but the save
-  // and restore stay: PP17 shipped with them, V19 pins them, and a
-  // surface that leaves session state alone is the contract regardless
-  // of who happens to read it today.
+  // A surface leaves session state as it found it, whether or not
+  // anything downstream currently reads it. V19 pins this.
   uint16_t saved = currentSolverStatus;
   currentSolverStatus &= (uint16_t)~(SOLVER_STATUS_EQUATION_MODE | SOLVER_STATUS_INTERACTIVE);
   if(ppvPaintStackWindow(&ctx, root)) {

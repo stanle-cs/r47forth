@@ -312,10 +312,9 @@ static void ppfLabelName(uint16_t param, char *out) {
 static uint8_t ppfBigop(uint16_t item, uint16_t label, const uint8_t *stepBytes,
                         uint8_t fromN, uint8_t toN,
                         uint8_t ctxFont, uint8_t childFont, int *outPrec) {
-  /* A big operator is not an atom. Its body is drawn to the RIGHT of the
-   * stroke, so a factor or exponent beside it binds INTO the body. ADD
-   * brackets it under x, / and ^ and leaves it bare as the left operand
-   * of a +, which is where convention already scopes it. */
+  /* A big operator is not an atom: its body extends right of the stroke,
+   * so a neighbour binds into it. ADD brackets it under x, / and ^, and
+   * leaves it bare left of a +, where convention already scopes it. */
   *outPrec = PPF_PREC_ADD;
   bool_t isInt = (item == ITM_INTEGRAL_YX);
   uint8_t big = ppNewBox(PP_BIGOP, ctxFont);
@@ -620,13 +619,8 @@ bool_t ppfBuildEntry(const uint8_t *entry, uint8_t ctxFont, uint8_t childFont,
 
 /* ==== PHIST — the history pager ========================================= */
 
-// Inset 4 px from the frame lines at 20/168. Found by FV5 after the
-// variable-height rewrite, when glyph BOXES extended past the ink by
-// their padding rows (standardFont boxAscent 16 vs digit ink 12) and
-// showGlyphCode's pre-clear wiped a frame line the ink never touched.
-// That mechanism is gone — ppShowRun clears only the measured ink box —
-// so the inset now buys plain clearance between a row's ink and the
-// frame. Kept at 4: the rows are laid out against it.
+// Inset 4 px from the frame lines at 20/168: plain clearance between a
+// row's ink and the frame. The rows are laid out against it.
 #define PPF_BAND_TOP    25
 #define PPF_BAND_BOTTOM 163
 #define PPF_ROW_GAP     5

@@ -45,15 +45,9 @@ static char     ppcNimText[32];
 static bool_t   ppcNimTextValid;
 static bool_t   ppcInited = false;
 
-/* The two hooks wrap ONE dispatch, but a dispatch can run a
- * user program whose every step comes back through them — so the hooks
- * nest. STAGE was made re-entrancy-safe in PP12; DONE never was, and it
- * consumed the stage on the FIRST nested step instead of on its own
- * dispatch. The end state usually coincided (which is why every test
- * passed), but the error check then ran at step 1 rather than at the
- * end, so a failure later in the program left the shadow claiming a
- * finished formula the register did not hold. This counter pairs each
- * DONE with its own STAGE. */
+/* Pairs each DONE with its own STAGE. The hooks nest — a dispatch can run
+ * a program whose steps come back through them — so DONE must consume the
+ * stage on its own dispatch, not the first nested one. */
 static uint16_t ppcDispatchDepth = 0;
 
 static struct {
@@ -227,11 +221,9 @@ static uint8_t ppcValLeafFromRegister(calcRegister_t regist) {
     return ppcAlloc(PPN_OPAQUE);
   }
   uint32_t bytes = TO_BYTES((uint32_t)getRegisterFullSizeInBlocks(regist));
-  /* DESIGN.md 3 promises the two-child header for COMPLEX specifically, and
-   * scopes OPAQUE to "Matrix/string/oversized payloads". So the continuation
-   * is offered to complex only: an oversized long integer stays opaque, as it
-   * was before PPN_VAL2 existed and as T26 pins. Widening it to every type
-   * would be a capability change nobody ruled on. */
+  /* The continuation is offered to complex only, per DESIGN.md 3, which
+   * scopes OPAQUE to matrices, strings and oversized payloads: an
+   * oversized long integer stays opaque, as T26 pins. */
   const uint32_t cap = (dt == dtComplex34) ? (uint32_t)PPC_VAL_CAPACITY
                                            : (uint32_t)sizeof(((ppcNode_t *)0)->payload);
   if(bytes > cap) {
@@ -374,10 +366,9 @@ static uint16_t ppcSerializeNode(uint8_t n, uint8_t *out, uint16_t off, uint16_t
       out[off++] = (uint8_t)(nd->item & 0xff);    // allocParam
       out[off++] = (uint8_t)(nd->item >> 8);
       out[off++] = bytes;
-      /* a payload wider than one node continues into the
-       * PPN_VAL2 on child[0]. Copying `bytes` straight out of nd->payload
-       * would read past the array for a 32-byte complex. The stream stays
-       * one flat TKV — only the arena is split — so the reader is unchanged. */
+      /* A payload wider than one node continues into the PPN_VAL2 on
+       * child[0]; copying `bytes` straight out would read past the array.
+       * The stream stays one flat TKV, so the reader is unchanged. */
       uint8_t first = (bytes > head) ? head : bytes;
       xcopy(out + off, nd->payload, first);
       off = (uint16_t)(off + first);
@@ -584,14 +575,9 @@ static uint8_t ppcClassify(int16_t func) {
     case ITM_SIGMAn: case ITM_PIn: case ITM_iSIGMAn: case ITM_iPIn:
       return PPC_BIGOPSUM;
     #if defined(OPTION_INFSUMS)
-    // The early-stop sum consumes the SAME three stack levels — `inf`
-    // only changes when the loop gives up, not what it reads — so it
-    // captures identically. Its limits are the real ones the user
-    // supplied (it stops early if the terms converge; "infinity" is the
-    // key's name, not its arithmetic), so nothing new to render.
-    // GUARDED: without the option, item 2755 is an unimplemented stub
-    // that moves no stack, and classifying it would mint a node for an
-    // operation that never happened.
+    // Captures identically to a plain sum: same three stack levels, and
+    // the limits are the ones the user supplied. Guarded because without
+    // the option the item is a stub that moves no stack.
     case ITM_SIGMAnINF:
       return PPC_BIGOPSUM;
     #endif // OPTION_INFSUMS
@@ -602,17 +588,9 @@ static uint8_t ppcClassify(int16_t func) {
     case ITM_UNDO:
       return PPC_DISCARD;   // the user revoked the current formula
 
-    // R/S resumes a stopped program, which then rewrites the
-    // stack with every step out of scope — so nothing tells the shadow.
-    // XEQ is the same operation reached by the other key and is
-    // US_ENABLED, so the default rule already covers it; R/S is
-    // US_UNCHANGED and was not.
-    // SST is the third member of that set and was not
-    // enumerated: fnSst only sets PGM_SINGLE_STEP, and the key handler then
-    // runs one program step with PGM_RUNNING, so every nested hook fails
-    // ppcScopeOk and returns without mirroring OR invalidating. The step's
-    // stack motion is recorded nowhere, and the T line goes on showing a
-    // formula for an X the step replaced.
+    // Both run program steps whose stack motion happens out of scope, so
+    // nothing tells the shadow. Both are US_UNCHANGED, so the default
+    // rule does not cover them the way it covers XEQ.
     case ITM_RS: case ITM_SST:
       return PPC_INVALIDATE;
     case 427: case 428:
@@ -627,10 +605,9 @@ static uint8_t ppcClassify(int16_t func) {
   if(indexOfItems[func].func == fnConstant) {
     return PPC_CONSTCLS;
   }
-  // The default rule (binding): unknown undo-enabled items moved the
-  // stack in ways we did not model — invalidate; unknown non-undo items
-  // are display/mode chatter — ignore. Upstream maintains US_STATUS for
-  // its own undo correctness, so it maintains our predicate too.
+  // The default rule, binding: an unknown undo-enabled item moved the
+  // stack in a way we did not model, so invalidate; an unknown non-undo
+  // item is display or mode chatter, so ignore.
   uint32_t us = indexOfItems[func].status & US_STATUS;
   // US_CANCEL belongs on the invalidate side, not the ignore
   // side: upstream's own header defines it as "the command cancels the
@@ -725,10 +702,9 @@ void prettyNoteFunction(int16_t func, uint16_t param) {
     ppcInit();
   }
   if(!ppcScopeOk()) {
-    // A nested dispatch (a BIGOP's label program runs every step through
-    // runFunction under FLAG_SOLVING/PGM_RUNNING) must not clobber the
-    // outer stage. valid is only ever true strictly inside a dispatch,
-    // so a top-level STAGE out of scope has nothing to clear.
+    // A nested dispatch must not clobber the outer stage. valid is only
+    // ever true strictly inside a dispatch, so a top-level STAGE out of
+    // scope has nothing to clear.
     return;
   }
   ppcStage.valid = false;
@@ -774,26 +750,17 @@ void prettyNoteFunction(int16_t func, uint16_t param) {
         ppcDisplaced(k, true);
       }
       break;
-    /* FILL overwrites Y..top with X — displacement by
-     * DESIGN.md's segmentation rule, exactly like the CLSTK wipe above — but
-     * it had no STAGE arm at all, so nothing was filed while the registers
-     * were still pre-op. Its DONE arm then freed those slots, and
-     * ppcFreeTree clears ppcCurrent when it frees the live root, so a
-     * finished formula riding in a slot >= 1 was DELETED rather than filed:
-     * T-line blank, no PHIST row, no message. Slot 0 is FILL's source and
-     * keeps its value, so it is not displaced. */
+    /* FILL overwrites Y..top with X, which is displacement, so those
+     * slots must be filed here while the registers are still pre-op.
+     * Slot 0 is the source and keeps its value. */
     case PPC_FILL:
       for(uint8_t k = 1; k <= ppcTopSlot(); k++) {
         ppcDisplaced(k, true);
       }
       break;
-    /* At DONE fnStore has ALREADY copied X
-     * into the target, so ppcEmit read the post-store register and the ring
-     * recorded "2+3 = 9" for a formula whose value is 5 — permanently, and
-     * the browser's ENTER recalls that 9. ppcEmit's contract is that
-     * resultReg still holds the formula's value, which is only true before
-     * the dispatch. Every other emit-with-register site in this file runs at
-     * STAGE; this one now does too, matching PPC_XSWAPREG's arm above. */
+    /* Must run at STAGE: ppcEmit's contract is that resultReg still holds
+     * the formula's value, and by DONE fnStore has overwritten it. Every
+     * other emit-with-register site in this file runs here too. */
     case PPC_STO_NOP: {
       uint16_t t = param;
       if(t > (uint16_t)REGISTER_X && ppcIsSlotRegister(t)) {
@@ -1072,20 +1039,8 @@ void prettyNoteFunctionDone(void) {
       break;
     }
     case PPC_STO_NOP: {
-      // The invariant is about VALUES, not motion: STO overwrites its
-      // target while the shadow still shows that slot's old tree. Four
-      // cases, all handled at STAGE (see the arm there):
-      //  * a STACK target degrades that slot to UNKNOWN, which
-      //    re-materialises truthfully from the register on next use;
-      //  * STO X writes X with what X already holds, so it changes no
-      //    value and must not disturb the shadow at all;
-      //  * the tree being dropped may be a FINISHED formula, so it is
-      //    displaced (emitted with the register that still holds its
-      //    value) before being freed;
-      //  * REGISTER_L is a shadow slot too — ppcSlotL caches the LASTx
-      //    tree — so STO L must clear it.
-      // Nothing is left to do here. An errored dispatch costs only
-      // granularity, which the invariant permits.
+      // Handled entirely at STAGE, where the target register still holds
+      // the formula's value. An errored dispatch costs only granularity.
       break;
     }
     case PPC_RCLCLS: {

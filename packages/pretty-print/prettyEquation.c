@@ -32,11 +32,9 @@ typedef struct {
   bool_t failed;
 } ppqCtx_t;
 
-/* 0xa16a is STD_SUP_PLUS, the twin of the 0xa16b minus
- * already listed. _showExponent emits both — it has an explicit '+' arm — so
- * admitting only the minus made one glyph decide whether the whole equation
- * kept its 2D strip. Same class as ppqNumber's comma: an acceptor alphabet
- * narrower than the producer's emit-set. */
+/* 0xa16a is STD_SUP_PLUS, twin of the 0xa16b minus. _showExponent emits
+ * both, so admitting only the minus would let one glyph decide whether
+ * the whole equation keeps its 2D strip. */
 #define PPQ_IS_SUP(code)  (((code) >= 0xa160 && (code) <= 0xa169) \
                            || (code) == 0xa16a || (code) == 0xa16b)
 #define PPQ_IS_SUB(code)  ((code) >= 0xa080 && (code) <= 0xa089)
@@ -663,10 +661,9 @@ static uint8_t ppqTerm(ppqCtx_t *c, uint8_t font, uint8_t tinyF) {
         c->failed = true;
         return PP_NONE;
       }
-      // children re-font to tiny so the stack fits the 23 px strip row;
-      // parens unwrap under the bar (it scopes, textbook style). When
-      // the caller's fonts are equal (EQSHW) the deep re-font would
-      // only flatten a construct's tiny limits — skip it.
+      // Children re-font to tiny so the stack fits the 23 px strip row,
+      // and parens unwrap under the bar, which scopes. Equal caller fonts
+      // (EQSHW) skip the re-font: it would only flatten tiny limits.
       uint8_t num = ppqUnwrapParen(n);
       uint8_t dn = ppqUnwrapParen(den);
       if(tinyF != font) {
@@ -1000,14 +997,9 @@ bool_t ppqShowRender(const char *src) {
                  94 - 8, vmNormal, false, true);
     }
     else {
-      /* Measuring w and then painting `src` anyway is a lie by truncation:
-       * showString passes NO_LF, so x ran past 400 and every glyph beyond
-       * the edge was dropped by bitblt24 with nothing marking the cut — the
-       * owner read a truncated equation as the whole one. That is the lie
-       * the sibling pager refuses that. Its remedy (omit the
-       * row) does not transfer, because this fallback exists to avoid a
-       * blank band and EQ9 pins that; so mark the cut instead, which is
-       * what the surface EQSHW improves on already does. */
+      /* Painting src unclipped would drop every glyph past the edge with
+       * nothing marking the cut. Omitting the row is not an option here —
+       * this fallback exists to avoid a blank band — so mark the cut. */
       char cut[256];
       ppqFitWithEllipsis(src, cut, sizeof(cut));
       showString(cut, &standardFont, 2, 94 - 8, vmNormal, false, true);
