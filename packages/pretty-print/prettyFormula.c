@@ -401,12 +401,30 @@ static uint8_t ppfFromCaptureNode(uint8_t cap, uint8_t ctxFont, uint8_t childFon
       }
       return ppfRun(text, ctxFont);
     }
-    case PPN_VAL:
-      if(!ppfStageValFields(nd->aux, nd->pad[0], nd->item, nd->pad[1], nd->payload)
+    case PPN_VAL: {
+      /* A payload wider than one node continues into a PPN_VAL2 on
+       * child[0], the same shape PPN_LIT uses above. Passing nd->payload
+       * straight through with pad[1] = 32 would read 16 bytes past the
+       * array — the next arena node's header. */
+      const uint8_t head  = (uint8_t)sizeof(nd->payload);
+      const uint8_t bytes = nd->pad[1];
+      const uint8_t *src  = nd->payload;
+      uint8_t full[PPC_VAL_CAPACITY];
+      if(bytes > head) {
+        const ppcNode_t *c = (nd->child[0] != PPC_NIL) ? ppcNodeAt(nd->child[0]) : NULL;
+        if(c == NULL || c->kind != PPN_VAL2 || bytes > (uint8_t)sizeof(full)) {
+          return PP_NONE;   // a split value with no continuation is not drawable
+        }
+        xcopy(full, nd->payload, head);
+        xcopy(full + head, c->payload, (uint8_t)(bytes - head));
+        src = full;
+      }
+      if(!ppfStageValFields(nd->aux, nd->pad[0], nd->item, bytes, src)
           || !ppfFormatStaged(ppfValBuf, sizeof(ppfValBuf))) {
         return PP_NONE;
       }
       return ppfRun(ppfValBuf, ctxFont);
+    }
     case PPN_CONST:
       return ppfRun(indexOfItems[nd->item].itemCatalogName, ctxFont);
     case PPN_RCL: {

@@ -1286,6 +1286,20 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
     if(ppcCurrentFormulaRoot() == PPC_NIL) {
       ppTestFail("T22b a complex operand still withholds the whole formula");
     }
+    /* The LIVE half (PP18RR4-2) is NOT pinned. ppfFromCaptureNode now
+     * reassembles the PPN_VAL2 continuation, which stops a 16-byte
+     * overread past nd->payload, but asserting the DRAWN text needs C47's
+     * complex formatting spelled out and a guessed expectation would only
+     * enshrine whatever ppfFormatStaged happens to emit. Pin it against
+     * the formatter's real output when someone has it. */
+    {
+      uint8_t live = PP_NONE;
+      ppReset();
+      if(!ppfBuildCurrent(PP_FONT_STANDARD, PP_FONT_STANDARD, &live)) {
+        ppTestFail("T22b the live formula does not build with a complex operand");
+      }
+    }
+
     /* The history half. A formula files on DISPLACEMENT, not on completion,
      * so the wipe is part of the fixture rather than an afterthought — the
      * first version of this pin checked the ring while the formula was still
@@ -4049,6 +4063,53 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
     if(!erpnWas) {
       clearSystemFlag(FLAG_ERPN);
     }
+  }
+
+  /* V-XEQ (PP18RR4-1) — a callee's trailing ENTER must survive the return.
+   * ITM_XEQ's arm walks the whole subroutine and returns, so an epilogue
+   * that clears the lift latch after the arm erases what the callee armed,
+   * and the caller's next literal pushes where the machine overwrites.
+   *   LBL VXA: 1 2 XEQ VXB 5 + +      LBL VXB: 4 ENTER
+   * The armed latch makes the 5 overwrite the dup, so the machine holds
+   * [1,2,4,5], adds to 9, adds to 11, and the picture is 2+(4+5). */
+  {
+    static const uint8_t pgmXB[] = {
+      ITM_LBL, STRING_LABEL_VARIABLE, 3, 'V','Z','B',
+      ITM_LITERAL, STRING_LONG_INTEGER, 1, '4',
+      PPV2(ITM_ENTER),
+      PPV2(ITM_END),
+    };
+    static const uint8_t pgmXA[] = {
+      ITM_LBL, STRING_LABEL_VARIABLE, 3, 'V','Z','A',
+      ITM_LITERAL, STRING_LONG_INTEGER, 1, '1',
+      ITM_LITERAL, STRING_LONG_INTEGER, 1, '2',
+      PPV2(ITM_XEQ), STRING_LABEL_VARIABLE, 3, 'V','Z','B',
+      ITM_LITERAL, STRING_LONG_INTEGER, 1, '5',
+      PPV2(ITM_ADD), PPV2(ITM_ADD),
+      PPV2(ITM_END),
+    };
+    ppcTestWriteAndLoadPgm(pgmXB, sizeof(pgmXB));
+    ppcTestWriteAndLoadPgm(pgmXA, sizeof(pgmXA));
+    ppvTestExpect("V-XEQ callee ENTER survives the return (=11)", "VZA", "2+(4+5)");
+  }
+
+  /* V-FILL (PP18RR4-4) — FILL writes the slots directly instead of going
+   * through ppvPush, so the saturation latch never arms and T replication
+   * never runs: the walk underflows and declines a program the machine
+   * runs. Eight adds is the shortest chain that outlives the eight slots;
+   * the machine replicates T, so each add takes another 7. */
+  {
+    static const uint8_t pgmFL[] = {
+      ITM_LBL, STRING_LABEL_VARIABLE, 3, 'V','F','L',
+      ITM_LITERAL, STRING_LONG_INTEGER, 1, '7',
+      PPV2(ITM_FILL),
+      PPV2(ITM_ADD), PPV2(ITM_ADD), PPV2(ITM_ADD), PPV2(ITM_ADD),
+      PPV2(ITM_ADD), PPV2(ITM_ADD), PPV2(ITM_ADD), PPV2(ITM_ADD),
+      PPV2(ITM_END),
+    };
+    ppcTestWriteAndLoadPgm(pgmFL, sizeof(pgmFL));
+    ppvTestExpect("V-FILL saturates, so T replicates (=63)", "VFL",
+                  "7+(7+(7+(7+(7+(7+(7+(7+7)))))))");
   }
 
   /* V-MODE4 — the stack-DEPTH axis of the same oracle.

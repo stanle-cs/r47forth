@@ -46,7 +46,7 @@
 #define PPV_POOL_BYTES    512   ///< leaf TEXT only: literals and names
 #define PPV_AST_NODES      48   ///< expression nodes for one whole walk
 #define PPV_FRAG_MAX      255   ///< a serialized form must fit an evaluator slice
-#define PPV_STACK_SLOTS     8   ///< SSIZE8 simulated regardless of the flag
+#define PPV_STACK_SLOTS     8   ///< array width; the LIVE depth follows SSIZE4/8
 #define PPV_MAX_DEPTH       5   ///< XEQ inlining + construct recursion
 #define PPV_STEP_BUDGET   256   ///< decoded steps across the whole walk
 #define PPV_DIRTY_MAX       8
@@ -798,7 +798,7 @@ static bool_t ppvMonadicName(uint16_t op, char *out) {
  * metadata to infer from — TICKS is the counterexample that would break
  * one, looking inert and pushing a value nobody can predict. */
 
-/* Items that must NOT have the lift latch cleared after them.
+/* Items whose arm OWNS the lift latch, so the epilogue must not touch it.
  *
  * Upstream clears stack lift in a dispatch epilogue no item can skip, and
  * this mirrors that: the arms live in ppvStepArm and may return freely,
@@ -806,14 +806,22 @@ static bool_t ppvMonadicName(uint16_t op, char *out) {
  * whether it breaks or returns, and the exceptions are this list rather
  * than a property of control flow.
  *
- * The exceptions are the declaration and display items, which upstream
- * marks SLS_UNCHANGED and which must leave a pending lift alone, and
- * ENTER, which is the item that ARMS the latch. */
+ * Membership is "the arm decides the latch", NOT upstream's SLS_UNCHANGED
+ * — XEQ is SLS_ENABLED and is here anyway. Three reasons, one per group:
+ *   - the declaration and display items change no stack and must leave a
+ *     pending lift alone;
+ *   - ENTER is the item that ARMS the latch;
+ *   - XEQ does not execute a step, it walks the whole callee on the
+ *     shared stack. Its arm clears the latch BEFORE that walk so the
+ *     callee cannot inherit one, and whatever the callee leaves is the
+ *     caller's to see: a subroutine ending in ENTER arms the caller's
+ *     next read. An epilogue firing after the walk would erase that. */
 static bool_t ppvLiftNeutral(uint16_t op) {
   switch(op) {
     case ITM_NULL: case ITM_LBL: case ITM_MVAR: case ITM_REM:
     case ITM_PAUSE: case ITM_SNAP:
     case ITM_ENTER:
+    case ITM_XEQ:
       return true;
     default:
       return false;
