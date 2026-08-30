@@ -789,6 +789,8 @@ void prettyTestFallback(uint16_t unusedButMandatoryParameter) {
 // capture traces decode history entries through them
 static void ppfTestSigNode(uint8_t n, char *out, size_t cap);
 static void ppfTestExpect(const char *what, uint8_t root, const char *expected);
+static bool_t ppfTestPowersScoped(uint8_t n);
+static const char *ppfTestFirstRunText(uint8_t n);
 
 static void ppcTestSigNode(uint8_t n, char *out, size_t cap) {
   size_t len = strlen(out);
@@ -945,7 +947,53 @@ static bool_t ppTreeHasRun(uint8_t n, const char *text) {
  * the program-file format and import it through the official loader,
  * which appends it and registers the global label. The Test-suffixed
  * name is the one the test HAL maps ioPathLoadProgram to. */
+/* Fixture labels must be unique across this file. findNamedLabel returns
+ * the FIRST match in label order and nothing clears program memory between
+ * fixtures, so a duplicate silently points one pin at another pin's
+ * program: V72 failed as a lift-latch regression ~960 lines from the
+ * fixture that took its name. Identical bytes under the same name are a
+ * re-run of the same fixture, not a collision. */
+static void ppcTestNoteLabel(const uint8_t *pgm, size_t n) {
+  static char     seenName[48][8];
+  static uint32_t seenSum[48];
+  static uint8_t  seenCount = 0;
+
+  if(n < 4 || pgm[0] != ITM_LBL || pgm[1] != STRING_LABEL_VARIABLE) {
+    return;
+  }
+  uint8_t len = pgm[2];
+  if(len == 0 || len > 7 || (size_t)(3 + len) > n) {
+    return;
+  }
+  char name[8];
+  for(uint8_t i = 0; i < len; i++) {
+    name[i] = (char)pgm[3 + i];
+  }
+  name[len] = 0;
+
+  uint32_t sum = (uint32_t)n;
+  for(size_t i = 0; i < n; i++) {
+    sum = sum * 31u + pgm[i];
+  }
+  for(uint8_t i = 0; i < seenCount; i++) {
+    if(strcmp(seenName[i], name) == 0) {
+      if(seenSum[i] != sum) {
+        char msg[64];
+        snprintf(msg, sizeof(msg), "label %s is defined by two different fixtures", name);
+        ppTestFail(msg);
+      }
+      return;
+    }
+  }
+  if(seenCount < 48) {
+    strcpy(seenName[seenCount], name);
+    seenSum[seenCount] = sum;
+    seenCount++;
+  }
+}
+
 static void ppcTestWriteAndLoadPgm(const uint8_t *pgm, size_t n) {
+  ppcTestNoteLabel(pgm, n);
   FILE *f = fopen("c47programTest.bin", "wb");
   if(f == NULL) {
     ppTestFail("cannot open c47programTest.bin");
@@ -1409,6 +1457,109 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
     }
     else {
       ppfTestExpect("T24c stacked power brackets its base", pw, "S(P(S(3|3))|3)");
+    }
+  }
+
+  /* T25 (PP18RR5-1, PP18RR5-3) — the CLASS, over every producer of a PP_SUP.
+   * T24c pinned one operator on one surface, and the rule was stated for
+   * all of them: ITM_YX built the same node kind twelve lines away and
+   * still bracketed by precedence, so 2 ENTER 3 yx 2 yx drew 2 to the 32.
+   * Rows are (steps, expected signature); ppfTestPowersScoped then checks
+   * the property over the whole tree, so a new producer that skips
+   * ppfPowBase reddens here without anyone writing its row. */
+  {
+    static const struct { const char *what; uint16_t op1; const char *lit; uint16_t op2; const char *sig; } powRows[] = {
+      { "T25 x2 over x2",  ITM_SQUARE, NULL, ITM_SQUARE, "S(P(S(3|2))|2)" },
+      { "T25 x3 over x3",  ITM_CUBE,   NULL, ITM_CUBE,   "S(P(S(3|3))|3)" },
+      { "T25 yx over x2",  ITM_SQUARE, "2",  ITM_YX,     "S(P(S(3|2))|2)" },
+    };
+    for(uint8_t r = 0; r < sizeof(powRows) / sizeof(powRows[0]); r++) {
+      ppcTestReset();
+      ppcTestType("3");
+      ppcTestOp((int16_t)powRows[r].op1);
+      if(powRows[r].lit != NULL) {
+        ppcTestType(powRows[r].lit);
+      }
+      ppcTestOp((int16_t)powRows[r].op2);
+      uint8_t pw = PP_NONE;
+      ppReset();
+      if(!ppfBuildCurrent(PP_FONT_STANDARD, PP_FONT_STANDARD, &pw)) {
+        ppTestFail(powRows[r].what);
+      }
+      else {
+        ppfTestExpect(powRows[r].what, pw, powRows[r].sig);
+        if(!ppfTestPowersScoped(pw)) {
+          ppTestFail("T25 a power's base is itself a power, unbracketed");
+        }
+      }
+    }
+
+    /* yx over yx: two operands, so the base is built by the OP2 arm from a
+     * node the OP2 arm built. This is the shape the finding was reported
+     * against, and it reaches the same builder on both capture surfaces —
+     * the live tree here, the filed entry below through the token decoder. */
+    ppcTestReset();
+    ppcTestType("2");
+    ppcTestOp(ITM_ENTER);
+    ppcTestType("3");
+    ppcTestOp(ITM_YX);
+    ppcTestType("2");
+    ppcTestOp(ITM_YX);
+    uint8_t yx = PP_NONE;
+    ppReset();
+    if(!ppfBuildCurrent(PP_FONT_STANDARD, PP_FONT_STANDARD, &yx)) {
+      ppTestFail("T25 yx over yx does not build");
+    }
+    else {
+      ppfTestExpect("T25 yx over yx brackets its base", yx, "S(P(S(2|3))|2)");
+    }
+
+    ppcTestOp(ITM_CLSTK);   // displacing the formula files it
+    ppcTestExpectHist("T25 the stacked power files", 1);
+    uint8_t filed = PP_NONE;
+    ppReset();
+    if(!ppfBuildEntry(ppcHistoryEntry(0, NULL, NULL), PP_FONT_STANDARD,
+                      PP_FONT_STANDARD, false, &filed)) {
+      ppTestFail("T25 the filed stacked power does not decode");
+    }
+    else if(!ppfTestPowersScoped(filed)) {
+      ppTestFail("T25 the FILED power's base is itself a power, unbracketed");
+    }
+
+    /* PP18RR5-3: the base need not be a PP_SUP node. A leaf read from a
+     * REGISTER is formatted for display, so a large value arrives as one
+     * flat run already ending in the superscript digits of its own
+     * exponent, and a kind test reads (1x10^50) squared as an exponent of
+     * 502. A TYPED literal keeps its typed text and never has the tail,
+     * which is why this row recalls instead of typing. The SUB-10 glyph is
+     * the reach check: without it the row would pass while testing nothing. */
+    ppcTestReset();
+    ppcTestType("1");
+    addItemToNimBuffer(ITM_EXPONENT);
+    ppcTestType("50");
+    ppcTestOpParam(ITM_STO, (uint16_t)REGISTER_Y);
+    ppcTestOpParam(ITM_RCL, (uint16_t)REGISTER_Y);
+    ppcTestOp(ITM_SQUARE);
+    uint8_t sci = PP_NONE;
+    ppReset();
+    if(!ppfBuildCurrent(PP_FONT_STANDARD, PP_FONT_STANDARD, &sci)) {
+      ppTestFail("T25 the scientific-form power does not build");
+    }
+    else {
+      const char *leaf = ppfTestFirstRunText(sci);
+      const ppNode_t *root = ppNodeAt(sci);
+      const ppNode_t *base = (root != NULL) ? ppNodeAt(root->firstChild) : NULL;
+      if(leaf == NULL || strstr(leaf, STD_SUB_10) == NULL) {
+        ppTestFail("T25 the value never reached scientific form, so the row tests nothing");
+      }
+      else if(root == NULL || root->kind != PP_SUP) {
+        ppTestFail("T25 the squared scientific value is not a power");
+      }
+      else if(base == NULL || base->kind != PP_PAREN) {
+        // structural, not a glyph test: the row must not agree with the
+        // predicate it exists to check
+        ppTestFail("T25 a squared scientific value draws its two exponents as one");
+      }
     }
   }
 
@@ -2165,6 +2316,75 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
  * Layout signatures: RUN -> its text with spaces stripped; HBOX ->
  * [children space-joined]; FRAC -> F(a|b); SUP -> S(a|b); RAD -> R(a);
  * PAREN -> P(a). Expected strings build from catalog names at runtime. */
+
+/* The PP18RR5-1 property, checked over a WHOLE tree so one function serves
+ * every surface: a PP_SUP whose base already carries an exponent draws both
+ * exponents at the same height and reads as one number, so every producer
+ * of a PP_SUP must bracket such a base. A base carries an exponent when it
+ * is a PP_SUP or a run whose text ends in superscript glyphs. */
+static bool_t ppfTestRunEndsSup(uint8_t n) {
+  const ppNode_t *nd = ppNodeAt(n);
+  if(nd == NULL || nd->kind != PP_RUN) {
+    return false;
+  }
+  const char *t = ppTextAt(nd->textOff);
+  uint16_t last = 0;
+  for(uint16_t i = 0; t != NULL && t[i] != 0; ) {
+    uint8_t c = (uint8_t)t[i];
+    uint16_t code;
+    if(c < 0x80) {
+      code = c;
+      i++;
+    }
+    else if(t[i + 1] == 0) {
+      break;
+    }
+    else {
+      code = (uint16_t)(((uint16_t)c << 8) | (uint8_t)t[i + 1]);
+      i = (uint16_t)(i + 2);
+    }
+    if(code != ' ' && !(code >= 0xa000 && code <= 0xa00f)) {
+      last = code;   // the formatter pads with a trailing space glyph
+    }
+  }
+  return last >= 0xa160 && last <= 0xa16b;
+}
+
+static const char *ppfTestFirstRunText(uint8_t n) {
+  const ppNode_t *nd = ppNodeAt(n);
+  if(nd == NULL) {
+    return NULL;
+  }
+  if(nd->kind == PP_RUN) {
+    return ppTextAt(nd->textOff);
+  }
+  for(uint8_t c = nd->firstChild; c != PP_NONE; c = ppNodeAt(c)->nextSibling) {
+    const char *t = ppfTestFirstRunText(c);
+    if(t != NULL) {
+      return t;
+    }
+  }
+  return NULL;
+}
+
+static bool_t ppfTestPowersScoped(uint8_t n) {
+  const ppNode_t *nd = ppNodeAt(n);
+  if(nd == NULL) {
+    return true;
+  }
+  if(nd->kind == PP_SUP) {
+    const ppNode_t *b = ppNodeAt(nd->firstChild);
+    if(b != NULL && (b->kind == PP_SUP || ppfTestRunEndsSup(nd->firstChild))) {
+      return false;
+    }
+  }
+  for(uint8_t c = nd->firstChild; c != PP_NONE; c = ppNodeAt(c)->nextSibling) {
+    if(!ppfTestPowersScoped(c)) {
+      return false;
+    }
+  }
+  return true;
+}
 
 static void ppfTestSigNode(uint8_t n, char *out, size_t cap) {
   if(strlen(out) + 24 >= cap) {
@@ -3020,6 +3240,23 @@ void prettyTestEquation(uint16_t unusedButMandatoryParameter) {
     }
     if(sigMinus[0] == 0 || sigPlus[0] == 0 || strlen(sigPlus) != strlen(sigMinus)) {
       ppTestFail("EQ4c the two signed-exponent forms do not draw the same shape");
+    }
+  }
+
+  /* EQ4d (PP18RR5-1) — the EQN grammar is the third producer of a PP_SUP,
+   * so it carries the same rule: a base that already ends in exponent
+   * glyphs must be bracketed, or 1x10^5 raised to 2 draws its two exponents
+   * at one height. The number scanner swallows the SUB-10 tail into the
+   * run, so the kind test alone cannot see it — ppfPowBase reads the run. */
+  {
+    ppReset();
+    uint8_t eRoot = PP_NONE;
+    if(!ppqParse("1" "\x80\xb7" "\xa4\x7d" "\xa1\x65" "^2/X",
+                 PP_FONT_STANDARD, PP_FONT_TINY, &eRoot)) {
+      ppTestFail("EQ4d the exponent-tail power form does not parse");
+    }
+    else if(!ppfTestPowersScoped(eRoot)) {
+      ppTestFail("EQ4d a power over a scientific-form number draws two exponents as one");
     }
   }
 
@@ -4149,7 +4386,7 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
    * ITM_XEQ's arm walks the whole subroutine and returns, so an epilogue
    * that clears the lift latch after the arm erases what the callee armed,
    * and the caller's next literal pushes where the machine overwrites.
-   *   LBL VXA: 1 2 XEQ VXB 5 + +      LBL VXB: 4 ENTER
+   *   LBL VZA: 1 2 XEQ VZB 5 + +      LBL VZB: 4 ENTER
    * The armed latch makes the 5 overwrite the dup, so the machine holds
    * [1,2,4,5], adds to 9, adds to 11, and the picture is 2+(4+5). */
   {
@@ -4170,14 +4407,65 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
     };
     ppcTestWriteAndLoadPgm(pgmXB, sizeof(pgmXB));
     ppcTestWriteAndLoadPgm(pgmXA, sizeof(pgmXA));
-    ppvTestExpect("V-XEQ callee ENTER survives the return (=11)", "VZA", "2+(4+5)");
+
+    /* The latch's meaning is mode-dependent, so the picture is too: under
+     * eRPN the callee's ENTER leaves the latch SET, the 5 lifts instead of
+     * overwriting, and 4+(4+5) = 13 is the right answer. Asserting only
+     * one mode leaves the pin true of an ambient this file happens to set. */
+    bool_t erpnWasX = getSystemFlag(FLAG_ERPN);
+
+    clearSystemFlag(FLAG_ERPN);
+    ppvTestExpect("V-XEQ classic: callee ENTER survives the return (=11)", "VZA", "2+(4+5)");
+
+    setSystemFlag(FLAG_ERPN);
+    ppvTestExpect("V-XEQ eRPN: the caller's 5 lifts (=13)", "VZA", "4+(4+5)");
+
+    if(erpnWasX) {
+      setSystemFlag(FLAG_ERPN);
+    }
+    else {
+      clearSystemFlag(FLAG_ERPN);
+    }
   }
 
-  /* V-FILL (PP18RR4-4) — FILL writes the slots directly instead of going
-   * through ppvPush, so the saturation latch never arms and T replication
-   * never runs: the walk underflows and declines a program the machine
-   * runs. Eight adds is the shortest chain that outlives the eight slots;
-   * the machine replicates T, so each add takes another 7. */
+  /* V-DECL (PP18RR5-4) — a declaration item between ENTER and the lifting
+   * read must leave the latch alone. Nothing exercised that: deleting the
+   * six declaration items from ppvLiftNeutral left the whole gate green,
+   * so the exception list was correct but untested. MVAR stands for the
+   * group; the walk never holds more than four entries, so the stack size
+   * cannot change the picture.
+   *   1 2 ENTER MVAR z 5 + +  ->  the 5 overwrites the dup, giving 1+(2+5).
+   * With the item dropped from the list the epilogue clears the latch, the
+   * 5 lifts, and the walker draws 2+(2+5) for a program returning 8. */
+  {
+    static const uint8_t pgmDC[] = {
+      ITM_LBL, STRING_LABEL_VARIABLE, 3, 'V','D','C',
+      ITM_LITERAL, STRING_LONG_INTEGER, 1, '1',
+      ITM_LITERAL, STRING_LONG_INTEGER, 1, '2',
+      PPV2(ITM_ENTER),
+      PPV2(ITM_MVAR), STRING_LABEL_VARIABLE, 1, 'z',
+      ITM_LITERAL, STRING_LONG_INTEGER, 1, '5',
+      PPV2(ITM_ADD), PPV2(ITM_ADD),
+      PPV2(ITM_END),
+    };
+    ppcTestWriteAndLoadPgm(pgmDC, sizeof(pgmDC));
+
+    bool_t erpnWasDC = getSystemFlag(FLAG_ERPN);
+    clearSystemFlag(FLAG_ERPN);
+    ppvTestExpect("V-DECL the latch survives a declaration item (=8)", "VDC", "1+(2+5)");
+    if(erpnWasDC) {
+      setSystemFlag(FLAG_ERPN);
+    }
+  }
+
+  /* V-FILL (PP18RR4-4) — FILL is the only arm that fills the stack without
+   * ppvPush, so it has to arm the saturation latch itself; without that, T
+   * never replicates and the walk declines a program the machine runs.
+   * Eight adds outlive either stack depth, and the replicated T keeps the
+   * same right-nested picture at both, so the assertion is one string and
+   * the stack size is the axis. Under SS=4 the old arm still saturated by
+   * accident — it wrote eight slots, and the first push renormalised —
+   * which is why this pin has to set SS=8 rather than take the battery's. */
   {
     static const uint8_t pgmFL[] = {
       ITM_LBL, STRING_LABEL_VARIABLE, 3, 'V','F','L',
@@ -4188,8 +4476,23 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
       PPV2(ITM_END),
     };
     ppcTestWriteAndLoadPgm(pgmFL, sizeof(pgmFL));
-    ppvTestExpect("V-FILL saturates, so T replicates (=63)", "VFL",
+
+    bool_t ss8WasFL = getSystemFlag(FLAG_SSIZE8);
+
+    setSystemFlag(FLAG_SSIZE8);
+    ppvTestExpect("V-FILL SSIZE8 saturates, so T replicates (=63)", "VFL",
                   "7+(7+(7+(7+(7+(7+(7+(7+7)))))))");
+
+    clearSystemFlag(FLAG_SSIZE8);
+    ppvTestExpect("V-FILL SSIZE4 saturates, so T replicates (=63)", "VFL",
+                  "7+(7+(7+(7+(7+(7+(7+(7+7)))))))");
+
+    if(ss8WasFL) {
+      setSystemFlag(FLAG_SSIZE8);
+    }
+    else {
+      clearSystemFlag(FLAG_SSIZE8);
+    }
   }
 
   /* V-MODE4 — the stack-DEPTH axis of the same oracle.

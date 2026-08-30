@@ -798,7 +798,15 @@ static bool_t ppvMonadicName(uint16_t op, char *out) {
  * metadata to infer from — TICKS is the counterexample that would break
  * one, looking inert and pushing a value nobody can predict. */
 
-/* Items whose arm OWNS the lift latch, so the epilogue must not touch it.
+/* The declaration and display items: no stack, no picture, and no effect
+ * on a pending lift. One list, used by the dispatch arm and by the
+ * exception test below, because keeping two in sync by hand is how the
+ * exception test gets half-updated. */
+#define PPV_DECLARATION_ITEMS \
+  case ITM_NULL: case ITM_LBL: case ITM_MVAR: case ITM_REM: \
+  case ITM_PAUSE: case ITM_SNAP
+
+/* Items the epilogue's lift clear must NOT run after.
  *
  * Upstream clears stack lift in a dispatch epilogue no item can skip, and
  * this mirrors that: the arms live in ppvStepArm and may return freely,
@@ -806,10 +814,14 @@ static bool_t ppvMonadicName(uint16_t op, char *out) {
  * whether it breaks or returns, and the exceptions are this list rather
  * than a property of control flow.
  *
- * Membership is "the arm decides the latch", NOT upstream's SLS_UNCHANGED
- * — XEQ is SLS_ENABLED and is here anyway. Three reasons, one per group:
- *   - the declaration and display items change no stack and must leave a
- *     pending lift alone;
+ * Membership is "clearing here would DESTROY what the step left", not
+ * upstream's SLS_UNCHANGED (XEQ is SLS_ENABLED and is here anyway) and
+ * not "the arm touches the latch" — LITERAL, RCL, PGMINT and PGMDRV all
+ * decide the latch and are absent, because each leaves it exactly as the
+ * epilogue would set it, so the clear is a no-op for them. Three reasons,
+ * one per group:
+ *   - the declaration items change no stack and must leave a pending
+ *     lift alone;
  *   - ENTER is the item that ARMS the latch;
  *   - XEQ does not execute a step, it walks the whole callee on the
  *     shared stack. Its arm clears the latch BEFORE that walk so the
@@ -818,8 +830,7 @@ static bool_t ppvMonadicName(uint16_t op, char *out) {
  *     next read. An epilogue firing after the walk would erase that. */
 static bool_t ppvLiftNeutral(uint16_t op) {
   switch(op) {
-    case ITM_NULL: case ITM_LBL: case ITM_MVAR: case ITM_REM:
-    case ITM_PAUSE: case ITM_SNAP:
+    PPV_DECLARATION_ITEMS:
     case ITM_ENTER:
     case ITM_XEQ:
       return true;
@@ -866,10 +877,7 @@ static void ppvStep(ppvCtx_t *ctx, ppvStack_t *stk, uint16_t op, const uint8_t *
 
 static void ppvStepArm(ppvCtx_t *ctx, ppvStack_t *stk, uint16_t op, const uint8_t *pa) {
   switch(op) {
-    // declarations, comments, display and timing: no stack, no picture,
-    // and no effect on the pending lift either
-    case ITM_NULL: case ITM_LBL: case ITM_MVAR: case ITM_REM:
-    case ITM_PAUSE: case ITM_SNAP:
+    PPV_DECLARATION_ITEMS:
       return;
 
     case ITM_ENTER: {
@@ -920,11 +928,18 @@ static void ppvStepArm(ppvCtx_t *ctx, ppvStack_t *stk, uint16_t op, const uint8_
         ppvDecline(ctx, PPV_D_UNDERFLOW);
         return;
       }
+      /* FILL is the one arm that fills the stack without ppvPush, so it
+       * has to arm the saturation latch itself or T never replicates and
+       * a long chain declines a program the machine runs. It fills the
+       * LIVE slots: writing all eight under SSIZE4 leaves depth past the
+       * configured depth. */
       uint8_t t = stk->ast[stk->depth - 1];
-      for(uint8_t i = 0; i < PPV_STACK_SLOTS; i++) {
+      uint8_t slots = ppvLiveStackSlots();
+      for(uint8_t i = 0; i < slots; i++) {
         stk->ast[i] = t;
       }
-      stk->depth = PPV_STACK_SLOTS;
+      stk->depth = slots;
+      stk->saturated = true;
       break;
     }
 
@@ -1625,9 +1640,13 @@ void fnPrettyVisual(uint16_t label) {
   uint16_t saved = currentSolverStatus;
   currentSolverStatus &= (uint16_t)~(SOLVER_STATUS_EQUATION_MODE | SOLVER_STATUS_INTERACTIVE);
   if(ppvPaintStackWindow(&ctx, root)) {
-    // only the stack refresh is suspended: the menu and the status bar
-    // keep working, and X keeps whatever the program left there
+    /* Only the stack refresh is suspended: the menu and the status bar
+     * keep working, and X keeps whatever the program left there. The
+     * chrome bits are CLEARED rather than left alone, because the guard
+     * that decides the menu repaint reads them: ORing would let a bit an
+     * earlier full-screen surface set decide this surface's chrome. */
     screenUpdatingMode |= SCRUPD_MANUAL_STACK;
+    screenUpdatingMode &= (uint8_t)~(SCRUPD_MANUAL_MENU | SCRUPD_MANUAL_SHIFT_STATUS);
     screenHoldsDrawnPixels = true;
     // a self-painted screen declares itself one, or EXIT cannot dismiss
     // it (DESIGN.md §6, the binding rule)

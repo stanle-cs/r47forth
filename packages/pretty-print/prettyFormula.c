@@ -92,6 +92,52 @@ uint8_t ppfRun(const char *s, uint8_t fontId) {
   return ppNewRun(s, (uint16_t)strlen(s), fontId);
 }
 
+/* Bracket the base of a power when the base already carries an exponent.
+ * PP_SUP draws both exponents at the same height, so 3 squared squared
+ * would draw as 3-two-two and read as 3^22. ppfWrapIf cannot decide it:
+ * every builder reports ATOM and ATOM < ATOM is false. Two shapes count
+ * as "already a power" — a PP_SUP node, and a run whose text ends in
+ * superscript glyphs, which is how a value in scientific form spells its
+ * exponent. Every producer of PP_SUP calls this, so no caller carries
+ * the rule and no POW precedence level is needed. */
+uint8_t ppfPowBase(uint8_t a, int aPrec, uint8_t fontId) {
+  const ppNode_t *nd = (a != PP_NONE) ? ppNodeAt(a) : NULL;
+  bool_t isPower = false;
+  if(nd != NULL && nd->kind == PP_SUP) {
+    isPower = true;
+  }
+  else if(nd != NULL && nd->kind == PP_RUN) {
+    /* The last glyph that carries ink: the display formatter ends a
+     * value with a padding space (0xa000..0xa00f), so testing the very
+     * last glyph would never see the exponent underneath it. */
+    const char *s = ppTextAt(nd->textOff);
+    uint16_t last = 0;
+    for(uint16_t i = 0; s != NULL && s[i] != 0; ) {
+      uint8_t c = (uint8_t)s[i];
+      uint16_t code;
+      if(c < 0x80) {
+        code = c;
+        i++;
+      }
+      else if(s[i + 1] == 0) {
+        break;   // truncated glyph: not a tail we can read
+      }
+      else {
+        code = (uint16_t)(((uint16_t)c << 8) | (uint8_t)s[i + 1]);
+        i = (uint16_t)(i + 2);
+      }
+      if(code != ' ' && !(code >= 0xa000 && code <= 0xa00f)) {
+        last = code;
+      }
+    }
+    // 0xa160..0xa16b: the superscript digits plus the signs
+    // exponentToDisplayString emits after the multiplication sign
+    isPower = (last >= 0xa160 && last <= 0xa16b);
+  }
+  return isPower ? ppfParen(a, fontId)
+                 : ppfWrapIf(a, aPrec, PPF_PREC_ATOM, fontId);
+}
+
 uint8_t ppfBuildOp2(uint16_t item, uint8_t a, int aPrec, uint8_t b, int bPrec,
                            uint8_t ctxFont, uint8_t childFont, int *outPrec) {
   *outPrec = PPF_PREC_ATOM;
@@ -107,7 +153,7 @@ uint8_t ppfBuildOp2(uint16_t item, uint8_t a, int aPrec, uint8_t b, int bPrec,
     }
     case ITM_YX: {
       uint8_t sup = ppNewBox(PP_SUP, ctxFont);
-      uint8_t base = ppfWrapIf(a, aPrec, PPF_PREC_ATOM, ctxFont);   // (2+3)² keeps its parens
+      uint8_t base = ppfPowBase(a, aPrec, ctxFont);   // (2+3)² keeps its parens
       if(sup == PP_NONE || base == PP_NONE || b == PP_NONE) {
         return PP_NONE;
       }
@@ -233,17 +279,7 @@ uint8_t ppfBuildOp1(uint16_t item, uint8_t a, int aPrec,
     }
     case ITM_SQUARE: case ITM_CUBE: {
       uint8_t sup = ppNewBox(PP_SUP, ctxFont);
-      /* A stacked power needs its base bracketed, and ppfWrapIf cannot do
-       * it: this arm reports ATOM and ATOM < ATOM is false. PP_SUP puts
-       * the outer exponent at the same height as the inner one, so an
-       * unbracketed 3 cubed cubed draws flat as 3-cubed-cubed and reads as
-       * 3^33, for a value of 3^9. Ask the node's KIND rather than adding a
-       * POW precedence level, which would change the contract under every
-       * caller. Deciding it here means no caller has to remember to. */
-      const ppNode_t *an = (a != PP_NONE) ? ppNodeAt(a) : NULL;
-      uint8_t base = (an != NULL && an->kind == PP_SUP)
-                       ? ppfParen(a, ctxFont)
-                       : ppfWrapIf(a, aPrec, PPF_PREC_ATOM, ctxFont);
+      uint8_t base = ppfPowBase(a, aPrec, ctxFont);
       uint8_t exp = ppfRun(item == ITM_SQUARE ? "2" : "3", childFont);
       if(sup == PP_NONE || base == PP_NONE || exp == PP_NONE) {
         return PP_NONE;

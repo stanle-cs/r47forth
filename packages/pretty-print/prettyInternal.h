@@ -119,14 +119,15 @@ uint8_t ppqFrameDerivative(uint8_t eq, bool_t second);   ///< PP13: d/dx (d²/dx
  * engine and the walker so precedence is decided in one place. No POW
  * level: PP_SUP scopes itself, so only ADD and MUL need brackets. The one
  * shape that level would have covered — a power whose base is itself a
- * power — is handled inside the SQUARE/CUBE arm by inspecting the base
- * node's kind, so no caller carries that precondition. */
+ * power — is handled by ppfPowBase, which every producer of a PP_SUP
+ * calls: the two arms here and ppqFactor's '^' arm in prettyEquation.c. */
 #define PPF_PREC_ADD  1
 #define PPF_PREC_MUL  2
 #define PPF_PREC_ATOM 3
 
 uint8_t ppfRun    (const char *s, uint8_t fontId);
 uint8_t ppfWrapIf (uint8_t node, int prec, int minPrec, uint8_t fontId);   ///< parens iff prec < minPrec
+uint8_t ppfPowBase(uint8_t a, int aPrec, uint8_t fontId);   ///< a power's base: parens iff it already carries an exponent
 uint8_t ppfBuildOp1(uint16_t item, uint8_t a, int aPrec,
                     uint8_t ctxFont, uint8_t childFont, int *outPrec);
 uint8_t ppfBuildOp2(uint16_t item, uint8_t a, int aPrec, uint8_t b, int bPrec,
