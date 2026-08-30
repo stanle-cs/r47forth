@@ -77,7 +77,17 @@ finding.
         fault, not the reader. If you split by phase, each packet must
         carry the other phase's compensating code for the arms it
         audits, or say in Orientation which phase performs the repair.
-     7. Constants that gate reachability — sizing arithmetic, caps,
+     7. IF YOU GIVE ONE SIDE'S ESTABLISHING FACT, GIVE THE OTHER SIDE'S.
+        PP18 round 6 asked whether a subroutine's trailing ENTER survives
+        the return. The Orientation supplied XEQ's dispatch metadata
+        (SLS_ENABLED) and NOT the return items' (RTN and END are
+        SLS_UNCHANGED), so the reader concluded the caller's epilogue
+        clears the latch after the callee runs — two true facts and a
+        wrong conclusion, from a genuinely one-sided packet. When a
+        question turns on which of two operations owns a state, both
+        operations' metadata belongs in the Orientation, quoted from the
+        table. The reader cannot ask for the row you did not mention.
+     8. Constants that gate reachability — sizing arithmetic, caps,
         buffer budgets — with their VALUES multiplied out. undo-history
         round 5: both readers traced the sums restore path as live code;
         HISTORY_SUMS_BYTES (~1.3 KiB) vs the 1 KiB entry cap makes it
@@ -101,7 +111,7 @@ finding.
      body is included so other code can be read, say so at its fence:
      "context, not the subject — byte-identical to upstream".
 
-     EIGHTH CLASS (round 10): if you cut by LINE RANGE, do not choose the
+     NINTH CLASS (round 10): if you cut by LINE RANGE, do not choose the
      range from the comment banner. A design packet took two pieces of one
      long function — the loop that sets a flag and the statement that
      consumes it — by grepping for their banners; the second range ended
