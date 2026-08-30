@@ -3646,6 +3646,90 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
     ppcTestWriteAndLoadPgm(pgmFX,  sizeof(pgmFX));
   }
 
+  /* V-MODE (AUDIT PP18RR1-2, PP18RR1-3) — the mode-looped oracle. Four
+   * audit rounds ran every V fixture under the build default only, which is
+   * classic lift and SSIZE8, so two whole configuration branches of the
+   * simulated machine were never exercised. The walker now reads both flags;
+   * these pin that it does, by drawing the SAME program under each setting
+   * and requiring the pictures to DIFFER in the way the machine differs.
+   *
+   * VMEN: 1, 2, ENTER, 3, x, +.
+   *   classic — ENTER clears the lift latch, so the 3 OVERWRITES the dup:
+   *             stack [1,2,3] -> 1 + 2x3, and XEQ returns 7.
+   *   eRPN    — a running program's ENTER dups AND leaves the latch set, so
+   *             the 3 LIFTS: [1,2,2,3] -> 2 + 2x3, and XEQ returns 8.
+   * Before the fix the walker drew the classic picture in both modes, so
+   * under eRPN it asserted 7 for a program returning 8. */
+  {
+    static const uint8_t pgmMEN[] = {
+      ITM_LBL, STRING_LABEL_VARIABLE, 4, 'V','M','E','N',
+      ITM_LITERAL, STRING_LONG_INTEGER, 1, '1',
+      ITM_LITERAL, STRING_LONG_INTEGER, 1, '2',
+      PPV2(ITM_ENTER),
+      ITM_LITERAL, STRING_LONG_INTEGER, 1, '3',
+      PPV2(ITM_MULT),
+      PPV2(ITM_ADD),
+      PPV2(ITM_END),
+    };
+    ppcTestWriteAndLoadPgm(pgmMEN, sizeof(pgmMEN));
+
+    bool_t erpnWas = getSystemFlag(FLAG_ERPN);
+    char want[64];
+
+    clearSystemFlag(FLAG_ERPN);
+    sprintf(want, "1+2%s3", STD_CROSS);
+    ppvTestExpect("V-MODE classic ENTER overwrites", "VMEN", want);
+
+    setSystemFlag(FLAG_ERPN);
+    sprintf(want, "2+2%s3", STD_CROSS);
+    ppvTestExpect("V-MODE eRPN ENTER lifts", "VMEN", want);
+
+    if(!erpnWas) {
+      clearSystemFlag(FLAG_ERPN);
+    }
+  }
+
+  /* V-MODE4 (AUDIT PP18RR1-3) — the stack-DEPTH axis of the same oracle.
+   * VM4: 1 2 3 4 5 + + + +.
+   *   SSIZE8 — nothing saturates; all five literals survive, XEQ returns 15.
+   *   SSIZE4 — the fifth literal's lift drops the 1, and each subsequent
+   *            drop replicates T, so the machine adds 2 twice and returns 16.
+   * The walker modelled eight slots and no replication, so under SSIZE4 it
+   * drew the SSIZE8 picture: 15 asserted for a program returning 16. */
+  {
+    static const uint8_t pgmVM4[] = {
+      ITM_LBL, STRING_LABEL_VARIABLE, 3, 'V','M','4',
+      ITM_LITERAL, STRING_LONG_INTEGER, 1, '1',
+      ITM_LITERAL, STRING_LONG_INTEGER, 1, '2',
+      ITM_LITERAL, STRING_LONG_INTEGER, 1, '3',
+      ITM_LITERAL, STRING_LONG_INTEGER, 1, '4',
+      ITM_LITERAL, STRING_LONG_INTEGER, 1, '5',
+      PPV2(ITM_ADD), PPV2(ITM_ADD), PPV2(ITM_ADD), PPV2(ITM_ADD),
+      PPV2(ITM_END),
+    };
+    ppcTestWriteAndLoadPgm(pgmVM4, sizeof(pgmVM4));
+
+    bool_t ss8Was = getSystemFlag(FLAG_SSIZE8);
+
+    /* The VALUE is the oracle, not the spelling: the walker keeps the RPN's
+     * own right-nesting (4 5 + 3 + really is 3+(4+5)) rather than flattening
+     * associative chains, so the pictures are parenthesised. 1+(2+(3+(4+5)))
+     * is 15, which is what XEQ returns under SSIZE8; 2+(2+(3+(4+5))) is 16,
+     * which is what it returns under SSIZE4 with T replicated twice. */
+    setSystemFlag(FLAG_SSIZE8);
+    ppvTestExpect("V-MODE4 SSIZE8 keeps all five (=15)", "VM4", "1+(2+(3+(4+5)))");
+
+    clearSystemFlag(FLAG_SSIZE8);
+    ppvTestExpect("V-MODE4 SSIZE4 drops one and replicates T (=16)", "VM4", "2+(2+(3+(4+5)))");
+
+    if(ss8Was) {
+      setSystemFlag(FLAG_SSIZE8);
+    }
+    else {
+      clearSystemFlag(FLAG_SSIZE8);
+    }
+  }
+
   // V1: the ask itself — a double integral recovered from the chain,
   // limits and d-variables and all, with the title idiom passing through
   ppvTestExpect("V1 DBLINT", "VDBL", "INTEG(INTEG(t;t;0;x);x;0;2)");
@@ -5024,6 +5108,42 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
   }
   // V37: a name that is not a label never reaches the walker at all —
   // TAM refuses it, and nothing is drawn
+  /* V36b (AUDIT PP18RR3-2) — the softkey row must survive a VISUAL. The
+   * stack-window arm sets MANUAL_STACK + TI_SHOWNOTHING in CM_NORMAL, which
+   * are exactly _refreshNormalScreen's three early-return conjuncts, and that
+   * return skips the menu and status bar too. The TAM label menu is popped
+   * after fnPrettyVisual returns, so the pop's one repaint request arrived
+   * here and was dropped: the row kept showing the popped menu. DESIGN.md
+   * and the code's own comment both claim only the stack is suspended.
+   * No prior pin called refreshScreen after the typed path, which is the
+   * one step that makes the suppression observable. */
+  {
+    uint8_t savedCalcMode4 = calcMode;
+    bool_t  savedAlpha4 = getSystemFlag(FLAG_ALPHA);
+    calcMode = CM_NORMAL;
+    temporaryInformation = TI_NO_INFO;
+    lastErrorCode = ERROR_NONE;
+    aimBuffer[0] = 0;
+    lcd_fill_rect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, LCD_SET_VALUE);
+    screenHoldsDrawnPixels = false;
+
+    ppvTestKeyIn("VDBL");
+    lcd_fill_rect(0, SCREEN_HEIGHT - SOFTMENU_HEIGHT, SCREEN_WIDTH,
+                  SOFTMENU_HEIGHT, LCD_SET_VALUE);   // clear the row, then ask for a repaint
+    refreshScreen(900);   // a test-owned source id, as the key handler does with 117
+    if(ppvSumRows((int16_t)(SCREEN_HEIGHT - SOFTMENU_HEIGHT),
+                  (int16_t)(SCREEN_HEIGHT - 1)) == 0) {
+      ppTestFail("V36b the softkey row was never repainted after a typed VISUAL");
+    }
+
+    lastErrorCode = ERROR_NONE;
+    temporaryInformation = TI_NO_INFO;
+    screenHoldsDrawnPixels = false;
+    screenUpdatingMode &= ~SCRUPD_MANUAL_STACK;
+    calcMode = savedCalcMode4;
+    if(savedAlpha4) { setSystemFlag(FLAG_ALPHA); } else { clearSystemFlag(FLAG_ALPHA); }
+  }
+
   {
     uint8_t savedCalcMode3 = calcMode;
     bool_t  savedAlpha = getSystemFlag(FLAG_ALPHA);

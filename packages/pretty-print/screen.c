@@ -5867,6 +5867,14 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
         }
 
         if(calcMode == CM_NORMAL && screenUpdatingMode != SCRUPD_AUTO && temporaryInformation == TI_SHOWNOTHING) {
+          /* AUDIT PP18RR3-2 (pretty-print): this return is TOTAL, skipping
+           * the menu and status bar as well as the stack. A caller that did
+           * not set SCRUPD_MANUAL_MENU never asked to manage the menu, so it
+           * still gets one; callers that set the bit are unaffected. */
+          if((screenUpdatingMode & SCRUPD_MANUAL_MENU) == 0) {
+            showSoftmenuCurrentPart();
+            refreshStatusBar();
+          }
           goto RETURN_NORMAL;
         }
 

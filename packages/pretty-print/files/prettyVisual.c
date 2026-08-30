@@ -88,6 +88,7 @@ typedef struct {
   uint8_t ast[PPV_STACK_SLOTS];   ///< AST indices, PPV_NIL when empty
   uint8_t depth;
   bool_t  liftDisabled;   ///< ENTER latched: the next lifting read overwrites X
+  bool_t  saturated;      ///< the model has held a full stack, so T replicates on every drop
 } ppvStack_t;
 
 typedef struct {
@@ -188,19 +189,37 @@ static uint8_t ppvLeaf(ppvCtx_t *ctx, uint8_t kind, const char *text, uint16_t l
   return n;
 }
 
+/* AUDIT PP18RR1-3. The drop threshold is the LIVE stack depth, not the
+ * compile-time slot count: under SSIZE4 the hardware drops at four
+ * (getStackTop() == REGISTER_T) while this mirror kept eight, so a chain of
+ * five distinct literals drew operands the real stack had already dropped —
+ * 1+2+3+4+5 for a program that returns 16. The array stays eight wide; only
+ * the effective depth follows the flag. */
+static uint8_t ppvLiveStackSlots(void) {
+  int16_t n = (int16_t)(getStackTop() - REGISTER_X + 1);
+  if(n < 1) {
+    n = 1;
+  }
+  return (n > PPV_STACK_SLOTS) ? (uint8_t)PPV_STACK_SLOTS : (uint8_t)n;
+}
+
 static bool_t ppvPush(ppvCtx_t *ctx, ppvStack_t *stk, uint8_t node) {
   if(node == PPV_NIL) {
     ppvDecline(ctx, PPV_D_ARENA);
     return false;
   }
-  if(stk->depth == PPV_STACK_SLOTS) {
+  uint8_t slots = ppvLiveStackSlots();
+  if(stk->depth >= slots) {
     // a full stack drops its bottom, exactly as the hardware one does
-    for(uint8_t i = 0; i + 1 < PPV_STACK_SLOTS; i++) {
+    for(uint8_t i = 0; i + 1 < slots; i++) {
       stk->ast[i] = stk->ast[i + 1];
     }
-    stk->depth--;
+    stk->depth = (uint8_t)(slots - 1);
   }
   stk->ast[stk->depth++] = node;
+  if(stk->depth >= slots) {
+    stk->saturated = true;
+  }
   return true;
 }
 
@@ -420,6 +439,7 @@ static bool_t ppvBody(ppvCtx_t *ctx, uint16_t bodyIdx, const char *var,
   ppvStack_t sub;
   sub.depth        = 0;
   sub.liftDisabled = false;
+  sub.saturated    = false;
   /* ONE shared VAR node on every level, which is what this comment
    * always claimed and what the code did not do (AUDIT PP18-8): the
    * allocation sat inside the loop and spent eight of the 48 arena
@@ -815,7 +835,72 @@ static bool_t ppvMonadicName(uint16_t op, char *out) {
  * metadata to infer from — TICKS is the counterexample that would break
  * one, looking inert and pushing a value nobody can predict. */
 
+/* AUDIT PP18RR1-11. The lift latch used to be cleared by a single statement
+ * AFTER the switch — which seventeen arms skipped by returning, so the
+ * invariant held only because each of those arms happened to be lift-neutral
+ * or to own the latch itself. PP18-5 shipped a bug of exactly that shape and
+ * was fixed by hand-inserting clears into the three arms that had it.
+ *
+ * Upstream's shape is a dispatch epilogue no item can skip, so that is the
+ * shape used here: the arms live in ppvStepArm and may return freely, and
+ * ppvStep applies the epilogue afterwards. A new arm added tomorrow gets the
+ * clear whether it breaks or returns; the exceptions are a NAMED list rather
+ * than an emergent property of control flow.
+ *
+ * The exceptions: the declaration/display items, which upstream marks
+ * SLS_UNCHANGED and which must leave a pending lift alone, and ENTER, which
+ * is the one item that ARMS the latch. */
+static bool_t ppvLiftNeutral(uint16_t op) {
+  switch(op) {
+    case ITM_NULL: case ITM_LBL: case ITM_MVAR: case ITM_REM:
+    case ITM_PAUSE: case ITM_SNAP:
+    case ITM_ENTER:
+      return true;
+    default:
+      return false;
+  }
+}
+
+static void ppvStepArm(ppvCtx_t *ctx, ppvStack_t *stk, uint16_t op, const uint8_t *pa);
+
+/* AUDIT PP18RR1-3, second half. The hardware stack is ALWAYS exactly its
+ * configured depth: an operation that consumes operands pulls the rest down
+ * and T duplicates itself into the vacated slot. The mirror modelled a
+ * variable-depth stack that simply got shorter, so a chain long enough to
+ * saturate it ran out of operands and declined where the machine kept
+ * computing with replicated copies of T — under SSIZE4 that is five
+ * literals, which is an ordinary program.
+ *
+ * Replication only applies once the model has actually held a full stack.
+ * Before that the deeper registers hold whatever preceded the program, which
+ * a static walk cannot know, and the underflow decline is the honest answer.
+ *
+ * This lives in the epilogue for the same reason the lift clear does: the
+ * arms that drop are many and the rule is one. */
+static void ppvRefillFromT(ppvStack_t *stk) {
+  if(!stk->saturated) {
+    return;
+  }
+  uint8_t slots = ppvLiveStackSlots();
+  while(stk->depth < slots) {
+    for(uint8_t i = stk->depth; i > 0; i--) {
+      stk->ast[i] = stk->ast[i - 1];
+    }
+    stk->depth++;   // ast[0] is unchanged, so T now appears twice
+  }
+}
+
 static void ppvStep(ppvCtx_t *ctx, ppvStack_t *stk, uint16_t op, const uint8_t *pa) {
+  ppvStepArm(ctx, stk, op, pa);
+  if(!ppvLiftNeutral(op)) {
+    stk->liftDisabled = false;
+  }
+  if(!ctx->failed) {
+    ppvRefillFromT(stk);
+  }
+}
+
+static void ppvStepArm(ppvCtx_t *ctx, ppvStack_t *stk, uint16_t op, const uint8_t *pa) {
   switch(op) {
     // declarations, comments, display and timing: no stack, no picture,
     // and no effect on the pending lift either
@@ -831,7 +916,14 @@ static void ppvStep(ppvCtx_t *ctx, ppvStack_t *stk, uint16_t op, const uint8_t *
       // the dup shares the operand node; the tree is a DAG here and
       // both back ends only ever read it
       if(ppvPush(ctx, stk, stk->ast[stk->depth - 1])) {
-        stk->liftDisabled = true;   // the next lifting read overwrites X
+        /* AUDIT PP18RR1-2. Classic ENTER clears FLAG_ASLIFT, so the next
+         * lifting read OVERWRITES X. Under eRPN a running program's ENTER
+         * dups AND re-sets the latch (keyboard.c's FLAG_ERPN && PGM_RUNNING
+         * arm), so the next read LIFTS instead — and the walker, which
+         * modelled classic unconditionally, drew 1+2x3 for a program that
+         * returns 8. The capture engine already models this branch; the
+         * mirror now reads the same flag. */
+        stk->liftDisabled = !getSystemFlag(FLAG_ERPN);
       }
       return;
     }
@@ -949,14 +1041,15 @@ static void ppvStep(ppvCtx_t *ctx, ppvStack_t *stk, uint16_t op, const uint8_t *
 
     case ITM_XEQ: {
       uint16_t idx;
-      /* AUDIT PP18-5: these three arms return before the epilogue that
-       * clears the latch, so an ENTER before them stayed armed and the
-       * next lifting read OVERWROTE the dup instead of pushing. At top
-       * level that is a false D10 decline for a program that never
-       * underflows; inside a construct body, where the seeded frame
-       * supplies a phantom operand, it is a silent wrong drawing —
-       * a x (a+b) drew as x x (a+b). Upstream clears stack-lift in the
-       * dispatch epilogue for every SLS_ENABLED item, and these are. */
+      /* AUDIT PP18-5, and still load-bearing after PP18RR1-11 moved the
+       * epilogue into ppvStep. These clears are about ORDER, not about
+       * reaching the epilogue: they run BEFORE the nested ppvWalk, so a
+       * callee never inherits an ENTER latch armed in its caller. The
+       * epilogue cannot do that job — it runs after the arm returns.
+       * The original defect: an ENTER before one of these stayed armed and
+       * the next lifting read OVERWROTE the dup instead of pushing — a
+       * false D10 decline at top level, and inside a seeded construct body
+       * a silent wrong drawing, a x (a+b) drawn as x x (a+b). */
       stk->liftDisabled = false;
       if(ppvLabelIndex(ctx, pa, &idx)) {
         ppvWalk(ctx, idx, stk);   // a subroutine shares its caller's stack
@@ -989,7 +1082,6 @@ static void ppvStep(ppvCtx_t *ctx, ppvStack_t *stk, uint16_t op, const uint8_t *
       return;
     }
   }
-  stk->liftDisabled = false;   // every op above finishes with lift enabled
 }
 
 static void ppvWalk(ppvCtx_t *ctx, uint16_t labelIdx, ppvStack_t *stk) {
@@ -1184,6 +1276,7 @@ static uint8_t ppvRun(ppvCtx_t *ctx, uint16_t labelIdx) {
 
   ppvStack_t stk;
   stk.depth        = 0;
+  stk.saturated    = false;
   stk.liftDisabled = false;
 
   ppvWalk(ctx, labelIdx, &stk);
