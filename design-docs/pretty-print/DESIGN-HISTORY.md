@@ -1432,3 +1432,27 @@ stay green, and FV19 pins `CM_PRETTY_BROWSER` inside 19..23 — renumbering
 it out of that range would silently reopen the hole with nothing else
 going red. DESIGN.md's calcMode row still said "20 reserved (not wired)",
 stale since PP10; corrected in the same pass.
+
+## 2026-08-29 — `ppfCombine1`/`ppfCombine2` renamed to `ppfBuildOp1`/`ppfBuildOp2`
+
+Mechanical rename, no behaviour change; the gate is the proof. The arity
+digit was never the problem — it is the package's own convention, shared
+by `ppvOp1`/`ppvOp2`, `PPA_OP1`/`PPA_OP2` and `PPN_OP1`/`PPN_OP2`, and a
+reader who has met any of those pairs reads it correctly on sight. The
+verb was. These functions do not merely combine two nodes: they choose
+the construct kind for the operator (`PP_FRAC` for divide, `PP_RAD` for
+the square root, `PP_SUP` for the power), settle bracketing against the
+operands' precedences, and report the result's precedence back through
+`outPrec`. "Combine" said none of that, and it was the only verb of its
+kind in a file whose every other name is `ppfBuild*`. So the name broke
+its own file's convention while the digit followed the package's.
+
+`ppfBuildOp1`/`ppfBuildOp2` satisfy both, and line up with the
+`ppvOp1`/`ppvOp2` in the walker that calls them — which matters because
+these two functions plus `ppfWrapIf` ARE the public seam between VISUAL
+and the drawing engine, and are the first thing an upstream reviewer
+meets.
+
+Entries above this one keep the old name deliberately: they record what
+was true when they were written, and so do the `AUDIT_*` reports. Anyone
+grepping `ppfCombine` in the trail should read it as `ppfBuildOp`.

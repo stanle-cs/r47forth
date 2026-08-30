@@ -68,7 +68,7 @@ static bool_t ppfFormatStaged(char *dest, size_t destSize) {
 
 /* ==== infix construction ================================================
  * Precedence: ADD/SUB 1, MULT 2; FRAC/SUP/RAD/atoms 3 (visually scoped).
- * ppfCombine* build the layout for one operator from already-built child
+ * ppfBuildOp* build the layout for one operator from already-built child
  * layouts + their precedences — shared by the tree walker and the token
  * decoder so both paths typeset identically. */
 
@@ -92,7 +92,7 @@ uint8_t ppfRun(const char *s, uint8_t fontId) {
   return ppNewRun(s, (uint16_t)strlen(s), fontId);
 }
 
-uint8_t ppfCombine2(uint16_t item, uint8_t a, int aPrec, uint8_t b, int bPrec,
+uint8_t ppfBuildOp2(uint16_t item, uint8_t a, int aPrec, uint8_t b, int bPrec,
                            uint8_t ctxFont, uint8_t childFont, int *outPrec) {
   *outPrec = PPF_PREC_ATOM;
   switch(item) {
@@ -192,7 +192,7 @@ uint8_t ppfCombine2(uint16_t item, uint8_t a, int aPrec, uint8_t b, int bPrec,
   }
 }
 
-uint8_t ppfCombine1(uint16_t item, uint8_t a, int aPrec,
+uint8_t ppfBuildOp1(uint16_t item, uint8_t a, int aPrec,
                            uint8_t ctxFont, uint8_t childFont, int *outPrec) {
   *outPrec = PPF_PREC_ATOM;
   switch(item) {
@@ -425,7 +425,7 @@ static uint8_t ppfFromCaptureNode(uint8_t cap, uint8_t ctxFont, uint8_t childFon
       if(a == PP_NONE) {
         return PP_NONE;
       }
-      return ppfCombine1(nd->item, a, p, ctxFont, childFont, outPrec);
+      return ppfBuildOp1(nd->item, a, p, ctxFont, childFont, outPrec);
     }
     case PPN_OP2: {
       int pa, pb;
@@ -434,7 +434,7 @@ static uint8_t ppfFromCaptureNode(uint8_t cap, uint8_t ctxFont, uint8_t childFon
       if(a == PP_NONE || b == PP_NONE) {
         return PP_NONE;
       }
-      return ppfCombine2(nd->item, a, pa, b, pb, ctxFont, childFont, outPrec);
+      return ppfBuildOp2(nd->item, a, pa, b, pb, ctxFont, childFont, outPrec);
     }
     case PPN_BIGOP: {
       int pf, pt;
@@ -550,7 +550,7 @@ bool_t ppfBuildEntry(const uint8_t *entry, uint8_t ctxFont, uint8_t childFont,
           return false;
         }
         int p;
-        uint8_t n = ppfCombine1(item, stackNode[sp - 1], stackPrec[sp - 1], ctxFont, childFont, &p);
+        uint8_t n = ppfBuildOp1(item, stackNode[sp - 1], stackPrec[sp - 1], ctxFont, childFont, &p);
         if(n == PP_NONE) {
           return false;
         }
@@ -566,7 +566,7 @@ bool_t ppfBuildEntry(const uint8_t *entry, uint8_t ctxFont, uint8_t childFont,
           return false;
         }
         int p;
-        uint8_t n = ppfCombine2(item, stackNode[sp - 2], stackPrec[sp - 2],
+        uint8_t n = ppfBuildOp2(item, stackNode[sp - 2], stackPrec[sp - 2],
                                 stackNode[sp - 1], stackPrec[sp - 1], ctxFont, childFont, &p);
         if(n == PP_NONE) {
           return false;

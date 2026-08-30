@@ -132,9 +132,9 @@ uint8_t ppqFrameDerivative(uint8_t eq, bool_t second);   ///< PP13: d/dx (d²/dx
 
 uint8_t ppfRun    (const char *s, uint8_t fontId);
 uint8_t ppfWrapIf (uint8_t node, int prec, int minPrec, uint8_t fontId);   ///< parens iff prec < minPrec
-uint8_t ppfCombine1(uint16_t item, uint8_t a, int aPrec,
+uint8_t ppfBuildOp1(uint16_t item, uint8_t a, int aPrec,
                     uint8_t ctxFont, uint8_t childFont, int *outPrec);
-uint8_t ppfCombine2(uint16_t item, uint8_t a, int aPrec, uint8_t b, int bPrec,
+uint8_t ppfBuildOp2(uint16_t item, uint8_t a, int aPrec, uint8_t b, int bPrec,
                     uint8_t ctxFont, uint8_t childFont, int *outPrec);
 
 // prettyEquation.c — node assembly, shared with the walker (PP18). Both

@@ -555,13 +555,13 @@ PP17 shipped it as a transpiler to equation-language TEXT which
 `ppqShowRender` then re-parsed. **PP18 removed that round trip**, for two
 reasons. It settled precedence twice — the walker inserted brackets into
 a string and the parser read them back out to rediscover the same
-structure — while `ppfCombine1`/`ppfCombine2` had been doing exactly that
+structure — while `ppfBuildOp1`/`ppfBuildOp2` had been doing exactly that
 job for the capture engine all along. And it made the text grammar a
 dependency of drawing, which is the opposite of what an upstream reader
 asked for.
 
 The walker now builds a small expression tree and lays it out through the
-shared builders: `ppfCombine1`/`ppfCombine2` for operators,
+shared builders: `ppfBuildOp1`/`ppfBuildOp2` for operators,
 `ppqBuildBigop` for constructs, `ppfWrapIf` for scoping. **Nothing in the
 walker decides where a bracket goes.** The drawing came out
 byte-identical to PP17's, which is how the change was verified.
@@ -569,7 +569,7 @@ byte-identical to PP17's, which is how the change was verified.
 Two places where the node form is not merely equivalent to the text form:
 a fraction bar SCOPES, so `a/(b+c)` draws with no parentheses at all
 (V49); and a stacked power DOES need its base bracketed, which the walker
-does locally because `ppfCombine` deliberately has no POW level — a
+does locally because `ppfBuildOp` deliberately has no POW level — a
 `PP_SUP` normally scopes itself, and adding a level would change the
 contract underneath the capture engine (V51).
 

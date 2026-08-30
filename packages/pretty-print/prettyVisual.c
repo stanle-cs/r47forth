@@ -11,7 +11,7 @@
  * engine (live dispatches) and the equation parser (EQN text). This is
  * the third: a symbolic RPN interpreter over stored program steps that
  * builds a small expression tree, which is then laid out through the
- * SAME node builders the capture engine uses (ppfCombine1/ppfCombine2)
+ * SAME node builders the capture engine uses (ppfBuildOp1/ppfBuildOp2)
  * and the same construct assembly the equation parser uses
  * (ppqBuildBigop). Nothing here decides where a bracket goes.
  *
@@ -134,7 +134,7 @@ static void ppvDecline(ppvCtx_t *ctx, uint8_t reason) {
  * The walk builds a small expression tree; ctx->pool holds only LEAF text
  * (a literal as the program spells it, a variable's name). Structure is
  * nodes, not brackets in a string — which is the point of PP18: whether
- * something needs parentheses is decided ONCE, by ppfCombine1/ppfCombine2
+ * something needs parentheses is decided ONCE, by ppfBuildOp1/ppfBuildOp2
  * when the tree is turned into layout, and not a second time by a parser
  * reading brackets back out of text.
  *
@@ -1125,7 +1125,7 @@ static void ppvWalk(ppvCtx_t *ctx, uint16_t labelIdx, ppvStack_t *stk) {
 
 /* ==== the layout back end ==============================================
  * AST -> 2D nodes, and the reason PP18 exists. Bracketing is decided
- * here ONCE, by the same ppfCombine1/ppfCombine2 the capture engine has
+ * here ONCE, by the same ppfBuildOp1/ppfBuildOp2 the capture engine has
  * always used; the walker no longer has an opinion about parentheses.
  *
  * Shaped after ppfFromCaptureNode: default the out-precedence to ATOM,
@@ -1160,10 +1160,10 @@ static uint8_t ppvAstToNodes(ppvCtx_t *ctx, uint8_t n,
         ctx->layoutFull = true;
         return PP_NONE;
       }
-      // ppfCombine has no POW level — a PP_SUP scopes itself, so it
+      // ppfBuildOp has no POW level — a PP_SUP scopes itself, so it
       // reports ATOM and a stacked power would come out unbracketed and
       // read as a^(b^c). Bracket the base ourselves; the alternative,
-      // adding a level, would change ppfCombine's contract under the
+      // adding a level, would change ppfBuildOp's contract under the
       // capture engine.
       if((a->item == ITM_SQUARE || a->item == ITM_CUBE)
           && ctx->ast[a->child[0]].kind == PPA_OP1
@@ -1171,7 +1171,7 @@ static uint8_t ppvAstToNodes(ppvCtx_t *ctx, uint8_t n,
               || ctx->ast[a->child[0]].item == ITM_CUBE)) {
         p = PPF_PREC_MUL;
       }
-      return ppfCombine1(a->item, x, p, ctxFont, childFont, outPrec);
+      return ppfBuildOp1(a->item, x, p, ctxFont, childFont, outPrec);
     }
 
     case PPA_OP2: {
@@ -1186,7 +1186,7 @@ static uint8_t ppvAstToNodes(ppvCtx_t *ctx, uint8_t n,
         ctx->layoutFull = true;
         return PP_NONE;
       }
-      return ppfCombine2(a->item, x, pa, y, pb, ctxFont, childFont, outPrec);
+      return ppfBuildOp2(a->item, x, pa, y, pb, ctxFont, childFont, outPrec);
     }
 
     case PPA_CONSTRUCT: {
@@ -1237,7 +1237,7 @@ static uint8_t ppvAstToNodes(ppvCtx_t *ctx, uint8_t n,
        * the stroke and extends as far as the body goes, so a factor or
        * an exponent placed beside it binds INTO the body: `SUM n x 2`
        * reads as SUM(n x 2), and (1+2+3)^2 drew exactly the picture
-       * 1^2+2^2+3^2 deserves. Reporting ADD makes ppfCombine bracket it
+       * 1^2+2^2+3^2 deserves. Reporting ADD makes ppfBuildOp bracket it
        * under x, / and ^ — and leaves it bare as the left operand of a
        * +, which is the one place convention already scopes it.
        *

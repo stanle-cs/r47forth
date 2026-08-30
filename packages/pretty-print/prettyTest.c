@@ -2648,7 +2648,7 @@ void prettyTestFormula(uint16_t unusedButMandatoryParameter) {
         ppTestFailInt("FV18 implausible node count", PP_POOL_NODES, used);
       }
       else {
-        // one node short: the LAST allocation in ppfCombine2 is ppfParen
+        // one node short: the LAST allocation in ppfBuildOp2 is ppfParen
         ppReset();
         for(uint8_t i = 0; i < (uint8_t)(PP_POOL_NODES - (used - 1)); i++) {
           if(ppNewBox(PP_HBOX, PP_FONT_STANDARD) == PP_NONE) {
