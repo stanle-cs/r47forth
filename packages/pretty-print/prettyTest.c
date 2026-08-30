@@ -954,9 +954,15 @@ static bool_t ppTreeHasRun(uint8_t n, const char *text) {
  * fixture that took its name. Identical bytes under the same name are a
  * re-run of the same fixture, not a collision. */
 static void ppcTestNoteLabel(const uint8_t *pgm, size_t n) {
-  static char     seenName[48][8];
-  static uint32_t seenSum[48];
-  static uint8_t  seenCount = 0;
+  /* Sized against the suite (83 distinct labels today) with headroom, and
+   * the overflow arm FAILS: a registry that silently stops registering
+   * reports the same green as one that is working. The first version held
+   * 48 and dropped 37 names, including the VXA/VXB pair it was written
+   * for. */
+  #define PPC_LABEL_SEEN_MAX 160
+  static char     seenName[PPC_LABEL_SEEN_MAX][8];
+  static uint32_t seenSum[PPC_LABEL_SEEN_MAX];
+  static uint16_t seenCount = 0;
 
   if(n < 4 || pgm[0] != ITM_LBL || pgm[1] != STRING_LABEL_VARIABLE) {
     return;
@@ -975,7 +981,7 @@ static void ppcTestNoteLabel(const uint8_t *pgm, size_t n) {
   for(size_t i = 0; i < n; i++) {
     sum = sum * 31u + pgm[i];
   }
-  for(uint8_t i = 0; i < seenCount; i++) {
+  for(uint16_t i = 0; i < seenCount; i++) {
     if(strcmp(seenName[i], name) == 0) {
       if(seenSum[i] != sum) {
         char msg[64];
@@ -985,10 +991,15 @@ static void ppcTestNoteLabel(const uint8_t *pgm, size_t n) {
       return;
     }
   }
-  if(seenCount < 48) {
+  if(seenCount < PPC_LABEL_SEEN_MAX) {
     strcpy(seenName[seenCount], name);
     seenSum[seenCount] = sum;
     seenCount++;
+  }
+  else {
+    char msg[64];
+    snprintf(msg, sizeof(msg), "label table full at %s: collisions past here are unchecked", name);
+    ppTestFail(msg);
   }
 }
 
@@ -1460,13 +1471,55 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
     }
   }
 
+  /* T26 (PP18RR6-1) — a short integer through ppfBuildEntry. Nothing in
+   * this file drove a dtShortInteger leaf at all, so the arm that formats
+   * one was covered by no pin: it handed a 200-byte buffer to a builder
+   * that lays its digits out from ERROR_MESSAGE_LENGTH/2 upward, writing
+   * 56 bytes past the end, three times per history row.
+   *
+   * This pin drives that arm — nothing did, at all — and it does NOT
+   * detect the overflow: measured, the pre-fix call stays green here,
+   * because the simulator build sets b_sanitize=none (the ASAN_OPTIONS on
+   * the test command line is meson boilerplate). The guard against
+   * regression is the _Static_assert beside the call, not this test. The
+   * operand's spelling depends on the base, so the assertion is that the
+   * entry decodes to text at all. */
+  {
+    ppcTestReset();
+    ppcTestType("10");
+    ppcTestOpParam(ITM_toINT, 16);   // integer mode, base 16
+    if(getRegisterDataType(REGISTER_X) != dtShortInteger) {
+      ppTestFail("T26 the value is not a short integer, so the row tests nothing");
+    }
+    else {
+      ppcTestOp(ITM_ENTER);
+      ppcTestType("5");
+      ppcTestOp(ITM_ADD);
+      ppcTestOp(ITM_CLSTK);          // displacing the formula files it
+      ppcTestExpectHist("T26 the integer formula files", 1);
+      uint8_t filed = PP_NONE;
+      ppReset();
+      if(!ppfBuildEntry(ppcHistoryEntry(0, NULL, NULL), PP_FONT_STANDARD,
+                        PP_FONT_STANDARD, true, &filed)) {
+        ppTestFail("T26 the filed integer entry does not decode");
+      }
+      else if(ppfTestFirstRunText(filed) == NULL
+              || ppfTestFirstRunText(filed)[0] == 0) {
+        ppTestFail("T26 the filed integer formula has no operand text");
+      }
+    }
+    ppcTestReset();
+  }
+
   /* T25 (PP18RR5-1, PP18RR5-3) — the CLASS, over every producer of a PP_SUP.
    * T24c pinned one operator on one surface, and the rule was stated for
    * all of them: ITM_YX built the same node kind twelve lines away and
    * still bracketed by precedence, so 2 ENTER 3 yx 2 yx drew 2 to the 32.
    * Rows are (steps, expected signature); ppfTestPowersScoped then checks
-   * the property over the whole tree, so a new producer that skips
-   * ppfPowBase reddens here without anyone writing its row. */
+   * the property over each row's WHOLE tree, which catches a nested
+   * producer inside a shape a row already types. It does NOT reach a new
+   * producer no row drives — a fourth PP_SUP arm still needs its own
+   * row here. */
   {
     static const struct { const char *what; uint16_t op1; const char *lit; uint16_t op2; const char *sig; } powRows[] = {
       { "T25 x2 over x2",  ITM_SQUARE, NULL, ITM_SQUARE, "S(P(S(3|2))|2)" },
@@ -1533,6 +1586,31 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
      * 502. A TYPED literal keeps its typed text and never has the tail,
      * which is why this row recalls instead of typing. The SUB-10 glyph is
      * the reach check: without it the row would pass while testing nothing. */
+    /* PP18RR6-2: the class is not "already a power", it is "the base run
+     * is not a visual atom". A typed negative reads as a term, and the
+     * capture leaf used to report ATOM for it while the walker reported
+     * ADD for the same numeral — so 5 +/- x² drew -5² for a value of 25
+     * on the capture surfaces and (-5)² in VISUAL. Both leaves now ask
+     * ppfTextIsAtom, so they cannot disagree. */
+    ppcTestReset();
+    ppcTestType("5");
+    addItemToNimBuffer(ITM_CHS);
+    ppcTestOp(ITM_SQUARE);
+    uint8_t neg = PP_NONE;
+    ppReset();
+    if(!ppfBuildCurrent(PP_FONT_STANDARD, PP_FONT_STANDARD, &neg)) {
+      ppTestFail("T25 the negated square does not build");
+    }
+    else {
+      const char *nleaf = ppfTestFirstRunText(neg);
+      if(nleaf == NULL || nleaf[0] != '-') {
+        ppTestFail("T25 the literal is not negative, so the row tests nothing");
+      }
+      else {
+        ppfTestExpect("T25 a signed numeral brackets as a term", neg, "S(P(-5)|2)");
+      }
+    }
+
     /* The TYPED form of the same value is the other half of the class: it
      * keeps the owner's text, so its exponent is ASCII (1.e+50) and the
      * glyph test is blind to it. Same picture defect, different alphabet. */
@@ -5758,6 +5836,36 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
       ppTestFail("V19 a stale solver session changed the drawing");
     }
   }
+  /* V-CHROME (PP18RR6-6) — the Z/T arm declares which chrome it manages
+   * and the menu-repaint guard reads that declaration, so the declaration
+   * is a postcondition worth asserting: deleting the clear left the whole
+   * gate green. Both bits are SET first, or the assertion passes on an
+   * ambient that was already clear. The reach check is mandatory here —
+   * only six calls in this suite get as far as a paint arm, and V27's is
+   * not one of them. */
+  {
+    calcRegister_t id = findNamedLabel("VPRC", GLOBAL_LABELS);
+    calcMode = CM_NORMAL;
+    temporaryInformation = TI_NO_INFO;
+    lastErrorCode = 0;
+    currentSolverStatus = 0;
+    screenHoldsDrawnPixels = false;
+    screenUpdatingMode |= SCRUPD_MANUAL_MENU | SCRUPD_MANUAL_SHIFT_STATUS;
+    fnPrettyVisual((uint16_t)id);
+    if(lastErrorCode != ERROR_NONE || !screenHoldsDrawnPixels
+        || temporaryInformation != TI_SHOWNOTHING) {
+      ppTestFailInt("V-CHROME the Z/T arm was never reached, so the row tests nothing",
+                    0, (int)lastErrorCode);
+    }
+    else if(!(screenUpdatingMode & SCRUPD_MANUAL_STACK)) {
+      ppTestFail("V-CHROME the Z/T arm did not claim the stack");
+    }
+    else if(screenUpdatingMode & (SCRUPD_MANUAL_MENU | SCRUPD_MANUAL_SHIFT_STATUS)) {
+      ppTestFail("V-CHROME the Z/T arm kept chrome it does not manage, so the menu is not repainted");
+    }
+    screenUpdatingMode = SCRUPD_AUTO;
+  }
+
   // V20: a decline paints NOTHING — the whole text is composed before a
   // pixel is touched
   {
@@ -5775,9 +5883,16 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
     lastErrorCode = 0;
   }
 
-  // V27: WHERE the drawing goes was part of the request. The formula
-  // lands in the Z/T rows and the X line — which holds the answer the
-  // program just computed — is left exactly as it was.
+  /* V27: WHERE the drawing goes was part of the request. The formula
+   * lands in the Z/T rows and the X line — which holds the answer the
+   * program just computed — is left exactly as it was.
+   *
+   * MEASURED 2026-08-30 and NOT YET EXPLAINED: this call returns
+   * lastErrorCode 24 with screenHoldsDrawnPixels false, i.e. it never
+   * reaches a paint arm, and the ink sums below are satisfied anyway.
+   * The same holds at 7ddff2c5f, so it predates the round-5 and round-6
+   * waves. Until that is diagnosed this fixture proves less than it
+   * reads as — do not cite it as coverage for placement. */
   {
     calcRegister_t id = findNamedLabel("VDBL", GLOBAL_LABELS);
     calcMode = CM_NORMAL;

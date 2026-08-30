@@ -53,7 +53,22 @@ static bool_t ppfFormatStaged(char *dest, size_t destSize) {
                                (uint16_t)getRegisterTag(TEMP_REGISTER_1), false);
       break;
     case dtShortInteger:
-      shortIntegerToDisplayString(TEMP_REGISTER_1, buf, false, 0);
+      /* This builder does NOT write from the front: it lays digits out
+       * from displayString[ERROR_MESSAGE_LENGTH / 2] upward as scratch and
+       * only then compacts them, so its buffer must be at least
+       * ERROR_MESSAGE_LENGTH bytes. buf is 200, and the first write would
+       * land 56 bytes past its end. tmpString is what every upstream
+       * caller passes; nothing runs between the call and the copy below,
+       * so holding it across these two lines is safe. */
+      _Static_assert(TMP_STR_LENGTH >= ERROR_MESSAGE_LENGTH,
+                     "shortIntegerToDisplayString writes from "
+                     "ERROR_MESSAGE_LENGTH/2 upward, so its buffer must be "
+                     "at least ERROR_MESSAGE_LENGTH bytes");
+      shortIntegerToDisplayString(TEMP_REGISTER_1, tmpString, false, 0);
+      if(strlen(tmpString) >= sizeof(buf)) {
+        return false;
+      }
+      strcpy(buf, tmpString);
       break;
     default:
       return false;
@@ -92,72 +107,68 @@ uint8_t ppfRun(const char *s, uint8_t fontId) {
   return ppNewRun(s, (uint16_t)strlen(s), fontId);
 }
 
-/* Bracket the base of a power when the base already carries an exponent.
- * PP_SUP draws both exponents at the same height, so 3 squared squared
- * would draw as 3-two-two and read as 3^22. ppfWrapIf cannot decide it:
- * every builder reports ATOM and ATOM < ATOM is false. Two shapes count
- * as "already a power" — a PP_SUP node, and a run whose text ends in
- * superscript glyphs, which is how a value in scientific form spells its
- * exponent. Every producer of PP_SUP calls this, so no caller carries
- * the rule and no POW precedence level is needed. */
+/* Is this run text a VISUAL ATOM — something a raised exponent or a
+ * neighbouring operator can sit against without brackets? Only digits,
+ * the radix mark and the digit-group spaces are. Anything else — a
+ * leading minus, the multiplication sign and subscript 10 of a value in
+ * scientific form, an angular-unit suffix, a complex joiner, a typed
+ * ASCII exponent — reads as a term, so the leaf reports PPF_PREC_ADD and
+ * every existing bracket rule handles it. Naming the class this way is
+ * what stops the rule chasing one alphabet at a time. */
+bool_t ppfTextIsAtom(const char *s, uint16_t len) {
+  if(s == NULL) {
+    return true;
+  }
+  for(uint16_t i = 0; i < len && s[i] != 0; ) {
+    uint8_t c = (uint8_t)s[i];
+    if(c < 0x80) {
+      if(!((c >= '0' && c <= '9') || c == '.' || c == ',' || c == ' ')) {
+        return false;
+      }
+      i++;
+    }
+    else {
+      if(i + 1 >= len || s[i + 1] == 0) {
+        return false;   // a truncated glyph is not an atom
+      }
+      uint16_t code = (uint16_t)(((uint16_t)c << 8) | (uint8_t)s[i + 1]);
+      if(!(code >= 0xa000 && code <= 0xa00f)) {   // digit-group spaces
+        return false;
+      }
+      i = (uint16_t)(i + 2);
+    }
+  }
+  return true;
+}
+
+/* The precedence of a built run, for producers that do not know what
+ * they formatted. Only a run that SPELLS A NUMBER is judged: a name is an
+ * atom whatever its glyphs, and it is a name unless it opens with a digit,
+ * a radix mark or a sign. */
+int ppfRunPrec(uint8_t n) {
+  const ppNode_t *nd = (n != PP_NONE) ? ppNodeAt(n) : NULL;
+  if(nd == NULL || nd->kind != PP_RUN) {
+    return PPF_PREC_ATOM;
+  }
+  const char *t = ppTextAt(nd->textOff);
+  if(t == NULL || !((t[0] >= '0' && t[0] <= '9')
+                    || t[0] == '.' || t[0] == ',' || t[0] == '-')) {
+    return PPF_PREC_ATOM;
+  }
+  return ppfTextIsAtom(t, (uint16_t)strlen(t)) ? PPF_PREC_ATOM : PPF_PREC_ADD;
+}
+
+/* A power's base needs brackets when the base is itself a PP_SUP: that is
+ * structural, and ppfWrapIf cannot see it because every builder reports
+ * ATOM and ATOM < ATOM is false. The TEXTUAL half of the class — a base
+ * whose glyphs already read as a term — is not decided here; the leaf
+ * that formatted the text reports PPF_PREC_ADD and ppfWrapIf brackets it.
+ * Every producer of a PP_SUP calls this. */
 uint8_t ppfPowBase(uint8_t a, int aPrec, uint8_t fontId) {
   const ppNode_t *nd = (a != PP_NONE) ? ppNodeAt(a) : NULL;
-  bool_t isPower = false;
-  if(nd != NULL && nd->kind == PP_SUP) {
-    isPower = true;
-  }
-  else if(nd != NULL && nd->kind == PP_RUN) {
-    /* The last glyph that carries ink: the display formatter ends a
-     * value with a padding space (0xa000..0xa00f), so testing the very
-     * last glyph would never see the exponent underneath it. */
-    const char *s = ppTextAt(nd->textOff);
-    uint16_t last = 0;
-    for(uint16_t i = 0; s != NULL && s[i] != 0; ) {
-      uint8_t c = (uint8_t)s[i];
-      uint16_t code;
-      if(c < 0x80) {
-        code = c;
-        i++;
-      }
-      else if(s[i + 1] == 0) {
-        break;   // truncated glyph: not a tail we can read
-      }
-      else {
-        code = (uint16_t)(((uint16_t)c << 8) | (uint8_t)s[i + 1]);
-        i = (uint16_t)(i + 2);
-      }
-      if(code != ' ' && !(code >= 0xa000 && code <= 0xa00f)) {
-        last = code;
-      }
-    }
-    // 0xa160..0xa16b: the superscript digits plus the signs
-    // exponentToDisplayString emits after the multiplication sign
-    isPower = (last >= 0xa160 && last <= 0xa16b);
-
-    /* A TYPED literal keeps the text the owner typed, so its exponent is
-     * ASCII and the glyph test cannot see it: 1 EEX 50 squared draws
-     * 1.e+50 with a raised 2 after it. Match a trailing [eE][+-]?digits,
-     * past the same padding. */
-    if(!isPower && s != NULL) {
-      uint16_t n = (uint16_t)strlen(s);
-      while(n >= 2 && (uint8_t)s[n - 2] == 0xa0 && (uint8_t)s[n - 1] <= 0x0f) {
-        n = (uint16_t)(n - 2);
-      }
-      while(n > 0 && s[n - 1] == ' ') {
-        n--;
-      }
-      uint16_t d = n;
-      while(d > 0 && s[d - 1] >= '0' && s[d - 1] <= '9') {
-        d--;
-      }
-      if(d < n && d > 0 && (s[d - 1] == '+' || s[d - 1] == '-')) {
-        d--;
-      }
-      isPower = (d < n && d > 1 && (s[d - 1] == 'e' || s[d - 1] == 'E'));
-    }
-  }
-  return isPower ? ppfParen(a, fontId)
-                 : ppfWrapIf(a, aPrec, PPF_PREC_ATOM, fontId);
+  return (nd != NULL && nd->kind == PP_SUP)
+           ? ppfParen(a, fontId)
+           : ppfWrapIf(a, aPrec, PPF_PREC_ATOM, fontId);
 }
 
 uint8_t ppfBuildOp2(uint16_t item, uint8_t a, int aPrec, uint8_t b, int bPrec,
@@ -467,6 +478,8 @@ static uint8_t ppfFromCaptureNode(uint8_t cap, uint8_t ctxFont, uint8_t childFon
         xcopy(text + l, c->payload, cl);
         text[l + cl] = 0;
       }
+      *outPrec = ppfTextIsAtom(text, (uint16_t)strlen(text))
+                   ? PPF_PREC_ATOM : PPF_PREC_ADD;
       return ppfRun(text, ctxFont);
     }
     case PPN_VAL: {
@@ -491,6 +504,8 @@ static uint8_t ppfFromCaptureNode(uint8_t cap, uint8_t ctxFont, uint8_t childFon
           || !ppfFormatStaged(ppfValBuf, sizeof(ppfValBuf))) {
         return PP_NONE;
       }
+      *outPrec = ppfTextIsAtom(ppfValBuf, (uint16_t)strlen(ppfValBuf))
+                   ? PPF_PREC_ATOM : PPF_PREC_ADD;
       return ppfRun(ppfValBuf, ctxFont);
     }
     case PPN_CONST:

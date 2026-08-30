@@ -120,14 +120,18 @@ uint8_t ppqFrameDerivative(uint8_t eq, bool_t second);   ///< PP13: d/dx (d²/dx
  * level: PP_SUP scopes itself, so only ADD and MUL need brackets. The one
  * shape that level would have covered — a power whose base is itself a
  * power — is handled by ppfPowBase, which every producer of a PP_SUP
- * calls: the two arms here and ppqFactor's '^' arm in prettyEquation.c. */
+ * calls: the two arms here and ppqFactor's '^' arm in prettyEquation.c.
+ * A base whose TEXT reads as a term is a different half of that class and
+ * is decided at the leaf, which reports PPF_PREC_ADD for it. */
 #define PPF_PREC_ADD  1
 #define PPF_PREC_MUL  2
 #define PPF_PREC_ATOM 3
 
 uint8_t ppfRun    (const char *s, uint8_t fontId);
 uint8_t ppfWrapIf (uint8_t node, int prec, int minPrec, uint8_t fontId);   ///< parens iff prec < minPrec
-uint8_t ppfPowBase(uint8_t a, int aPrec, uint8_t fontId);   ///< a power's base: parens iff it already carries an exponent
+uint8_t ppfPowBase(uint8_t a, int aPrec, uint8_t fontId);   ///< a power's base: parens iff the base node is itself a PP_SUP
+bool_t  ppfTextIsAtom(const char *s, uint16_t len);   ///< digits, radix and digit-group spaces only; anything else reads as a term
+int     ppfRunPrec(uint8_t n);                        ///< PPF_PREC_ATOM or _ADD for a built PP_RUN, from its text
 uint8_t ppfBuildOp1(uint16_t item, uint8_t a, int aPrec,
                     uint8_t ctxFont, uint8_t childFont, int *outPrec);
 uint8_t ppfBuildOp2(uint16_t item, uint8_t a, int aPrec, uint8_t b, int bPrec,

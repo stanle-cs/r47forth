@@ -566,12 +566,18 @@ shared builders: `ppfBuildOp1`/`ppfBuildOp2` for operators,
 walker decides where a bracket goes.** The drawing came out
 byte-identical to PP17's, which is how the change was verified.
 
-Two places where the node form is not merely equivalent to the text form:
-a fraction bar SCOPES, so `a/(b+c)` draws with no parentheses at all
-(V49); and a stacked power DOES need its base bracketed, which the walker
-does locally because `ppfBuildOp` deliberately has no POW level — a
-`PP_SUP` normally scopes itself, and adding a level would change the
-contract underneath the capture engine (V51).
+Three places where the node form is not merely equivalent to the text
+form. A fraction bar SCOPES, so `a/(b+c)` draws with no parentheses at all
+(V49). A stacked power DOES need its base bracketed, because `ppfBuildOp`
+deliberately has no POW level — a `PP_SUP` normally scopes itself, and
+adding a level would change the contract underneath the capture engine
+(V51); that rule now lives in `ppfPowBase`, which every producer of a
+`PP_SUP` calls, and the walker's older local copy is redundant. And a leaf
+whose TEXT is not a visual atom — a signed numeral, a value in scientific
+form, a tagged angle, a complex — reports `PPF_PREC_ADD` rather than
+`ATOM`, so the ordinary bracket rules scope it; both leaf builders ask the
+same `ppfTextIsAtom`, because when only the walker had that rule the two
+surfaces drew the same numeral differently (PP18RR6-2, r6).
 
 **Why a symbolic stack seeded with the variable NAME is faithful.**
 Upstream feeds a body program through two channels: the integrator writes

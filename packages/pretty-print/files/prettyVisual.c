@@ -1117,8 +1117,10 @@ static uint8_t ppvAstToNodes(ppvCtx_t *ctx, uint8_t n,
       if((a->flags & PPV_F_OPAQUE) != 0) {
         return PP_NONE;   // never reaches here: the walk refuses it first
       }
-      if(a->textLen > 0 && ctx->pool[a->textOff] == '-') {
-        *outPrec = PPF_PREC_ADD;   // a signed numeral brackets as a term
+      // one predicate with the capture leaves, or the two producers drift
+      // on the same numeral and only one of them brackets it
+      if(!ppfTextIsAtom(ctx->pool + a->textOff, a->textLen)) {
+        *outPrec = PPF_PREC_ADD;
       }
       return ppNewRun(ctx->pool + a->textOff, a->textLen, ctxFont);
 
