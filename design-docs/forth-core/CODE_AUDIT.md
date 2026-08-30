@@ -62,6 +62,11 @@ statement needs an attacker is not a finding.
    out-of-family reader is not given a dimension: it is told the others
    exist and sent where it would go if nobody had reviewed the code at
    all. Depth on what looks wrong beats breadth over what looks fine.
+   **Round 1 of every audit is read by all three families — in-family,
+   Gemini, and GPT/Sol — over the actual subject** (ruled 2026-08-29,
+   after four PP18 rounds closed in-family only on the strength of a
+   green probe); the round counter does not advance until round 1's
+   report records both out-of-family replies.
 5. **Verify adversarially.** Every finding goes to a reader who did not
    produce it, whose instructions are to **refute** it. Default to
    refuted when uncertain. A finding that survives is CONFIRMED; one that
@@ -73,7 +78,8 @@ statement needs an attacker is not a finding.
    finding, **and at least one of those rounds out-of-family.** An
    all-in-family clean round does not close the audit. **A real finding
    resets the count** — because the fix is new code, and new code has not
-   been audited by anybody.
+   been audited by anybody. Round 1 must itself be three-family before
+   any round counts.
 8. **Stan reads the report.** Nothing is fixed as part of the audit; see
    "Findings, not fixes".
 
@@ -418,7 +424,10 @@ Sections, in this order:
 1. **Subject and coverage.** What was audited (commits, files, lines),
    what was deliberately not, and what the reading budget did not reach.
    A report that does not say what it missed cannot be trusted about what
-   it found.
+   it found. It also carries the out-of-family accounting: each reader
+   with packet path, reply path, the reply's verbatim `MODEL:` line and
+   findings raised — or, when the pass has not run, a banner (`'pending'`
+   or `'none'`), which on round 1 means the round is not complete.
 2. **Mechanical results.** Gate, warnings, `design-audit.sh`. Pass/fail
    and anything they surfaced.
 3. **CONFIRMED findings**, worst first. Each carries: where
@@ -435,7 +444,9 @@ Sections, in this order:
    empty section here did not understand what it read.
 7. **Verdict.** Would you ship this? Where would it break first?
 8. **Round and exit state.** Which round this was, which readers, and
-   whether the exit criterion is met.
+   whether the exit criterion is met. A round with no out-of-family
+   reader says so here AND in a section-1 banner; round 1 without all
+   three families does not advance the counter.
 
 Findings are ranked by what they cost the owner. A crash on a common
 gesture outranks a wrong result in a case nobody reaches, which outranks

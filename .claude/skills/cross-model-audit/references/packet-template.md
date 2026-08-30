@@ -61,7 +61,23 @@ finding.
         Round 3's bad Sol finding was this omission.
      4. If a comment in the code names a function, that function's body is
         in the packet below. Say so here; the linter cross-checks.
-     5. Constants that gate reachability — sizing arithmetic, caps,
+     5. NEVER state a contract the CODE does not state. Quote it, or cite
+        DESIGN.md / file:line, in the SAME bullet. PP18 round 2's packet
+        called ppcHistSeq "a monotonically increasing stamp" where the
+        source says only "seq u16" and "ppcHistSeq++"; the reader
+        dutifully reported the wrap as a contract violation and refuting
+        an invented promise cost a full gate cycle. A reader cannot tell
+        your paraphrase from the code's own guarantee.
+     6. SPLITTING A TWO-PHASE MECHANISM BY PHASE HIDES THE COMPENSATION.
+        PP18 round 3 sent the STAGE half to one reader and the DONE half
+        to another. The DONE reader correctly found that the X<>reg arm
+        repairs only slot 0 — and was refuted, because the partner slot
+        and LASTX are displaced at STAGE, in the other packet. It named
+        the gap three times rather than guessing, so the packet was at
+        fault, not the reader. If you split by phase, each packet must
+        carry the other phase's compensating code for the arms it
+        audits, or say in Orientation which phase performs the repair.
+     7. Constants that gate reachability — sizing arithmetic, caps,
         buffer budgets — with their VALUES multiplied out. undo-history
         round 5: both readers traced the sums restore path as live code;
         HISTORY_SUMS_BYTES (~1.3 KiB) vs the 1 KiB entry cap makes it

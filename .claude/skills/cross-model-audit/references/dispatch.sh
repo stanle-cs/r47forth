@@ -19,7 +19,8 @@
 #
 # Env overrides: GEMINI_MODEL (gemini-3.1-pro-high), GEMINI_TIMEOUT (12m),
 # SOL_MODEL (gpt-5.6-sol), SOL_EFFORT (medium), SOL_TIMEOUT (900 s),
-# CROSSAUDIT_SKIP_LINT=1 to dispatch a packet the linter rejects.
+# CROSSAUDIT_SKIP_LINT=1 to dispatch a packet the linter rejects,
+# CROSSAUDIT_FORCE=1 to overwrite an existing non-empty reply file.
 set -euo pipefail
 
 GEMINI_MODEL="${GEMINI_MODEL:-gemini-3.1-pro-high}"
@@ -35,6 +36,17 @@ lint() {
   [ "${CROSSAUDIT_SKIP_LINT:-0}" = 1 ] && return 0
   python3 "$HERE/packet_lint.py" "$1" || die \
     "packet failed HARD lint checks — the packet is the audit; fix it first (CROSSAUDIT_SKIP_LINT=1 to override)"
+}
+
+# A second dispatch over the same packet defaults to the SAME reply path and
+# silently destroys the first reply — the only Gemini Pro reply over
+# derivchain.md died this way (2026-08-29). Replies are audit evidence: the
+# report and the workflow's outOfFamily accounting both cite these paths.
+noclobber() {
+  [ "${CROSSAUDIT_FORCE:-0}" = 1 ] && return 0
+  [ -s "$1" ] && die \
+    "reply file $1 already exists and is non-empty — refusing to overwrite audit evidence. Pass an explicit reply-out path for a second reader, or CROSSAUDIT_FORCE=1."
+  return 0
 }
 
 # check_identity <reply-file> <must-match-regex> <reader-name>
@@ -58,6 +70,7 @@ For agy: --model must come BEFORE -p, and the model must be on \`agy models\`."
 
 run_gemini() {
   local pkt="$1" out="${2:-${1%.md}.gemini.reply.md}"
+  noclobber "$out"
   lint "$pkt"
   echo "dispatch: gemini ($GEMINI_MODEL, --print-timeout $GEMINI_TIMEOUT) <- $pkt"
   # Flag order is load-bearing: --model BEFORE -p, prompt as argument not stdin.
@@ -71,6 +84,7 @@ run_sol() {
   local pkt out wd
   pkt="$(readlink -f "$1")"
   out="$(readlink -f "$(dirname "${2:-$1}")")/$(basename "${2:-${1%.md}.sol.reply.md}")"
+  noclobber "$out"
   lint "$pkt"
   wd="$(mktemp -d)"   # EMPTY dir: give Sol nothing to explore.
   echo "dispatch: sol ($SOL_MODEL, effort $SOL_EFFORT, timeout ${SOL_TIMEOUT}s, cwd $wd) <- $pkt"
@@ -90,6 +104,7 @@ probe() {
   p="$(mktemp --suffix=.md)"
   printf 'Begin your reply with the line `MODEL: <your exact model name>`.\nThen reply with exactly one more line: PROBE-OK. Run no commands.\n' > "$p"
   export CROSSAUDIT_SKIP_LINT=1
+  export CROSSAUDIT_FORCE=1   # probes reuse fixed /tmp paths on purpose
   case "$which" in
     gemini) GEMINI_TIMEOUT=4m run_gemini "$p" /tmp/crossaudit-probe-gemini.md ;;
     sol)    SOL_TIMEOUT=240 run_sol "$p" /tmp/crossaudit-probe-sol.md ;;

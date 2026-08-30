@@ -14,7 +14,9 @@ export const meta = {
   ],
 }
 
-/* args: { subject, commits, files, dimensions? }  — see CODE_AUDIT.md.
+/* args: { subject, commits, files, date, round, outOfFamily, dimensions?,
+ * extraFindings? }  — see CODE_AUDIT.md. round and outOfFamily are REQUIRED;
+ * the validation below throws before any agent spawns.
  * Findings, not fixes: no agent here edits the tree. Mutations, where a
  * verifier needs one, are applied and reverted inside that agent's step. */
 
@@ -29,9 +31,13 @@ export const meta = {
  * `args` is undefined and every default takes over: a refutation-only run
  * (dimensions:[], extraFindings:[...]) silently became an 8-dimension FIND
  * over `main..HEAD` under the subject "the current branch", losing all 13
- * findings it was meant to verify. NEVER resume a parameterized run to pick up
- * a script edit — relaunch FRESH with the full args re-passed. Resume is only
- * safe for a run whose args were the defaults anyway. The log line below is the
+ * findings it was meant to verify. NEVER resume a parameterized run
+ * WITHOUT re-passing the full args. Resume WITH the full args re-passed
+ * explicitly is safe and cheap — proven 2026-08-29, when a usage limit killed
+ * all 15 refuters and the synthesis mid-run: the resumed call cache-hit all 8
+ * finders and re-ran only the dead tail. The required round/outOfFamily
+ * validation below turns the dropped-args trap loud: a bare resume now throws
+ * here instead of silently auditing the default range. The log line below is the
  * check: if it does not name your subject and range, you are auditing the wrong
  * thing. */
 const A = (typeof args === 'string')
@@ -41,6 +47,65 @@ const A = (typeof args === 'string')
 const SUBJECT = A.subject || 'the current branch'
 const RANGE   = A.commits || 'main..HEAD'
 const FILES   = A.files   || '(discover from the commit range)'
+/* The audited tip, resolved for the worktree guard below. Round 2 shipped
+ * the guard with a literal '<audited tip>' placeholder, so every verifier
+ * had to derive the tip itself — the guard worked only because they did. */
+const TIP = A.tip || (RANGE.includes('..') ? RANGE.split('..').pop() : 'HEAD')
+
+/* Round + out-of-family accounting — REQUIRED (owner ruling 2026-08-29).
+ * Four PP18 rounds closed in-family only: a green `dispatch.sh probe all`
+ * was mistaken for the pass, and round 3's report carried the omission in
+ * prose and it changed nothing. So the check lives here, in the code path
+ * that emits the report, and it fails at the START, where it costs nothing.
+ * A resume drops args and now throws HERE instead of silently auditing the
+ * default range — relaunch fresh with the full args re-passed.
+ *
+ *   round:       positive integer. ROUND 1 OF EVERY AUDIT IS READ BY ALL
+ *                THREE FAMILIES — this workflow (in-family) plus Gemini
+ *                plus GPT/Sol — on the actual subject. The round counter
+ *                does not advance until round 1's report records both
+ *                out-of-family replies.
+ *   outOfFamily: 'pending'  — packets not yet returned (the in-family
+ *                             half legitimately runs first). The report
+ *                             banners itself as unable to close.
+ *                'none'     — an explicit, recorded decision to skip.
+ *                             Rounds >= 2 only; banner, not footnote.
+ *                { packets: [ { reader: 'gemini'|'sol'|'paste',
+ *                               family: 'gemini'|'gpt' (required for
+ *                               'paste', implied otherwise),
+ *                               packet: '<path>', reply: '<path>' } ] }
+ * 'none' stays cheap on rounds >= 2 by design: the failure was never that
+ * skipping is easy, it is that skipping was invisible. */
+const ROUND = A.round
+if (!Number.isInteger(ROUND) || ROUND < 1)
+  throw new Error('args.round (positive integer) is required — the three-family rule for round 1 is keyed on it (SKILL.md, Order of work step 4). If this is a resume: resume drops args, relaunch fresh with the full args re-passed.')
+const OOF_FAMILY = { gemini: 'gemini', sol: 'gpt' }
+const OOF = A.outOfFamily
+let oofPackets = null
+if (OOF === 'pending') {
+  /* legitimate: the FIND half runs before any packet exists */
+} else if (OOF === 'none') {
+  if (ROUND === 1) throw new Error("outOfFamily: 'none' is not accepted for round 1 — round 1 is read by all three families, no skip (SKILL.md, Order of work step 4). Use 'pending' for an in-family half whose packets are not back yet.")
+} else if (OOF && typeof OOF === 'object' && Array.isArray(OOF.packets)) {
+  const bad = OOF.packets.filter(p => !p
+    || !(p.reader in OOF_FAMILY || (p.reader === 'paste' && (p.family === 'gemini' || p.family === 'gpt')))
+    || typeof p.packet !== 'string' || typeof p.reply !== 'string')
+  if (bad.length) throw new Error(`outOfFamily.packets entries must be { reader: 'gemini'|'sol'|'paste', family ('gemini'|'gpt', required for 'paste'), packet, reply }: ${bad.length} of ${OOF.packets.length} malformed`)
+  oofPackets = OOF.packets.map(p => ({ ...p, family: OOF_FAMILY[p.reader] || p.family }))
+} else {
+  throw new Error("args.outOfFamily is required: 'pending', 'none' (rounds >= 2 only), or { packets: [{ reader, packet, reply }] }. A round that skipped the out-of-family pass may not look identical to one that ran it (SKILL.md, Order of work step 4).")
+}
+const oofFamilies = [...new Set((oofPackets || []).map(p => p.family))]
+const threeFamilyMet = oofFamilies.includes('gemini') && oofFamilies.includes('gpt')
+const oofStatus = oofPackets
+  ? oofPackets.map(p => `${p.reader}/${p.family}: ${p.packet} -> ${p.reply}`).join('; ')
+  : `'${OOF}'`
+let oofBanner = ''
+if (ROUND === 1 && !threeFamilyMet) {
+  oofBanner = `> **ROUND 1 THREE-FAMILY RULE NOT MET.** Out-of-family families in this run: ${oofFamilies.length ? oofFamilies.join(', ') : 'none'}; round 1 requires Gemini AND GPT on the actual subject, plus this in-family pass. This is not a complete round 1 — it cannot close anything, and the round counter does not advance until both families' replies are fed back through this workflow with their packets recorded in outOfFamily (SKILL.md, Order of work step 4).`
+} else if (!oofPackets) {
+  oofBanner = `> **This round had NO out-of-family reader** (outOfFamily: '${OOF}'). It does not count toward the exit criterion's two clean rounds and its verdicts carry one family's blind spots (SKILL.md, Exit criterion).`
+}
 
 /* The auditor brief, inlined verbatim rather than referenced. Naming the file
  * and telling the agent to follow it has failed here before (2026-08-04). */
@@ -140,7 +205,12 @@ const VERDICT_SCHEMA = {
   required: ['verdict', 'why', 'evidence'],
   properties: {
     verdict:  { type: 'string', enum: ['REFUTED', 'SURVIVES'] },
-    why:      { type: 'string' },
+    /* `why` must not OPEN with the opposite verdict token: PP18RR1-10 came
+     * back verdict:SURVIVES with why:'REFUTED ...' over evidence that proved
+     * survival, and a machine reading the pair would have filed it either
+     * way (restarted round 1, process item 3). State the reason, not a
+     * second verdict. */
+    why:      { type: 'string', description: 'the reason, NOT a verdict token — do not begin with REFUTED/SURVIVES; it must not contradict the verdict field' },
     evidence: { type: 'string', description: 'the path constructed, the trace followed, or the ruling found' },
   },
 }
@@ -169,7 +239,7 @@ const dims = A.dimensions
   : DIMENSIONS
 
 phase('Find')
-log(`auditing ${SUBJECT} — RANGE ${RANGE} — across ${dims.length} blind dimensions`)
+log(`auditing ${SUBJECT} — RANGE ${RANGE} — round ${ROUND} — across ${dims.length} blind dimensions — out-of-family: ${oofStatus}${ROUND === 1 && !threeFamilyMet ? ' — ROUND-1 THREE-FAMILY RULE NOT YET MET' : ''}`)
 
 /* Barrier is CORRECT here: the dedup and the rotation both need every
  * finder's output at once — a verifier must not receive a finding produced by
@@ -258,6 +328,27 @@ findings that were merely admired are not. DEFAULT TO REFUTED WHEN UNCERTAIN.
 
 Repo: /home/stan/c43. Subject: ${SUBJECT} (${RANGE}).
 
+WORKTREE CHECK — YOUR FIRST TWO ACTIONS, BEFORE ANY READ. Requested by
+rounds 2, 3, 4 and the restarted round 1; a worktree's ref is a CLAIM.
+  1. Run: git log --oneline -1 && git merge-base --is-ancestor ${TIP} HEAD && echo ANCESTOR-OK
+     The audited tip is ${TIP}.
+     Worktrees have spawned ~110 commits behind, where the audited code does
+     not exist yet — a verifier there judges a codebase that is not there.
+     If that does not print ANCESTOR-OK, or HEAD is not ${TIP}, run
+     'git checkout ${TIP}' before reading anything. Six consecutive rounds
+     have spawned at a ref ~110 commits behind, where the audited files do
+     not exist; every round was usable only because the readers caught it.
+  2. 'git status --porcelain' and 'git diff'. A worktree has ARRIVED carrying a
+     live foreign mutation written by a sibling verifier working the same
+     finding (restarted round 1: 'prettyVisual.c:1457'). A dirty worktree you
+     did not dirty means your reads and any gate run are UNTRUSTWORTHY unless
+     you account for the edit. REPORT a foreign edit in your evidence, and
+     NEVER revert it ('git checkout'/'restore' once nearly destroyed
+     uncommitted stage work). If the edit is exactly the mutation your
+     verification needed, say so and use it — but say so.
+Your own mutations: mark them 'AUDIT-PROBE R<n>', revert by INVERSE EDIT in
+this same step, and verify the mutation reached the built artifact.
+
 THE FINDING (produced by a different reader, working the "${f.dim}" dimension):
   title:          ${f.title}
   where:          ${f.file}:${f.line}
@@ -265,6 +356,15 @@ THE FINDING (produced by a different reader, working the "${f.dim}" dimension):
   consequence:    ${f.consequence}
   violated:       ${f.violated}
   severity:       ${f.severity}
+
+SCOPE — YOU ARE NOT LIMITED TO WHAT THE FINDING QUOTES. If the finding
+came from an out-of-family packet, that packet's excerpt is NOT your scope:
+you have the whole repository and the finding may turn on code the reader
+never saw. Round 2 settled two of four findings on code outside the packet
+(the STO arm for one, the BIGOP DONE arm for the other) — a refuter who had
+assumed packet scope would have returned the wrong verdict on BOTH, one
+SURVIVES that should have been REFUTED and one REFUTED-as-unreachable that
+was real. Go read the callers.
 
 YOUR LENS — use only this one:
 ${lens.text}
@@ -317,7 +417,7 @@ log(`${confirmed.length} survived refutation, ${refuted.length} refuted`)
 phase('Synthesis')
 
 const report = await agent(
-`Write the audit report for ${SUBJECT} (${RANGE}), following
+`Write the audit report for ${SUBJECT} (${RANGE}), round ${ROUND}, following
 design-docs/forth-core/CODE_AUDIT.md's "Report" section EXACTLY — its eight
 sections, in its order. Repo: /home/stan/c43.
 
@@ -342,6 +442,11 @@ merge what the finders reported clearing with what the refutation pass
 disproved, and say WHY each was cleared. An audit with an empty section there
 did not understand what it read.
 
+OUT-OF-FAMILY ACCOUNTING — round ${ROUND}; ${oofStatus}.
+${oofBanner
+  ? `Open section 1 with this banner VERBATIM, its own paragraph, before anything else:\n${oofBanner}`
+  : `In section 1, list every out-of-family reader: its packet path, its reply path, the MODEL line quoted VERBATIM from the reply file (READ each reply file; a missing or empty reply is a timeout or an overwrite, never a clean bill — if you find one, open section 1 with a banner saying so instead), and how many findings that reply raised. Section 8 carries the same list plus how many of each reader's findings survived refutation.`}
+
 CONFIRMED (survived the independent refutation pass):
 ${JSON.stringify(confirmed.map(f => ({ ...f, verdict: f.verdict })), null, 1)}
 
@@ -359,6 +464,9 @@ and return the absolute path plus a five-line summary.`,
 
 return {
   subject: SUBJECT,
+  round: ROUND,
+  outOfFamily: oofPackets ? { packets: oofPackets } : OOF,
+  outOfFamilyFamilies: oofFamilies,
   dimensions: dims.map(d => d.key),
   raw: all.length,
   deduped: unique.length,

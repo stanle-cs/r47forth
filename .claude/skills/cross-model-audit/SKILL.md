@@ -33,7 +33,7 @@ test can fail.
 |---|---|
 | `design-docs/forth-core/CODE_AUDIT.md` | the process record: dimensions, reader pool, what NOT to flag, report template, exit criterion. This skill is the operator's checklist; that file is the reasoning |
 | `design-docs/forth-core/PROMPT_CODE_AUDIT.md` | auditor brief + refutation brief. Copy-adapt into packets and subagent prompts; never re-derive from memory |
-| `design-docs/forth-core/audit-workflow.js` | the in-family runner: blind finders → dedup → worktree-isolated refutation → report. Also refutes out-of-family findings via `args.extraFindings` |
+| `design-docs/forth-core/audit-workflow.js` | the in-family runner: blind finders → dedup → worktree-isolated refutation → report. Also refutes out-of-family findings via `args.extraFindings`. Refuses to run without `round` and `outOfFamily` (2026-08-29) |
 | `references/packet-template.md` | the packet skeleton, one comment per paid-for rule |
 | `references/packet_lint.py` | mechanical packet checks; HARD hits block dispatch, the rest are judged |
 | `references/dispatch.sh` | `agy`/`codex` invocations with the flag order, timeouts, empty-dir setup, and MODEL-line identity check built in |
@@ -52,9 +52,12 @@ test can fail.
    mechanical half reports is a finding.
 3. **In-family pass.** `Workflow({scriptPath:
    'design-docs/forth-core/audit-workflow.js', args: {subject, commits,
-   files, date}})`. Args may arrive as a JSON string — the script parses
-   defensively, and round 1 silently audited the wrong range, so SAY which
-   range is being audited. All eight dimensions periodically; D7 (design)
+   files, date, round, outOfFamily}})`. Args may arrive as a JSON string —
+   the script parses defensively, and round 1 silently audited the wrong
+   range, so SAY which range is being audited. The script THROWS without
+   `round` and `outOfFamily`: four rounds closed in-family only and looked
+   complete (2026-08-29). `outOfFamily: 'pending'` is the honest value for
+   a FIND run whose packets are not back yet. All eight dimensions periodically; D7 (design)
    is the lens that pays for the exercise and silently lapsed for two
    rounds once. Sonnet carries the mechanical dimensions, the strongest
    model carries D7 and synthesis.
@@ -62,12 +65,27 @@ test can fail.
    `references/dispatch.sh gemini <packet>` (and `sol <packet>` for
    self-contained design review). Rules below. This pass is what closes an
    audit; if the automation fails, PASTE the packet into a fresh session
-   by hand rather than skipping the pass.
+   by hand rather than skipping the pass. **Round 1 of every audit is
+   read by all three families** — the in-family finders plus Gemini plus
+   Sol, each over the actual subject (Sol's constraint means round 1
+   always carves at least one self-contained packet). No skip: the round
+   counter does not advance until both replies are fed back through the
+   workflow (`outOfFamily: {packets: [...]}`) and the round-1 report
+   loses its banner. Ruled 2026-08-29, after four rounds closed on a
+   green probe.
 5. **Cheapest evidence.** Any finding that ends in an on-screen claim gets
    a `run-sim` capture — one screenshot settled three findings in round 5
    and found C21 in round 3, and both times it was nearly left on the
    table. Follow the run-sim skill; copy its driver, never write one.
-6. **Refute everything, both directions.** Out-of-family findings go
+6. **Refute everything, both directions.** ORDER MATTERS: run the
+   out-of-family half AFTER the in-family half and grep its numbers
+   before minting one. Round 2's two families converged on the same
+   defect from different evidence; the out-of-family half filed it as
+   corroboration of the in-family number rather than a second ID,
+   because **a number is a fix obligation and two numbers for one
+   defect is how a class gets half-fixed.** In the other order the
+   round would have shipped the duplicate. Cross-half dedup has no
+   tooling — it is the operator's job, done by grep. Out-of-family findings go
    through the same refutation as in-family ones — feed them to the
    workflow as `args.extraFindings` (with `dimensions: []` for a
    refutation-only round, which is what round 4 was). Gemini has produced
@@ -109,7 +127,8 @@ the template and the linter; the linter's HARD hits are non-negotiable.
 - **Size:** 3–11 KB proven to answer in minutes; rounds 9 and 10 extended
   the proven range to 23.9 KB (Gemini) and 19.2 KB (Sol, self-contained
   design packet); the undo-history round-1 refutation packets extended it
-  again to 27.9 KB (Gemini) and 26.6 KB (Sol) — both fully structured
+  again to 27.9 KB (Gemini) and 26.6 KB (Sol), and the PP18 restarted
+  round 1 to 30.3 KB (Gemini) and 28.9 KB (Sol) — all fully structured
   answers. Keep packets small for depth, not from fear of size —
   the old 13 KB failure was over-read. Round 10 split two oversized
   packets and the splits cost nothing, so **split on the QUESTION, not on
@@ -144,7 +163,9 @@ workflow; it may not be one of the readers.
 - Never send anything you would not put in the public repo.
 - `dispatch.sh probe all` verifies both drivers end-to-end for pennies;
   run it at the start of an audit session rather than debugging identity
-  mid-round.
+  mid-round. A probe is not a pass: it verifies the drivers answer — it
+  sends no packet and produces no finding. Four rounds were closed on the
+  strength of a green probe (2026-08-29).
 
 ## Verification rules
 
@@ -209,6 +230,17 @@ them out-of-family on the actual subject** — the fix commits themselves,
 not just the stage they fixed. A real finding resets the count. A round
 whose refutation pass died is not a verified round (round 3's verdicts
 were the author's own traces; round 4 existed to pay that debt).
+
+A round with no out-of-family reader does not count toward the two and
+says so in its own report — the workflow refuses to run without being
+told (`outOfFamily`, required, 2026-08-29). Round 1 is stricter: **round
+1 is not complete until all three families have read the subject** —
+in-family, Gemini, and Sol. Three in-family rounds are one reader's
+opinion repeated, whatever their finding counts look like: PP18 rounds
+1–4 confirmed 16, 8, 7 and 11 in-family, and the pass that finally ran
+still returned findings in code those rounds had cleared — over-refusals
+and a ruling stated in a comment that is literally false of its own
+function.
 
 Never close on a round that contains fixes: **r2 = 4 of 7 findings from
 r1's fixes, r3 = 4 of 4, r5 = 9 of 12, and the rate is not falling.** A

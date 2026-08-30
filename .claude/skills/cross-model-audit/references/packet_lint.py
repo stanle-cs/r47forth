@@ -180,6 +180,41 @@ def lint(path):
               "on a package override, the Orientation must name it (round 3: a "
               "reader with no repository cannot know the package rebuilds the "
               "FWRD picker on every paint).")
+    # SIXTH CLASS (PP18 round 2, 2026-08-29): the Orientation ASSERTED a
+    # contract the code does not state. The packet called ppcHistSeq "a
+    # monotonically increasing stamp"; the source says only "seq u16" and
+    # "ppcHistSeq++". The reader dutifully reported the wrap as a contract
+    # violation, and refuting an invented contract cost a full gate cycle.
+    # A reader cannot tell your paraphrase from the code's own promise, so
+    # the SENTENCE making the claim must carry its source.
+    orient = text.split('## The code')[0]
+    CONTRACT = re.compile(r'\b(monotonic\w*|always|never|guaranteed|invariant)\b',
+                          flags=re.I)
+    # A backticked identifier is NOT a citation — these packets are full of
+    # them, and counting them nullified this check on the packet that earned it.
+    CITE = re.compile(r'(DESIGN\.md|DESIGN-HISTORY|TESTING\.md|\w+\.[ch]:\d+|§|'
+                      r'quot\w+|verbatim|its own comment|the header(?:\'s)? own)',
+                      flags=re.I)
+    # Sentences about the AUDIT rather than the code make no contract claim.
+    META = re.compile(r'never been (?:audited|sent|read)|have never been|prior round|four rounds|this packet|'
+                      r'audit for|no repository', flags=re.I)
+    # Split on BULLETS/paragraphs, not sentences: the claim and its citation
+    # live in the same bullet, and a sentence split severed "The display never
+    # lies" from the DESIGN.md quote three clauses earlier.
+    uncited = []
+    for sent in re.split(r'\n\s*(?=[-*] )|\n\s*\n', orient):
+        m = CONTRACT.search(sent)
+        if m and not CITE.search(sent) and not META.search(sent):
+            uncited.append((m.group(0).lower(), ' '.join(sent.split())[:70]))
+    if uncited:
+        print(f"  [JUDGE] {len(uncited)} Orientation claim(s) state a contract with no "
+              "source in the same sentence:")
+        for word, sent in uncited[:4]:
+            print(f"          \u2022 \"{word}\" \u2014 {sent}...")
+        print("          Every contract the Orientation states must be the CODE's, not "
+              "yours: quote it, or cite DESIGN.md / file:line. An invented "
+              '"monotonically increasing" cost a full gate cycle refuting a '
+              "violation of a promise nothing in the tree makes (2026-08-29).")
     if not re.search(r'establish', text, flags=re.I):
         caps = sorted({w for w in re.findall(r'\b[A-Z][A-Z_]{2,11}\b', text)
                        if w not in CAPS_NOISE})
@@ -204,13 +239,16 @@ def lint(path):
     # Round 10: 23.9 KB (Gemini, whole-function fix packet — four findings, one
     # a real premise-level catch) and 19.2 KB (Sol, design packet) both answered
     # in minutes. undo-history round 1 extended it again: 27.9 KB (Gemini) and
-    # 26.6 KB (Sol) refutation packets, both fully structured answers.
+    # 26.6 KB (Sol) refutation packets, both fully structured answers. PP18
+    # restarted round 1 (2026-08-29): 30.3 KB (Gemini, layout end-to-end) and
+    # 28.9 KB (Sol, scoping cluster), both structured, both with substantive
+    # deliberately-not-flagged sections.
     # well. Two packets in that round WERE split for size and the split cost
     # nothing, so the ceiling is still advice, not a wall: split for DEPTH — one
     # packet, one question — and let size follow from that.
     note = ('thin — is the whole function really here?' if kb < 2 else
-            'proven range' if kb <= 28 else
-            'beyond the tested range (27.9 KB Gemini / 26.6 KB Sol are the largest proven); split for depth')
+            'proven range' if kb <= 30.5 else
+            'beyond the tested range (30.3 KB Gemini / 28.9 KB Sol are the largest proven (2026-08-29)); split for depth')
     print(f"  [SIZE] {size} bytes ({kb:.1f} KB) — {note}")
 
     if hard:
