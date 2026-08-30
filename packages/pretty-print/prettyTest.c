@@ -339,6 +339,12 @@ void prettyTestMeasure(uint16_t unusedButMandatoryParameter) {
     temporaryInformation = TI_NO_INFO;
     lastErrorCode        = 0;
     setSystemFlag(FLAG_FRACT);
+    /* The bold substitution is gated on font == &numericFont, and only a
+     * MIXED number's head is numeric — ppParseFraction skips the head
+     * entirely when there is none. Without PROPFR the drawing has no
+     * numeric run and this pin compares two identical pictures. */
+    bool_t hadPropfr = getSystemFlag(FLAG_PROPFR);
+    setSystemFlag(FLAG_PROPFR);
     prettySetEnabled(true);
     ppTestSetRealX("1.5");
 
@@ -378,8 +384,9 @@ void prettyTestMeasure(uint16_t unusedButMandatoryParameter) {
       ppTestFailInt("M8 BOLD changed the pretty output (lit pixels)", (int32_t)litPlain, (int32_t)litBold);
     }
 
-    if(!boldWas)  clearSystemFlag(FLAG_BOLD);
-    if(!hadFract) clearSystemFlag(FLAG_FRACT);
+    if(!boldWas)   clearSystemFlag(FLAG_BOLD);
+    if(!hadFract)  clearSystemFlag(FLAG_FRACT);
+    if(!hadPropfr) clearSystemFlag(FLAG_PROPFR);
     calcMode = modeWas;
   }
 
@@ -1405,15 +1412,27 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
     ppcTestOp(ITM_ENTER);
     ppcTestType("5");                                 // slots 0..4 known
 
+    /* Establish the state the assertion needs: slot 4 must actually hold a
+     * tree before the store, or the pin proves nothing. */
+    const uint8_t s4 = ppcTestSlotRaw(4);
+    const bool_t slot4WasKnown = (s4 != PPC_UNKNOWN && s4 != PPC_NIL);
+
     clearSystemFlag(FLAG_SSIZE8);                     // A..D leave the stack, stay writable
     ppcTestOpParam(ITM_STO, (uint16_t)REGISTER_A);    // upstream writes A = 5
     setSystemFlag(FLAG_SSIZE8);                       // and A is a stack register again
 
-    /* Degraded means UNKNOWN (or emptied): what it must NOT be is the tree
-     * it held before the store, which is what the narrow guard left there. */
-    const uint8_t slot4 = ppcTestSlotRaw(4);
-    if(slot4 != PPC_UNKNOWN && slot4 != PPC_NIL) {
-      ppTestFail("T23c slot 4 still holds its old tree after a STO to A the guard ignored");
+    /* Degraded means UNKNOWN: what it must NOT be is the tree it held
+     * before the store. PPC_NIL is NOT accepted as degraded — it is also
+     * what ppcTestSlotRaw returns out of range, so accepting it would let
+     * the pin pass on a slot that was never populated. */
+    if(!slot4WasKnown) {
+      ppTestFail("T23c setup: slot 4 never held a tree, so the guard below cannot be seen");
+    }
+    else {
+      const uint8_t slot4 = ppcTestSlotRaw(4);
+      if(slot4 != PPC_UNKNOWN) {
+        ppTestFail("T23c slot 4 was not degraded after a STO to A the guard ignored");
+      }
     }
     if(ss8Was) { setSystemFlag(FLAG_SSIZE8); } else { clearSystemFlag(FLAG_SSIZE8); }
   }
