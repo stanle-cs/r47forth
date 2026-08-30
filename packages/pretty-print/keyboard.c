@@ -2832,6 +2832,7 @@ RELEASE_END:
                   //printf("XXXXXXXX @@@@@@ temporaryInformation=%u calcmode=%u showRegis=%u\n", temporaryInformation, calcMode, showRegis);
                   if(item == ITM_RCL) {
                     keyActionProcessed = true;
+                    ppcShadowInvalidate();   // AUDIT PP18RR2-2: fnRecall direct, no item dispatch, so no capture hook runs
                     fnRecall(showRegis);
                     setSystemFlag(FLAG_ASLIFT);
                     temporaryInformation = TI_COPY_FROM_SHOW;
@@ -3020,6 +3021,13 @@ RELEASE_END:
                 else if(item == ITM_RCL) {
                   rbr1stDigit = true;
                   calcMode = previousCalcMode;
+                  /* AUDIT PP18RR2-2. Both arms below call fnRecall directly,
+                   * so neither capture hook runs; with FLAG_ASLIFT set,
+                   * fnRecall rolls the whole register stack up and the shadow
+                   * would go on describing registers that moved. This is the
+                   * class ppcShadowInvalidate exists for — the package's own
+                   * browser already calls it at the same kind of site. */
+                  ppcShadowInvalidate();
                   if(rbrMode == RBR_GLOBAL || rbrMode == RBR_LOCAL) {
                     fnRecall(currentRegisterBrowserScreen);
                     screenUpdatingMode = SCRUPD_AUTO;

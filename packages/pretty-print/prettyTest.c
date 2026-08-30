@@ -1146,6 +1146,33 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
   ppcTestExpectSig("T20 x<>reg", expect);
   ppcTestExpectHist("T20 hist", 1);
 
+  /* T20b (AUDIT PP18RR2-3) — FILL displaces, it does not delete. FILL
+   * overwrites Y..top with X, which is displacement by DESIGN.md's own
+   * segmentation rule, so a finished formula sitting in a slot >= 1 must be
+   * FILED, exactly as the CLSTK wipe site files it. The DONE arm frees those
+   * slots, and ppcFreeTree clears ppcCurrent when it frees the live root, so
+   * before the fix the formula vanished: T-line blank, no PHIST row.
+   * The CLSTK control below is the decisive half — identical shadow state
+   * through a wipe site that DOES displace — so a regression that breaks
+   * filing everywhere reddens both, not just one. */
+  ppcTestReset();
+  ppcTestType("2");
+  ppcTestOp(ITM_ENTER);
+  ppcTestType("3");
+  ppcTestOp(ITM_ADD);      // 2+3 finished, root now rides up on the next lift
+  ppcTestType("9");        // lifts the root into slot 1
+  ppcTestOp(ITM_FILL);
+  ppcTestExpectHist("T20b FILL files the displaced formula", 1);
+
+  ppcTestReset();
+  ppcTestType("2");
+  ppcTestOp(ITM_ENTER);
+  ppcTestType("3");
+  ppcTestOp(ITM_ADD);
+  ppcTestType("9");
+  ppcTestOp(ITM_CLSTK);
+  ppcTestExpectHist("T20b control: CLSTK files it", 1);
+
   // T21 (AUDIT R1-4, Gemini): RCL-arith against a slot that is UNKNOWN.
   // ppcDeepCopy returns PPC_UNKNOWN unchanged, and the guard beside it
   // tests only PPC_NIL, so the sentinel is stored as a child. The
@@ -1226,6 +1253,115 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
       }
     }
     lastErrorCode = 0;
+  }
+
+  /* T22b (AUDIT PP18RR2-10) — a complex operand must be CAPTURED, not
+   * silently withheld. A complex34 is 32 bytes against a 16-byte node, so
+   * ppcValLeafFromRegister used to return PPN_OPAQUE, and one opaque leaf
+   * poisons the tree for both surfaces: ppcCurrentFormulaRoot returns NIL
+   * (T line blank) and ppcEmit refuses it (no history row) — with
+   * lastErrorCode 0 and no decline shown anywhere. DESIGN.md 3 promised a
+   * two-child header for exactly this; PPN_VAL2 is it.
+   *
+   * The reaching input is the finding's own: put a complex in Y, leave the
+   * shadow UNKNOWN there, then multiply — STAGE's ppcEnsureKnown(1) must
+   * snapshot the complex rather than give up on the formula. */
+  {
+    ppcTestReset();
+    /* The complex goes in X, not Y: typing the next literal LIFTS, so the
+     * complex is what ends up in Y and therefore what the multiply's STAGE
+     * must snapshot. The first version of this fixture seeded Y directly,
+     * the lift carried the complex to Z, and the multiply then operated on
+     * two ordinary reals — so it passed with the fix disabled. */
+    reallocateRegister(REGISTER_X, dtComplex34, 0, amNone);
+    int32ToReal34(2, REGISTER_REAL34_DATA(REGISTER_X));
+    int32ToReal34(3, REGISTER_IMAG34_DATA(REGISTER_X));
+    ppcShadowInvalidate();          // both slots UNKNOWN, as the reported path had them
+    ppcTestType("4");               // lifts: X=4, Y=the complex
+    if(getRegisterDataType(REGISTER_Y) != dtComplex34) {
+      ppTestFail("T22b setup: Y is not complex after the lift — fixture cannot reach the defect");
+    }
+    ppcTestOp(ITM_MULT);
+    /* The T-line half: the tree is no longer poisoned by an opaque leaf. */
+    if(ppcCurrentFormulaRoot() == PPC_NIL) {
+      ppTestFail("T22b a complex operand still withholds the whole formula");
+    }
+    /* The history half. A formula files on DISPLACEMENT, not on completion,
+     * so the wipe is part of the fixture rather than an afterthought — the
+     * first version of this pin checked the ring while the formula was still
+     * open and failed for that reason, not for the defect's. */
+    ppcTestOp(ITM_CLSTK);
+    ppcTestExpectHist("T22b the complex formula files", 1);
+  }
+
+  /* T23b (AUDIT PP18RR2-4) — the filed "= result" must be the formula's own
+   * value, not what STO just wrote over it. PPC_STO_NOP had no STAGE arm, so
+   * its displacement ran at DONE — after fnStore had already copied X into
+   * the target — and ppcEmit read the register afterwards. The ring then
+   * permanently recorded 2+3 = 9, and the browser's ENTER recalls that 9 for
+   * a formula whose value is 5. T23 cannot see it: its displaced slot holds
+   * a bare literal, and ppcEmit returns early on a non-op root.
+   *
+   * The pin reads the FILED entry, not the live tree, because the defect is
+   * in what was written to the ring. */
+  {
+    ppcTestReset();
+    ppcTestType("2");
+    ppcTestOp(ITM_ENTER);
+    ppcTestType("3");
+    ppcTestOp(ITM_ADD);                             // X=5, the formula 2+3
+    ppcTestType("9");                               // lifts: Y=5, X=9
+    ppcTestOpParam(ITM_STO, (uint16_t)REGISTER_Y);  // Y := 9, displacing the formula
+    ppcTestExpectHist("T23b the displaced formula files", 1);
+
+    uint8_t filed = PP_NONE;
+    ppReset();
+    if(!ppfBuildEntry(ppcHistoryEntry(0, NULL, NULL), PP_FONT_STANDARD,
+                      PP_FONT_STANDARD, true, &filed)) {
+      ppTestFail("T23b the filed entry does not decode");
+    }
+    else {
+      if(!ppTreeHasRun(filed, "5")) {
+        ppTestFail("T23b the filed result is not 5, the value the formula had");
+      }
+      if(ppTreeHasRun(filed, "9")) {
+        ppTestFail("T23b the filed result is 9 — the value STO wrote, read after the store");
+      }
+    }
+  }
+
+  /* T23c (AUDIT PP18RR2-6) — a slot must be maintained wherever its register
+   * is writable, not only where the LIVE stack reaches. Under SSIZE4 the
+   * guards stopped covering A..D while the slots stayed live and upstream
+   * kept those registers writable, so a STO to A was ignored and the stale
+   * tree reappeared the moment SSIZE8 came back. The finding's own sequence:
+   * fill the slots under SSIZE8, switch to SSIZE4, store over A, and the
+   * shadow must no longer claim to know slot 4. */
+  {
+    bool_t ss8Was = getSystemFlag(FLAG_SSIZE8);
+    setSystemFlag(FLAG_SSIZE8);
+    ppcTestReset();
+    ppcTestType("1");
+    ppcTestOp(ITM_ENTER);
+    ppcTestType("2");
+    ppcTestOp(ITM_ENTER);
+    ppcTestType("3");
+    ppcTestOp(ITM_ENTER);
+    ppcTestType("4");
+    ppcTestOp(ITM_ENTER);
+    ppcTestType("5");                                 // slots 0..4 known
+
+    clearSystemFlag(FLAG_SSIZE8);                     // A..D leave the stack, stay writable
+    ppcTestOpParam(ITM_STO, (uint16_t)REGISTER_A);    // upstream writes A = 5
+    setSystemFlag(FLAG_SSIZE8);                       // and A is a stack register again
+
+    /* Degraded means UNKNOWN (or emptied): what it must NOT be is the tree
+     * it held before the store, which is what the narrow guard left there. */
+    const uint8_t slot4 = ppcTestSlotRaw(4);
+    if(slot4 != PPC_UNKNOWN && slot4 != PPC_NIL) {
+      ppTestFail("T23c slot 4 still holds its old tree after a STO to A the guard ignored");
+    }
+    if(ss8Was) { setSystemFlag(FLAG_SSIZE8); } else { clearSystemFlag(FLAG_SSIZE8); }
   }
 
   // T23 (AUDIT R1-8): STO to a STACK register changes a value the shadow
@@ -1898,6 +2034,28 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
     uint16_t hadPgm = currentProgramNumber;
     ppcTestOp(ITM_RS);
     ppcTestExpectSig("T24 R/S left the shadow describing stale registers", "-");
+    programRunStop = hadRunStop;
+    currentProgramNumber = hadPgm;
+    lastErrorCode = 0;
+    ppcTestReset();
+  }
+
+  /* T24b (AUDIT PP18RR2-5): SST is the third member of R1-7's set. fnSst
+   * only sets PGM_SINGLE_STEP; the key handler then runs one program step
+   * with PGM_RUNNING, so every nested hook fails ppcScopeOk and returns
+   * without mirroring OR invalidating — the step's stack motion is recorded
+   * nowhere. Identical to T24 but for the item, which is the point: R/S
+   * invalidated and SST did not. */
+  ppcTestReset();
+  ppcTestType("2");
+  ppcTestOp(ITM_ENTER);
+  ppcTestType("3");
+  ppcTestOp(ITM_ADD);
+  {
+    uint16_t hadRunStop = programRunStop;
+    uint16_t hadPgm = currentProgramNumber;
+    ppcTestOp(ITM_SST);
+    ppcTestExpectSig("T24b SST left the shadow describing stale registers", "-");
     programRunStop = hadRunStop;
     currentProgramNumber = hadPgm;
     lastErrorCode = 0;

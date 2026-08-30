@@ -72,6 +72,12 @@ void fnPrettyTlineToggle(uint16_t unusedButMandatoryParameter);
 // lift decision latched at calcModeNim; prettyReset re-arms at doFnReset.
 void prettyNoteFunction    (int16_t func, uint16_t param);
 void prettyNoteFunctionDone(void);
+/* AUDIT PP18RR2-2. For upstream sites that mutate registers WITHOUT going
+ * through item dispatch, so neither hook above runs: wipe the shadow to
+ * UNKNOWN without touching the history ring. The three direct fnRecall
+ * calls in keyboard.c (SHOW mode, and the register browser's two arms)
+ * are the callers this is public for. */
+void ppcShadowInvalidate   (void);
 void prettyNoteNimOpen     (void);
 void prettyNoteNimText     (const char *aim);
 void prettyNoteNumberCommit(void);

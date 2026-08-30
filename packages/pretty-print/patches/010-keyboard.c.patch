@@ -1,5 +1,5 @@
 diff --git a/src/c47/keyboard.c b/src/c47/keyboard.c
-index bc44026016e94a8865b8acc886386341596641c6..d29679062ed073e8f33a7b3af92de3177f83e8d8 100644
+index bc44026016e94a8865b8acc886386341596641c6..de02510868f193e78737b6dc9c0988d00a3e7d28 100644
 --- a/src/c47/keyboard.c
 +++ b/src/c47/keyboard.c
 @@ -687,7 +687,7 @@ static void executeFunction(const char *data, int16_t item_);
@@ -86,7 +86,29 @@ index bc44026016e94a8865b8acc886386341596641c6..d29679062ed073e8f33a7b3af92de317
            else {
              switch(calcMode) {
                case CM_NORMAL: {
-@@ -3577,6 +3620,11 @@ void fnKeyEnter(uint16_t unusedButMandatoryParameter) {
+@@ -2789,6 +2832,7 @@ RELEASE_END:
+                   //printf("XXXXXXXX @@@@@@ temporaryInformation=%u calcmode=%u showRegis=%u\n", temporaryInformation, calcMode, showRegis);
+                   if(item == ITM_RCL) {
+                     keyActionProcessed = true;
++                    ppcShadowInvalidate();   // AUDIT PP18RR2-2: fnRecall direct, no item dispatch, so no capture hook runs
+                     fnRecall(showRegis);
+                     setSystemFlag(FLAG_ASLIFT);
+                     temporaryInformation = TI_COPY_FROM_SHOW;
+@@ -2977,6 +3021,13 @@ RELEASE_END:
+                 else if(item == ITM_RCL) {
+                   rbr1stDigit = true;
+                   calcMode = previousCalcMode;
++                  /* AUDIT PP18RR2-2. Both arms below call fnRecall directly,
++                   * so neither capture hook runs; with FLAG_ASLIFT set,
++                   * fnRecall rolls the whole register stack up and the shadow
++                   * would go on describing registers that moved. This is the
++                   * class ppcShadowInvalidate exists for — the package's own
++                   * browser already calls it at the same kind of site. */
++                  ppcShadowInvalidate();
+                   if(rbrMode == RBR_GLOBAL || rbrMode == RBR_LOCAL) {
+                     fnRecall(currentRegisterBrowserScreen);
+                     screenUpdatingMode = SCRUPD_AUTO;
+@@ -3577,6 +3628,11 @@ void fnKeyEnter(uint16_t unusedButMandatoryParameter) {
          break;
        }
  
@@ -98,7 +120,7 @@ index bc44026016e94a8865b8acc886386341596641c6..d29679062ed073e8f33a7b3af92de317
        case CM_TIMER: {
          fnRegAddTimerApp(NOPARAM);     //ENTER
          break;
-@@ -3938,6 +3986,11 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
+@@ -3938,6 +3994,11 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
          break;
        }
  
@@ -110,7 +132,7 @@ index bc44026016e94a8865b8acc886386341596641c6..d29679062ed073e8f33a7b3af92de317
        case CM_ASN_BROWSER: {
          if(previousCalcMode == CM_AIM || tam.alpha) {
            if(currentMenu() == -MNU_AIMCATALOG) {
-@@ -4348,6 +4401,11 @@ void fnKeyBackspace(uint16_t unusedButMandatoryParameter) {
+@@ -4348,6 +4409,11 @@ void fnKeyBackspace(uint16_t unusedButMandatoryParameter) {
          break;
        }
  
@@ -122,7 +144,7 @@ index bc44026016e94a8865b8acc886386341596641c6..d29679062ed073e8f33a7b3af92de317
        case CM_BUG_ON_SCREEN:
        case CM_LISTXY:
        case CM_GRAPH:
-@@ -4612,6 +4670,11 @@ void fnKeyUp(uint16_t unusedButMandatoryParameter) {
+@@ -4612,6 +4678,11 @@ void fnKeyUp(uint16_t unusedButMandatoryParameter) {
          break;
        }
  
@@ -134,7 +156,7 @@ index bc44026016e94a8865b8acc886386341596641c6..d29679062ed073e8f33a7b3af92de317
        case CM_PEM: {
          resetAlphaSelectionBuffer();
          if(getSystemFlag(FLAG_ALPHA) && alphaCase == AC_LOWER) {
-@@ -4830,6 +4893,11 @@ void fnKeyDown(uint16_t unusedButMandatoryParameter) {
+@@ -4830,6 +4901,11 @@ void fnKeyDown(uint16_t unusedButMandatoryParameter) {
          break;
        }
  
@@ -146,7 +168,7 @@ index bc44026016e94a8865b8acc886386341596641c6..d29679062ed073e8f33a7b3af92de317
        case CM_PEM: {
          resetAlphaSelectionBuffer();
          if(getSystemFlag(FLAG_ALPHA) && alphaCase == AC_UPPER) {
-@@ -4931,6 +4999,11 @@ void fnKeyDotD(uint16_t unusedButMandatoryParameter) {
+@@ -4931,6 +5007,11 @@ void fnKeyDotD(uint16_t unusedButMandatoryParameter) {
          break;
        }
  

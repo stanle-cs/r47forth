@@ -79,7 +79,15 @@ int16_t         ppPreferredBase(int16_t baseY);   ///< baseY + numericFont box a
 #define PPC_LIT_CAPACITY 30
 
 enum { PPN_FREE = 0, PPN_OP1, PPN_OP2, PPN_LIT, PPN_LIT2, PPN_VAL,
-       PPN_RCL, PPN_CONST, PPN_OPAQUE, PPN_BIGOP };
+       PPN_RCL, PPN_CONST, PPN_OPAQUE, PPN_BIGOP, PPN_VAL2 };
+// PPN_VAL2 (AUDIT PP18RR2-10): a VAL whose raw payload exceeds the 16-byte
+// node carries the remainder in one continuation hung off child[0], the same
+// shape PPN_LIT/PPN_LIT2 already use for long typed literals. This is what
+// DESIGN.md 3 has always promised for complex ("complex via a two-child
+// header"); before it existed, a complex operand became PPN_OPAQUE, which
+// poisons the whole tree — the T line went blank and nothing was filed, with
+// no error anywhere. 32 bytes of complex34 fit in 16 + 16.
+#define PPC_VAL_CAPACITY 32
 // PPN_BIGOP (PP12): a captured Σₙ/∏ₙ/∫YX dispatch. item = the ITM id,
 // pad[0..1] = the label param (LE), payload = the step real34 (sums;
 // zeros for ∫), child[0] = from-limit VAL, child[1] = to-limit VAL.
@@ -166,6 +174,7 @@ const uint8_t   *ppcHistoryEntry(uint8_t idx, uint16_t *lenOut, uint16_t *seqOut
 void             ppcHistoryClear(void);
 void             ppcShadowInvalidate(void);   ///< dispatch-bypassing mutations (browser recall)
 uint8_t          ppcTestCurrentRaw(void);   ///< test only: the current root BEFORE the opaque screen, so a pin can tell a truthful degradation from a total invalidation
+uint8_t          ppcTestSlotRaw(uint8_t k);   ///< test only: slot k's raw arena index, so a pin can assert a slot was degraded (AUDIT PP18RR2-6)
 void             ppcTestDeinit(void);         ///< test only: re-arm the cold-start path so FV16 can prove lazy init leaves the FLAGS alone
 
 // prettyFormula.c — the browser reuses the pager's packed row builder
