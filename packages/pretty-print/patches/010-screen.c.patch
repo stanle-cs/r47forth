@@ -1,8 +1,22 @@
 diff --git a/src/c47/screen.c b/src/c47/screen.c
-index d2ac868bd18f9f4c20608f5dc90d5652844afcc6..b3949b1990d73ce32f170d655e3c8f70a65498b3 100644
+index d2ac868bd18f9f4c20608f5dc90d5652844afcc6..22eab79bca593efe116540454ae2e08268b6cd02 100644
 --- a/src/c47/screen.c
 +++ b/src/c47/screen.c
-@@ -1272,17 +1272,22 @@ return res;
+@@ -1235,7 +1235,12 @@ return res;
+     // Clearing the space needed by the glyph
+     bool_t rep_enlarge = numDouble || (enlarge && combinationFonts != 0);                //JM ENLARGE
+     uint32_t yNewMaxDx = (rep_enlarge ? 2 : 1) * (((glyph->rowsAboveGlyph + glyph->rowsGlyph + glyph->rowsBelowGlyph) >> miniC) - (rep_enlarge ? 4 : 0));
+-    if(!noShow && !noPreClear) {
++    /* The same wrapped x reaches this write as reaches setPixel below, and
++     * lcd_fill_rect does not screen it. The package's own primitives all
++     * do (ppFillVal clips four edges, ppDrawLine both axes, ppShowRun
++     * passes noPreClear to avoid this call) — the radical sign's
++     * showString is the one caller that does not. */
++    if(!noShow && !noPreClear && x < SCREEN_WIDTH) {
+       lcd_fill_rect(x, max(0, yy), (uint32_t)(doubling * ((xGlyph + glyph->colsGlyph + endingCols) >> miniC)) >> 3, max(0, (int32_t)(yNewMaxDx) + (yy<0 ? yy : 0)), (videoMode == vmNormal ? LCD_SET_VALUE : LCD_EMPTY_VALUE));  //JMmini
+     }
+     if(displaymode == numHalf) {
+@@ -1272,16 +1277,29 @@ return res;
            if(x2 > 0) {
              x2--;
            }
@@ -11,32 +25,35 @@ index d2ac868bd18f9f4c20608f5dc90d5652844afcc6..b3949b1990d73ce32f170d655e3c8f70
 -            setPixel(x1+1, y1);
 -          }
 -          if(numDouble) {
--            setPixel(x2, y1);
--          }
--          if(rep_enlarge) {
--            setPixel(x1, y2);
--            if(numDouble) {
--              setPixel(x2, y2);
 +          /* y is recovered from its wrap and clamped two lines up; x is
 +           * not. A negative x is a huge uint32, which the simulator HALs
 +           * reject and the device ROM's bitblt24 does not. */
++          /* Each write is screened by ITS OWN column. Gating the whole
++           * block on x1 also hid x2, which is x1-1: a glyph column landing
++           * exactly on SCREEN_WIDTH has an on-screen twin at 399 that the
++           * doubled path draws, and the glyph's own pre-clear blanks 399
++           * first — so the outer guard turned a wrapped-x fix into a lost
++           * pixel at the right edge. */
 +          if(x1 < SCREEN_WIDTH) {
 +            setPixel(x1, y1);
 +            if(boldString == 1 && x1 + 1 < SCREEN_WIDTH) {
 +              setPixel(x1+1, y1);
 +            }
-+            if(numDouble && x2 < SCREEN_WIDTH) {
-+              setPixel(x2, y1);
-+            }
-+            if(rep_enlarge) {
++          }
++          if(numDouble && x2 < SCREEN_WIDTH) {
+             setPixel(x2, y1);
+           }
+           if(rep_enlarge) {
+-            setPixel(x1, y2);
+-            if(numDouble) {
++            if(x1 < SCREEN_WIDTH) {
 +              setPixel(x1, y2);
-+              if(numDouble && x2 < SCREEN_WIDTH) {
-+                setPixel(x2, y2);
-+              }
++            }
++            if(numDouble && x2 < SCREEN_WIDTH) {
+               setPixel(x2, y2);
              }
            }
-         }
-@@ -3933,6 +3938,12 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
+@@ -3933,6 +3951,12 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
  
  
  
@@ -49,7 +66,7 @@ index d2ac868bd18f9f4c20608f5dc90d5652844afcc6..b3949b1990d73ce32f170d655e3c8f70
  /*Main type dtReal34 FLAG_FRACT*/
          else if(getSystemFlag(FLAG_FRACT)
                      && (    getRegisterDataType(regist) == dtReal34
-@@ -5861,6 +5872,23 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
+@@ -5861,6 +5885,23 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
          }
  
          if(calcMode == CM_NORMAL && screenUpdatingMode != SCRUPD_AUTO && temporaryInformation == TI_SHOWNOTHING) {
@@ -73,7 +90,7 @@ index d2ac868bd18f9f4c20608f5dc90d5652844afcc6..b3949b1990d73ce32f170d655e3c8f70
            goto RETURN_NORMAL;
          }
  
-@@ -6160,6 +6188,13 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
+@@ -6160,6 +6201,13 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
          force_refresh(force);
          break;
  

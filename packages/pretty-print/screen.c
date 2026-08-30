@@ -1235,7 +1235,12 @@ return res;
     // Clearing the space needed by the glyph
     bool_t rep_enlarge = numDouble || (enlarge && combinationFonts != 0);                //JM ENLARGE
     uint32_t yNewMaxDx = (rep_enlarge ? 2 : 1) * (((glyph->rowsAboveGlyph + glyph->rowsGlyph + glyph->rowsBelowGlyph) >> miniC) - (rep_enlarge ? 4 : 0));
-    if(!noShow && !noPreClear) {
+    /* The same wrapped x reaches this write as reaches setPixel below, and
+     * lcd_fill_rect does not screen it. The package's own primitives all
+     * do (ppFillVal clips four edges, ppDrawLine both axes, ppShowRun
+     * passes noPreClear to avoid this call) — the radical sign's
+     * showString is the one caller that does not. */
+    if(!noShow && !noPreClear && x < SCREEN_WIDTH) {
       lcd_fill_rect(x, max(0, yy), (uint32_t)(doubling * ((xGlyph + glyph->colsGlyph + endingCols) >> miniC)) >> 3, max(0, (int32_t)(yNewMaxDx) + (yy<0 ? yy : 0)), (videoMode == vmNormal ? LCD_SET_VALUE : LCD_EMPTY_VALUE));  //JMmini
     }
     if(displaymode == numHalf) {
@@ -1275,19 +1280,27 @@ return res;
           /* y is recovered from its wrap and clamped two lines up; x is
            * not. A negative x is a huge uint32, which the simulator HALs
            * reject and the device ROM's bitblt24 does not. */
+          /* Each write is screened by ITS OWN column. Gating the whole
+           * block on x1 also hid x2, which is x1-1: a glyph column landing
+           * exactly on SCREEN_WIDTH has an on-screen twin at 399 that the
+           * doubled path draws, and the glyph's own pre-clear blanks 399
+           * first — so the outer guard turned a wrapped-x fix into a lost
+           * pixel at the right edge. */
           if(x1 < SCREEN_WIDTH) {
             setPixel(x1, y1);
             if(boldString == 1 && x1 + 1 < SCREEN_WIDTH) {
               setPixel(x1+1, y1);
             }
-            if(numDouble && x2 < SCREEN_WIDTH) {
-              setPixel(x2, y1);
-            }
-            if(rep_enlarge) {
+          }
+          if(numDouble && x2 < SCREEN_WIDTH) {
+            setPixel(x2, y1);
+          }
+          if(rep_enlarge) {
+            if(x1 < SCREEN_WIDTH) {
               setPixel(x1, y2);
-              if(numDouble && x2 < SCREEN_WIDTH) {
-                setPixel(x2, y2);
-              }
+            }
+            if(numDouble && x2 < SCREEN_WIDTH) {
+              setPixel(x2, y2);
             }
           }
         }
