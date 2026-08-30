@@ -4422,6 +4422,30 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
       ITM_DROP,
       PPV2(ITM_END),
     };
+    /* One level deeper than TRPINT, and nothing draws it but the
+     * full-screen arm: V28 measures the chain at 38/58/78 px standard and
+     * 31/51/71 tiny, so a FOURTH integral is 98 and 91 — past the 72-row
+     * Z/T band at both rungs, inside the 147-row full band at the first.
+     * Without it the success half of ppvPaintFullScreen has no reaching
+     * input: a probe over the whole suite found six calls that paint, and
+     * all six took the stack window. */
+    static const uint8_t pgmIZ[] = {          // INT(0..z) IY dy
+      ITM_LBL, STRING_LABEL_VARIABLE, 3, 'V','I','Z',
+      PPV2(ITM_MVAR), STRING_LABEL_VARIABLE, 1, 'z',
+      PPV2(ITM_PGMINT), STRING_LABEL_VARIABLE, 3, 'V','I','Y',
+      ITM_LITERAL, STRING_LONG_INTEGER, 1, '0',
+      ITM_RCL, STRING_LABEL_VARIABLE, 1, 'z',
+      PPV2(ITM_INTEGRAL_YX), STRING_LABEL_VARIABLE, 1, 'y',
+      PPV2(ITM_END),
+    };
+    static const uint8_t pgmQDL[] = {         // INT(0..2) IZ dz
+      ITM_LBL, STRING_LABEL_VARIABLE, 4, 'V','Q','D','L',
+      PPV2(ITM_PGMINT), STRING_LABEL_VARIABLE, 3, 'V','I','Z',
+      ITM_LITERAL, STRING_LONG_INTEGER, 1, '0',
+      ITM_LITERAL, STRING_LONG_INTEGER, 1, '2',
+      PPV2(ITM_INTEGRAL_YX), STRING_LABEL_VARIABLE, 1, 'z',
+      PPV2(ITM_END),
+    };
     static const uint8_t pgmFX[] = {          // f(x) = x^2 - p*x - 2
       ITM_LBL, STRING_LABEL_VARIABLE, 3, 'V','F','X',
       PPV2(ITM_MVAR), STRING_LABEL_VARIABLE, 1, 'x',
@@ -4442,6 +4466,8 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
     ppcTestWriteAndLoadPgm(pgmIY,  sizeof(pgmIY));
     ppcTestWriteAndLoadPgm(pgmDBL, sizeof(pgmDBL));
     ppcTestWriteAndLoadPgm(pgmTRP, sizeof(pgmTRP));
+    ppcTestWriteAndLoadPgm(pgmIZ,  sizeof(pgmIZ));
+    ppcTestWriteAndLoadPgm(pgmQDL, sizeof(pgmQDL));
     ppcTestWriteAndLoadPgm(pgmFX,  sizeof(pgmFX));
   }
 
@@ -5841,8 +5867,10 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
    * is a postcondition worth asserting: deleting the clear left the whole
    * gate green. Both bits are SET first, or the assertion passes on an
    * ambient that was already clear. The reach check is mandatory here —
-   * only six calls in this suite get as far as a paint arm, and V27's is
-   * not one of them. */
+   * a probe counted SIX calls in this suite that get as far as a paint
+   * arm, and all six take the stack-window arm at its first rung. V27
+   * is one of them (an earlier note said otherwise; it read a decline
+   * belonging to another call). V-FULL below drives the other arm. */
   {
     calcRegister_t id = findNamedLabel("VPRC", GLOBAL_LABELS);
     calcMode = CM_NORMAL;
@@ -5887,12 +5915,11 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
    * lands in the Z/T rows and the X line — which holds the answer the
    * program just computed — is left exactly as it was.
    *
-   * MEASURED 2026-08-30 and NOT YET EXPLAINED: this call returns
-   * lastErrorCode 24 with screenHoldsDrawnPixels false, i.e. it never
-   * reaches a paint arm, and the ink sums below are satisfied anyway.
-   * The same holds at 7ddff2c5f, so it predates the round-5 and round-6
-   * waves. Until that is diagnosed this fixture proves less than it
-   * reads as — do not cite it as coverage for placement. */
+   * The reach is ASSERTED, not assumed: the call has to come back with
+   * no error and with the surface declaring its pixels, so a decline
+   * cannot satisfy the ink sums by leaving the screen alone. Measured
+   * 2026-08-30: err=0, holds=1, inT=3827912, inZ=4394459, below=0,
+   * X byte-identical. */
   {
     calcRegister_t id = findNamedLabel("VDBL", GLOBAL_LABELS);
     calcMode = CM_NORMAL;
@@ -5917,6 +5944,10 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
                                    Y_POSITION_OF_REGISTER_Y_LINE + 31);
     uint32_t xAfter   = ppvSumRows(Y_POSITION_OF_REGISTER_X_LINE,
                                    Y_POSITION_OF_REGISTER_X_LINE + 20);
+    if(lastErrorCode != ERROR_NONE) {
+      ppTestFailInt("V27 the Z/T arm was never reached, so the ink sums test nothing",
+                    0, (int)lastErrorCode);
+    }
     if(inWindow == 0) {
       ppTestFail("V27 nothing drawn in the Z/T window");
     }
@@ -5938,6 +5969,61 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
     temporaryInformation = TI_NO_INFO;
     screenHoldsDrawnPixels = false;
     screenUpdatingMode &= ~SCRUPD_MANUAL_STACK;
+  }
+
+  /* V-FULL: the OTHER paint arm. A drawing too tall for the Z/T window
+   * takes the whole band, frames it top and bottom, and claims all three
+   * chrome bits — the stack-window arm claims one and clears the other
+   * two, so the chrome mask is what tells the two arms apart.
+   *
+   * The success half of ppvPaintFullScreen had no reaching input before
+   * this row: V67 pins that BOTH arms can fail, and a probe over the
+   * whole suite found every painting call taking the stack window. A
+   * quadruple integral is 98 px standard and 91 tiny against a 72-row
+   * band, so both stack rungs decline it and the full band (147 rows)
+   * takes it at the first. */
+  {
+    calcRegister_t id = findNamedLabel("VQDL", GLOBAL_LABELS);
+    calcMode = CM_NORMAL;
+    temporaryInformation = TI_NO_INFO;
+    lastErrorCode = ERROR_NONE;
+    currentSolverStatus = 0;
+    screenHoldsDrawnPixels = false;
+    screenUpdatingMode = SCRUPD_AUTO;
+    lcd_fill_rect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, LCD_SET_VALUE);
+    fnPrettyVisual((uint16_t)id);
+    if(lastErrorCode != ERROR_NONE || !screenHoldsDrawnPixels) {
+      ppTestFailInt("V-FULL the full-screen arm was never reached, so the row tests nothing",
+                    0, (int)lastErrorCode);
+    }
+    else {
+      uint16_t litTop = 0, litBottom = 0;
+      for(int16_t x = 0; x < SCREEN_WIDTH; x++) {
+        if(lcd_buffer_pixel_on((uint32_t)x, 20))  litTop++;
+        if(lcd_buffer_pixel_on((uint32_t)x, 168)) litBottom++;
+      }
+      if(litTop != SCREEN_WIDTH || litBottom != SCREEN_WIDTH) {
+        ppTestFailInt("V-FULL the band was not framed top and bottom",
+                      SCREEN_WIDTH * 2, (int)(litTop + litBottom));
+      }
+      if((screenUpdatingMode & (SCRUPD_MANUAL_STACK | SCRUPD_MANUAL_MENU
+                                | SCRUPD_MANUAL_SHIFT_STATUS))
+          != (SCRUPD_MANUAL_STACK | SCRUPD_MANUAL_MENU | SCRUPD_MANUAL_SHIFT_STATUS)) {
+        ppTestFail("V-FULL a full-screen surface did not claim the whole chrome");
+      }
+      if(temporaryInformation != TI_SHOWNOTHING) {
+        ppTestFail("V-FULL the full-screen surface cannot be dismissed by EXIT");
+      }
+      // and it is the full band, not the stack window dressed up: the
+      // drawing has to reach past the Z line that bounds the other arm
+      if(ppvSumRows((int16_t)(Y_POSITION_OF_REGISTER_Z_LINE + 32), 167) == 0) {
+        ppTestFail("V-FULL nothing drawn below the Z/T window");
+      }
+    }
+    lastErrorCode = ERROR_NONE;
+    temporaryInformation = TI_NO_INFO;
+    screenHoldsDrawnPixels = false;
+    screenUpdatingMode = SCRUPD_AUTO;
   }
   // V28: the measurement this placement rests on. One stack line is
   // 36 px and holds a single integral only when shrunk; the T and Z
