@@ -117,7 +117,10 @@ uint8_t ppqFrameDerivative(uint8_t eq, bool_t second);   ///< PP13: d/dx (d²/dx
 
 /* prettyFormula.c — the shared 2D node builders, fed by both the capture
  * engine and the walker so precedence is decided in one place. No POW
- * level: PP_SUP scopes itself, so only ADD and MUL need brackets. */
+ * level: PP_SUP scopes itself, so only ADD and MUL need brackets. The one
+ * shape that level would have covered — a power whose base is itself a
+ * power — is handled inside the SQUARE/CUBE arm by inspecting the base
+ * node's kind, so no caller carries that precondition. */
 #define PPF_PREC_ADD  1
 #define PPF_PREC_MUL  2
 #define PPF_PREC_ATOM 3

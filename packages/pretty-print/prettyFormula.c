@@ -233,7 +233,17 @@ uint8_t ppfBuildOp1(uint16_t item, uint8_t a, int aPrec,
     }
     case ITM_SQUARE: case ITM_CUBE: {
       uint8_t sup = ppNewBox(PP_SUP, ctxFont);
-      uint8_t base = ppfWrapIf(a, aPrec, PPF_PREC_ATOM, ctxFont);
+      /* A stacked power needs its base bracketed, and ppfWrapIf cannot do
+       * it: this arm reports ATOM and ATOM < ATOM is false. PP_SUP puts
+       * the outer exponent at the same height as the inner one, so an
+       * unbracketed 3 cubed cubed draws flat as 3-cubed-cubed and reads as
+       * 3^33, for a value of 3^9. Ask the node's KIND rather than adding a
+       * POW precedence level, which would change the contract under every
+       * caller. Deciding it here means no caller has to remember to. */
+      const ppNode_t *an = (a != PP_NONE) ? ppNodeAt(a) : NULL;
+      uint8_t base = (an != NULL && an->kind == PP_SUP)
+                       ? ppfParen(a, ctxFont)
+                       : ppfWrapIf(a, aPrec, PPF_PREC_ATOM, ctxFont);
       uint8_t exp = ppfRun(item == ITM_SQUARE ? "2" : "3", childFont);
       if(sup == PP_NONE || base == PP_NONE || exp == PP_NONE) {
         return PP_NONE;

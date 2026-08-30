@@ -1391,6 +1391,27 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
     }
   }
 
+  /* T24c (PP18RR4-3) — a stacked power must bracket its base on the
+   * CAPTURE surfaces too. PP_SUP puts the outer exponent at the same
+   * height as the inner one, so an unbracketed 3 cubed cubed draws flat
+   * and reads as 3^33 for a value of 3^9. The walker had a local guard;
+   * the two capture call sites did not, and the rule now lives in the
+   * builder so none of them needs one. */
+  {
+    ppcTestReset();
+    ppcTestType("3");
+    ppcTestOp(ITM_CUBE);
+    ppcTestOp(ITM_CUBE);
+    uint8_t pw = PP_NONE;
+    ppReset();
+    if(!ppfBuildCurrent(PP_FONT_STANDARD, PP_FONT_STANDARD, &pw)) {
+      ppTestFail("T24c the stacked power does not build");
+    }
+    else {
+      ppfTestExpect("T24c stacked power brackets its base", pw, "S(P(S(3|3))|3)");
+    }
+  }
+
   /* T23c — a slot must be maintained wherever its register
    * is writable, not only where the LIVE stack reaches. Under SSIZE4 the
    * guards stopped covering A..D while the slots stayed live and upstream
