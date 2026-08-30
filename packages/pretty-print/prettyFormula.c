@@ -133,6 +133,28 @@ uint8_t ppfPowBase(uint8_t a, int aPrec, uint8_t fontId) {
     // 0xa160..0xa16b: the superscript digits plus the signs
     // exponentToDisplayString emits after the multiplication sign
     isPower = (last >= 0xa160 && last <= 0xa16b);
+
+    /* A TYPED literal keeps the text the owner typed, so its exponent is
+     * ASCII and the glyph test cannot see it: 1 EEX 50 squared draws
+     * 1.e+50 with a raised 2 after it. Match a trailing [eE][+-]?digits,
+     * past the same padding. */
+    if(!isPower && s != NULL) {
+      uint16_t n = (uint16_t)strlen(s);
+      while(n >= 2 && (uint8_t)s[n - 2] == 0xa0 && (uint8_t)s[n - 1] <= 0x0f) {
+        n = (uint16_t)(n - 2);
+      }
+      while(n > 0 && s[n - 1] == ' ') {
+        n--;
+      }
+      uint16_t d = n;
+      while(d > 0 && s[d - 1] >= '0' && s[d - 1] <= '9') {
+        d--;
+      }
+      if(d < n && d > 0 && (s[d - 1] == '+' || s[d - 1] == '-')) {
+        d--;
+      }
+      isPower = (d < n && d > 1 && (s[d - 1] == 'e' || s[d - 1] == 'E'));
+    }
   }
   return isPower ? ppfParen(a, fontId)
                  : ppfWrapIf(a, aPrec, PPF_PREC_ATOM, fontId);

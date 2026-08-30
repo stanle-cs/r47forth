@@ -1533,6 +1533,34 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
      * 502. A TYPED literal keeps its typed text and never has the tail,
      * which is why this row recalls instead of typing. The SUB-10 glyph is
      * the reach check: without it the row would pass while testing nothing. */
+    /* The TYPED form of the same value is the other half of the class: it
+     * keeps the owner's text, so its exponent is ASCII (1.e+50) and the
+     * glyph test is blind to it. Same picture defect, different alphabet. */
+    ppcTestReset();
+    ppcTestType("1");
+    addItemToNimBuffer(ITM_EXPONENT);
+    ppcTestType("50");
+    ppcTestOp(ITM_SQUARE);
+    uint8_t typed = PP_NONE;
+    ppReset();
+    if(!ppfBuildCurrent(PP_FONT_STANDARD, PP_FONT_STANDARD, &typed)) {
+      ppTestFail("T25 the typed scientific power does not build");
+    }
+    else {
+      const char *tleaf = ppfTestFirstRunText(typed);
+      const ppNode_t *troot = ppNodeAt(typed);
+      const ppNode_t *tbase = (troot != NULL) ? ppNodeAt(troot->firstChild) : NULL;
+      if(tleaf == NULL || strstr(tleaf, "e+") == NULL) {
+        ppTestFail("T25 the typed value carries no ASCII exponent, so the row tests nothing");
+      }
+      else if(troot == NULL || troot->kind != PP_SUP) {
+        ppTestFail("T25 the typed scientific value is not a power");
+      }
+      else if(tbase == NULL || tbase->kind != PP_PAREN) {
+        ppTestFail("T25 a squared typed scientific value draws its exponent against the owner's");
+      }
+    }
+
     ppcTestReset();
     ppcTestType("1");
     addItemToNimBuffer(ITM_EXPONENT);

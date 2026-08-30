@@ -612,6 +612,7 @@ static uint8_t ppqFactor(ppqCtx_t *c, uint8_t font, uint8_t tinyF) {
       }
       n = ppfPowBase(ppqScopeOperand(c, n, font), PPF_PREC_ATOM, font);
       if(n == PP_NONE) {
+        c->failed = true;   // ppfPowBase allocates and does not set it
         return PP_NONE;
       }
       ppAppendChild(sup, n);
