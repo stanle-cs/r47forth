@@ -297,6 +297,7 @@ after restore.
 | MUT-132 | the mirror picks the first DRAWABLE declaration (PP18R3-2) | V79 |
 | MUT-133 | the EQN parser leaves a construct operand unbracketed (PP18R3-3) | EQ35 |
 | MUT-134 | the limit subtrees not scanned when inventing (PP18R3-5) | V80 |
+| MUT-135 | the full-screen arm claims only `MANUAL_STACK`, as the Z/T arm does | V-FULL |
 | MUT-108 | a stacked power's base left unbracketed | V51 |
 | MUT-109 | a construct body no longer scoped by precedence | V57 |
 | MUT-110 | the derivative reads PGMINT's latch when PGMDRV has none | V55 |
@@ -558,6 +559,7 @@ a hand-built array the walker might read differently from the calculator.
 | V19/V20 | the surface: a stale solver session must not reframe the drawing and must come back bit-exact; a decline paints nothing |
 | V23 | an inner d-variable spelled like an outer one declines |
 | V27 | the drawing lands in the Z/T rows, spans BOTH of them, does not reach the Y line, leaves the X line byte-identical, and declares its pixels so EXIT dismisses it |
+| V-FULL | the OTHER paint arm: a quadruple integral (98 px standard, 91 tiny) is past the 72-row Z/T band at both rungs, so the full band takes it. Asserts the two frame lines, ink below the Z line, and **all three chrome bits** — the stack-window arm claims one and clears the other two, so the chrome mask is what tells the arms apart. Written because a probe found every painting call in the suite taking the stack window |
 | V28 | the six measured heights the placement rests on, plus the two inequalities they support: one line does NOT hold a full-size integral, the pair DOES hold the double |
 | V29-V32 | shapes appnote 22's own set never reaches: a constructed function UNDER an integral (its PLTINTG integrand), a SERIAL XEQ chain (the other half of "nested or serial"), the `PROD` arm, and an integration limit that is an expression rather than a literal or a bare name |
 | V33, V38 | the ENTER lift latch. V33 is the readable case (`5 ENTER 3 +`); **V38 is the one with teeth** — see below |
@@ -690,6 +692,19 @@ Z half, which is what actually distinguishes "drawn across the Z/T
 window" from "a one-line form that happens to sit inside it". A
 fallback path that lands in the same region as the path under test will
 mask its failure.
+
+**And the caveat that was recorded against V27 was wrong.** Round 6 noted
+that the same fixture returned `lastErrorCode` 24 with
+`screenHoldsDrawnPixels` false, so it never reached a paint arm at all. A
+probe placed at the assertion point measures `err=0`, `holds=1`,
+`inT=3827912`, `inZ=4394459`, `below=0` and the X line byte-identical. The
+earlier reading belonged to V20, which runs immediately before it and
+declines with exactly that code. MUT-97, MUT-98 and MUT-99 had already
+reddened V27 through the paint arm, which said the same thing and was not
+weighed. **Put the probe where the pin asserts, or it measures a
+neighbour.** The probe's real yield was V-FULL: six calls in this suite
+reach a paint arm and all six took the stack window, so the success half
+of `ppvPaintFullScreen` had no reaching input.
 
 **The same-level lesson, three times over.** MUT-79, MUT-90 and MUT-96
 all survived their first battery, and all three for one reason: the pin

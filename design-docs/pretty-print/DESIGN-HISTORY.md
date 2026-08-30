@@ -1480,3 +1480,60 @@ The lesson is the clause count. Each round added a spelling to the same
 predicate and each fix looked like it closed the class. A guard whose body
 is a growing disjunction of forms is a guard that has not found its
 property yet.
+
+## The V27 caveat was wrong, and what the probe found instead (2026-08-30)
+
+Round 6 recorded a measurement it could not explain: V27, the placement
+fixture, was said to return `lastErrorCode` 24 with
+`screenHoldsDrawnPixels` false, so it never reached a paint arm and its
+ink sums passed on an untouched screen. The note went into the fixture's
+comment, into the round-6 commit and into V-CHROME's comment, which
+states that six calls in the suite reach a paint arm "and V27's is not
+one of them".
+
+A probe at the assertion point says otherwise. V27's call comes back with
+`err=0`, `holds=1`, `ti=TI_SHOWNOTHING`, `inT=3827912`, `inZ=4394459`,
+`below=0`, and the X line byte-identical. The fixture works.
+
+Two facts explain how the wrong number was recorded. `displayCalcErrorMessage`
+paints nothing, so any decline leaves the ink sums at zero — the reported
+state and the reported result cannot both be true. And V20 runs
+immediately before V27 on a program that declines with exactly error 24
+and `holds` false. A probe that prints from inside `fnPrettyVisual`, or
+after the block rather than at the assertion, reads V20's decline and
+attributes it to the next fixture. **A measurement is evidence of what a
+pin does only when the probe sits where the pin asserts.** Three earlier
+mutations (MUT-97, MUT-98, MUT-99) had already reddened V27 through the
+paint arm, which contradicted the note and was not weighed.
+
+The same probe found a real hole one arm over. Six calls reach a paint
+arm and **all six take the stack window at its first rung**, so the
+success half of `ppvPaintFullScreen` had no reaching input at all. V67
+pins that both arms can fail; nothing drove the full screen to succeed.
+V-FULL closes it with a quadruple integral: V28 measures the chain at
+38/58/78 px standard and 31/51/71 tiny, so a fourth level is 98 and 91
+against a 72-row band. Both stack rungs decline it and the 147-row full
+band takes it. The row asserts the frame lines, the three chrome bits
+that tell the two arms apart, and ink below the Z line.
+
+V27 also gains the explicit error-code check it never carried. It could
+not pass vacuously before — the `screenHoldsDrawnPixels` assertion
+already blocked that — but the reach is now stated where a reader looks
+for it.
+
+## The screen.c hook row, corrected (2026-08-30)
+
+DESIGN.md §7 described one `screen.c` hunk. The patch carries five: the
+glyph pre-clear x-guard, the doubled-write column clamps, the §6 inline
+arm, the menu and status repaint guard, and the browser's `calcMode`
+case. The sibling-adjacency argument was stale with it. The real figures
+are in the table now, including the tight one: undo-history's second hunk
+ends one line above ours, because both packages add a case to the same
+switch. That site is contended by construction and the combined gate is
+what proves the two compose.
+
+The last whitespace-only churn finding went at the same time.
+`showEquation`'s guard re-indented the upstream `showString` line it
+encloses. The enclosed line keeps its own indentation now, which is the
+idiom `aafd38f7d` established for `screen.c`. `patch_churn_scan.py` over
+the package reports zero mechanical findings.
