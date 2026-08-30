@@ -538,3 +538,63 @@ Hunt it at: any grammar with a render path and an eval path. Extract the
 name test into ONE function both call, and pin the same spelling through
 both surfaces in the same test — a pin that only evaluates will not see
 the renderer's extra gate.
+
+## a predicate that accumulates alphabets instead of naming its class (pretty-print, PP18 r5/r6)
+
+A rule tests for the shapes you have seen. Each audit finds another
+spelling of the same property, and each fix adds another clause to the
+same predicate. The clause count is the tell: three waves in, ask what
+the property IS, not which forms it takes.
+
+Found: whether a power's base needs brackets, asked as "is the base
+already a power". Round 5 answered it with the node kind, then with a
+trailing-superscript-glyph scan. The out-of-family round added a typed
+ASCII exponent (`1.e+50`). Round 6 added a signed numeral (`5 +/- x²`
+drew `-5²` for a value of 25) and an angular-unit suffix that lands
+AFTER the exponent. Four alphabets for one property — "the base does not
+read as an atom" — which the walker had stated correctly, narrower, one
+file away, so the two producers drew the same numeral differently.
+
+The glyph scan also shipped INERT once: the display formatter pads a
+value with a trailing space glyph, so testing the literal last glyph
+never reached the exponent underneath, and the pin written beside it
+agreed and stayed green. Only the mutation caught it.
+
+Hunt it at: any guard whose body is a disjunction of forms. Ask which
+producer KNOWS the fact — usually the one that formatted the text — and
+whether it already reports it. If two producers answer the same question
+independently, they have already drifted or will.
+
+## a registry sized against the population as it stood, failing open (pretty-print, PP18 r6)
+
+A uniqueness or bookkeeping check with a hand-typed capacity and no else
+arm. Past capacity it neither matches nor records, and reports the same
+green as a working one.
+
+Found: a fixture-label collision check holding 48 names against a suite
+with 83, silently dropping 37 — including the exact pair whose collision
+motivated it. Its own validating measurement passed because that pair's
+first member is distinct name #10, inside the protected prefix.
+
+Hunt it at: every fixed-size table in test or bookkeeping code. Count the
+population, not the table. The overflow arm must fail, and the proof that
+the check works must use an element from the END of the population.
+
+## a buffer sized against a formatter's output, not its scratch (pretty-print, PP18 r6)
+
+An upstream builder that does not write from the front: it lays its
+result out from the middle of the buffer as scratch and compacts it
+afterwards. Sizing the buffer by counting the digits it can produce is
+the wrong measurement by a factor of the scratch offset.
+
+Found: `shortIntegerToDisplayString` starts at `displayString
+[ERROR_MESSAGE_LENGTH / 2]` = 256; a caller passed `char buf[200]`, so
+the first byte written was 56 past the end, three times per history row.
+A prior round cleared it by reasoning about digit counts with "ample
+margin". The class was already documented in a SIBLING package, with a
+`_Static_assert`, which the author of this file had no reason to open.
+
+Hunt it at: every call to a display builder. Read the builder's first
+statement, not its output. And when a package documents a constraint on
+shared upstream code, check whether its siblings violate it — the
+document does not travel with the constraint.

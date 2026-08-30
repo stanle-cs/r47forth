@@ -1456,3 +1456,27 @@ meets.
 Entries above this one keep the old name deliberately: they record what
 was true when they were written, and so do the `AUDIT_*` reports. Anyone
 grepping `ppfCombine` in the trail should read it as `ppfBuildOp`.
+
+## The bracket rule's home, r5–r6 (2026-08-30)
+
+The stacked-power bracket moved three times before it landed. Round 4 put
+it in `ppfBuildOp1`'s SQUARE/CUBE arm, "the one place that can answer it",
+and the header said no caller carried the precondition. Round 5 found
+`ppfBuildOp2`'s `ITM_YX` arm building the same node kind twelve lines
+above, and a value in scientific form whose exponent is already spelled
+into its glyphs. Round 6 found two more spellings — a typed negative and a
+tagged angle — and made the point the three rounds were circling: the
+question is not "is the base already a power", it is "does the base read
+as an atom", and only the producer that formatted the text can answer it.
+
+So `ppfTextIsAtom` names the class and both numeric leaf builders report
+`PPF_PREC_ADD` when their text is not one. The walker calls the same
+function — it had its own narrower version ("a signed numeral brackets as
+a term") since the PP18 refactor, which is exactly why the two surfaces
+drew `5 +/- x²` differently. `ppfPowBase` keeps only the structural
+`PP_SUP` test, because that one genuinely is invisible to precedence.
+
+The lesson is the clause count. Each round added a spelling to the same
+predicate and each fix looked like it closed the class. A guard whose body
+is a growing disjunction of forms is a guard that has not found its
+property yet.
