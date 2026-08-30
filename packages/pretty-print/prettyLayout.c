@@ -289,13 +289,11 @@ bool_t ppMeasure(uint8_t n, uint8_t depth) {
         if(idxAsc > nd->ascent) {
           nd->ascent = idxAsc;
         }
-        /* AUDIT PP18RR1-1. The descent dual of the line above. The index
-         * tucks above the baseline, but its own ink bottom sits at
-         * relBase + descent, which for an index that has a descent at all —
-         * any b/a fraction — falls below a box that only ever grew upward.
-         * Every band check downstream trusts ascent + descent, so acceptance
-         * was granted for a box the index tail exits and the paint pass drew
-         * it there. Class: one-sided bounding-box aggregation. */
+        /* The descent dual of the line above. The index tucks above the
+         * baseline, but its ink bottom is at relBase + descent, which for
+         * an index with any descent of its own falls below the box. Every
+         * band check downstream trusts ascent + descent, so the box must
+         * cover both edges. */
         int16_t idxDesc = (int16_t)(ppPool[index].relBase + ppPool[index].descent);
         if(idxDesc > nd->descent) {
           nd->descent = idxDesc;
@@ -501,16 +499,13 @@ bool_t ppMeasure(uint8_t n, uint8_t depth) {
 }
 
 
-/* AUDIT R3-11. Every rule this engine paints — fraction bars, radical
- * vinculums, the |x| strokes, tall parens, the Sigma/Pi/integral
- * glyphs — is an lcd_fill_rect, and its coordinates are uint32_t. The
- * browser's pan paints from a NEGATIVE origin, and a negative x cast to
- * uint32_t becomes a huge value, so the rectangle lands nowhere and the
- * rule is dropped WHOLE. Glyph ink clips correctly through showString,
- * so a panned row lost its fraction bar while keeping its digits —
- * measured: 1243 lit pixels with one solid run before panning, 910 and
- * NO solid run after. Clip here, once, rather than at nineteen call
- * sites. ppDrawLine already screens negatives per pixel. */
+/* Every rule this engine paints — fraction bars, radical vinculums, the
+ * |x| strokes, tall parens, the big-operator glyphs — is an
+ * lcd_fill_rect taking uint32_t coordinates. The browser's pan paints
+ * from a negative origin, and a negative x cast to uint32_t is a huge
+ * value, so the rectangle would land nowhere and the rule would vanish
+ * while the glyphs beside it still drew. Clip once here rather than at
+ * every call site; ppDrawLine screens negatives per pixel already. */
 static void ppFillVal(int16_t x, int16_t y, int16_t w, int16_t h, int val) {
   if(w <= 0 || h <= 0) {
     return;
@@ -539,17 +534,13 @@ static void ppFill(int16_t x, int16_t y, int16_t w, int16_t h) {    // ink
   ppFillVal(x, y, w, h, LCD_EMPTY_VALUE);
 }
 
-/* AUDIT R3-13. showString paints every glyph through showGlyphCode with
- * noPreClear false, and that pre-clear covers the glyph's whole FONT box
- * — rowsAboveGlyph + rowsGlyph + rowsBelowGlyph (screen.c:1239) — not
- * the ink this engine measured. Two consequences, both of them visible.
- * A denominator whose ink is short sits with its baseline pushed UP so
- * the ink still clears the bar by fracGap; its font box then reaches
- * fracGap + (boxAscent - ascent) rows higher, across the bar and into
- * the numerator, which is painted first and so is erased. Measured over
- * the numerator's own columns, an '8' numerator kept 52 lit rows over an
- * '8' denominator, 38 over an 'x', and 20 over a '.'. The same overshoot
- * lets a run packed against the band edge clear frame rows its measured
+/* showString paints each glyph through showGlyphCode with noPreClear
+ * false, and that pre-clear covers the glyph's whole FONT box — above,
+ * glyph and below — not the ink this engine measured. A short-inked
+ * denominator sits with its baseline pushed up so the ink still clears
+ * the bar, and its font box then reaches across the bar into the
+ * numerator, which is painted first and so gets erased. The same
+ * overshoot lets a run at the band edge clear frame rows its measured
  * ink never touches.
  *
  * Clear the MEASURED box here and paint the glyphs with noPreClear, so
@@ -558,11 +549,11 @@ static void ppFill(int16_t x, int16_t y, int16_t w, int16_t h) {    // ink
  * every denominator, by construction. Ordering rules and stretched
  * parens still paint after their glyph runs; that rule is unchanged.
  *
- * slc/sec reproduce _doShowString (screen.c:1365-1380) for the
- * showLeadingCols=false, showEndingCols=true call this replaces, so the
- * advance stays the one stringWidth() measured. Negative x and y are
- * upstream's own convention here: showGlyphCode recovers a wrapped y at
- * screen.c:1226, and column positions wrap back into range unsigned. */
+ * slc/sec reproduce _doShowString for the showLeadingCols=false,
+ * showEndingCols=true call this replaces, so the advance stays the one
+ * stringWidth() measured. Negative x and y are upstream's own convention
+ * here: showGlyphCode recovers a wrapped y, and column positions wrap
+ * back into range unsigned. */
 static void ppShowRun(const char *s, const ppMetrics_t *m, int16_t x, int16_t baseline,
                       int16_t asc, int16_t desc) {
   ppFillVal(x, (int16_t)(baseline - asc), (int16_t)stringWidth(s, m->font, false, true),
@@ -588,10 +579,9 @@ static void ppDrawLine(int16_t x0, int16_t y0, int16_t x1, int16_t y1) {
   int16_t sy = (int16_t)(y0 < y1 ? 1 : -1);
   int16_t err = (int16_t)(dx - dy);
   for(;;) {
-    // AUDIT R3-12. This screened negatives but not the far edges, and
     // setBlackPixel is a thin bitblt24 wrapper with no bounds check of
-    // its own — a panned or oversized stroke wrote past the frame
-    // buffer. Both ends, both axes.
+    // its own, so a panned or oversized stroke would write past the
+    // frame buffer. Screen both ends of both axes.
     if(x0 >= 0 && y0 >= 0 && x0 < SCREEN_WIDTH && y0 < SCREEN_HEIGHT) {
       setBlackPixel((uint32_t)x0, (uint32_t)y0);
     }
@@ -799,14 +789,11 @@ static void ppPaint(uint8_t n, int16_t x, int16_t baseline) {
         ppPaint(c, x + ppPool[c].relX, baseline + ppPool[c].relBase);
       }
       if(nd->kind == PP_FRAC) {
-        // AUDIT R5-1. This used to say the bar goes last because
-        // showGlyphCode pre-clears each glyph's full box — true when it
-        // was written, false since R3-13 gave the runs noPreClear. The
-        // children now clear only their MEASURED boxes, which stop
-        // fracGap+1 rows above the bar and start fracGap+2 below it, so
-        // for a fraction the order is no longer load-bearing. It is kept
-        // because the paint-order rule still binds the one run painted
-        // with a font-box pre-clear: the radical sign glyph.
+        // The children clear only their MEASURED boxes, which stop
+        // fracGap+1 above the bar and start fracGap+2 below it, so for a
+        // fraction the paint order is not load-bearing. It is kept
+        // because the rule still binds the one run painted with a
+        // font-box pre-clear: the radical sign glyph.
         // Ink is LCD_EMPTY_VALUE — the same lcd_fill_rect
         // drawSinglePixelFullWidthLine makes for its visible rules.
         ppFill((int16_t)(x), (int16_t)(baseline + m->barTopRel), (int16_t)(nd->width), (int16_t)(m->barThick));
@@ -829,21 +816,18 @@ void ppSetFontDeep(uint8_t n, uint8_t fontId) {
   }
 }
 
-/* AUDIT PP18RR3-1. Every glyph this engine paints goes through here or
- * through ppRenderRightAligned, so this is the one place the substitution
- * can be suppressed. showGlyphCode swaps in a numericFontBold glyph whenever
- * FLAG_BOLD is set and the font is &numericFont, and advances by the BOLD
- * glyph's rows — while ppMetricsInit, stringWidth and ppRunInk all measured
- * the PLAIN table, and the node has already cleared exactly the box those
- * metrics promised. Suppressing the flag for the duration of the paint keeps
- * paint and measure on the same table, so pretty print still draws for a
- * BOLD owner; it just draws in the plain numeric face for now. Making the
- * metrics bold-aware instead would put cached state behind a runtime flag,
- * which is a separate decision.
+/* Every glyph goes through here or ppRenderRightAligned, so this is the
+ * one place the bold substitution can be suppressed. showGlyphCode swaps
+ * in a numericFontBold glyph whenever FLAG_BOLD is set and the font is
+ * &numericFont, and advances by the BOLD glyph's rows — while the
+ * metrics, stringWidth and ppRunInk all read the PLAIN table and the node
+ * has already cleared the box those metrics promised. Suppressing the flag
+ * for the paint keeps both on one table, so a BOLD owner still gets a
+ * drawing, in the plain numeric face.
  *
- * The flag is restored on the single exit path of each wrapper — there is no
- * early return between the save and the restore, and systemFlagAction has no
- * FLAG_BOLD arm, so this is a bit flip with no side effect. */
+ * Restored on the single exit path of each wrapper; there is no early
+ * return between save and restore, and systemFlagAction has no FLAG_BOLD
+ * arm, so this is a bit flip with no side effect. */
 static bool_t ppSuppressBold(void) {
   bool_t was = getSystemFlag(FLAG_BOLD);
   if(was) {

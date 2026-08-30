@@ -135,10 +135,9 @@ uint8_t ppfBuildOp2(uint16_t item, uint8_t a, int aPrec, uint8_t b, int bPrec,
           || a == PP_NONE || b == PP_NONE) {
         return PP_NONE;
       }
-      // AUDIT R4-3. ppfParen allocates, so it can fail — and PP_HBOX is
-      // the one variadic container, so ppMeasure has no arity check that
-      // would catch the missing child. An unchecked append here renders
-      // "log2" with its argument silently absent, reported as success.
+      // ppfParen allocates and can fail, and PP_HBOX is variadic, so
+      // ppMeasure has no arity check to catch a missing child: unchecked,
+      // this renders "log2" with its argument absent and reports success.
       uint8_t par = ppfParen(a, ctxFont);
       if(par == PP_NONE) {
         return PP_NONE;
@@ -176,8 +175,8 @@ uint8_t ppfBuildOp2(uint16_t item, uint8_t a, int aPrec, uint8_t b, int bPrec,
           || a == PP_NONE || b == PP_NONE) {
         return PP_NONE;
       }
-      // AUDIT R4-3, the same shape: unchecked, this renders the function
-      // NAME alone with "(a, b)" absent, and reports success.
+      // Same shape: unchecked, this renders the function NAME alone with
+      // "(a, b)" absent, and reports success.
       uint8_t par = ppfParen(inner, ctxFont);
       if(par == PP_NONE) {
         return PP_NONE;
@@ -313,13 +312,10 @@ static void ppfLabelName(uint16_t param, char *out) {
 static uint8_t ppfBigop(uint16_t item, uint16_t label, const uint8_t *stepBytes,
                         uint8_t fromN, uint8_t toN,
                         uint8_t ctxFont, uint8_t childFont, int *outPrec) {
-  /* AUDIT R2-2: a big operator is not an atom here either. Its body is
-   * drawn to the RIGHT of the stroke, so a factor or exponent beside it
-   * binds INTO the body — the same defect PP18-4 fixed in the walker,
-   * left standing at the neighbour that shares this file. A captured or
-   * replayed Sigma took no brackets in PSHOW/PHIST while VISUAL drew
-   * them. ADD brackets it under x, / and ^ and leaves it bare as the
-   * left operand of a +, which is where convention already scopes it. */
+  /* A big operator is not an atom. Its body is drawn to the RIGHT of the
+   * stroke, so a factor or exponent beside it binds INTO the body. ADD
+   * brackets it under x, / and ^ and leaves it bare as the left operand
+   * of a +, which is where convention already scopes it. */
   *outPrec = PPF_PREC_ADD;
   bool_t isInt = (item == ITM_INTEGRAL_YX);
   uint8_t big = ppNewBox(PP_BIGOP, ctxFont);
@@ -628,10 +624,9 @@ bool_t ppfBuildEntry(const uint8_t *entry, uint8_t ctxFont, uint8_t childFont,
 // variable-height rewrite, when glyph BOXES extended past the ink by
 // their padding rows (standardFont boxAscent 16 vs digit ink 12) and
 // showGlyphCode's pre-clear wiped a frame line the ink never touched.
-// AUDIT R5-1: that mechanism is gone since R3-13 — ppShowRun clears only
-// the measured ink box — so the inset now buys plain clearance between a
-// row's ink and the frame. Kept at 4: the rows are laid out against it,
-// and nothing is gained by reclaiming the pixels.
+// That mechanism is gone — ppShowRun clears only the measured ink box —
+// so the inset now buys plain clearance between a row's ink and the
+// frame. Kept at 4: the rows are laid out against it.
 #define PPF_BAND_TOP    25
 #define PPF_BAND_BOTTOM 163
 #define PPF_ROW_GAP     5
@@ -671,23 +666,18 @@ bool_t ppfBuildRow(uint8_t row, uint8_t haveCurrent, bool_t canPan, uint8_t *roo
     }
     const ppNode_t *n = ppNodeAt(root);
     int16_t h = (int16_t)(n->ascent + n->descent);
-    // AUDIT R1-10. HEIGHT is a hard limit — a row taller than the band
-    // cannot be shown at all. WIDTH is not: the browser can pan
-    // sideways. Rejecting on width at BOTH rungs meant an ordinary long
-    // formula (three 16-digit numbers added: 724 px standard, 550 px
-    // tiny) was not panned, not truncated, not marked — it was ABSENT,
-    // and with it the only row the band came back with no lit pixels at
-    // all. So width only sends us down a rung; at the last rung the row
-    // is accepted however wide it is, and panning carries it.
+    // HEIGHT is a hard limit: a row taller than the band cannot be shown
+    // at all. WIDTH is not, because the browser pans sideways. So width
+    // only sends us down a rung; at the last rung the row is accepted
+    // however wide it is, and panning carries it.
     if(h > PPF_BAND_BOTTOM - PPF_BAND_TOP + 1) {
       continue;   // too tall even here: try tiny, then give up
     }
-    // AUDIT R2-2. Width sends the row down a rung; at the LAST rung it
-    // depends on the caller. The browser can pan sideways, so it takes
-    // the row however wide it is. The full-screen pager cannot pan, and
-    // an over-wide row there would be painted CLIPPED — showing
-    // `12345678 + 98` for `12345678 + 98765432`, which is a lie by
-    // truncation, and worse than the honest omission it replaced.
+    // At the LAST rung, width depends on the caller. The browser pans
+    // sideways, so it takes the row however wide. The full-screen pager
+    // cannot pan, and an over-wide row there would paint CLIPPED —
+    // showing `12345678 + 98` for `12345678 + 98765432`, a lie by
+    // truncation. It omits the row instead.
     if(n->width > SCREEN_WIDTH - 8 && (rung == 0 || !canPan)) {
       continue;
     }

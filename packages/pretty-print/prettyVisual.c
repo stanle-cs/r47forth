@@ -80,7 +80,7 @@ typedef struct {
                         ///< from 256 lower — another leaf's text, in bounds,
                         ///< so the integral drew a d-variable the program
                         ///< never integrates over, with no decline and no
-                        ///< D-number (AUDIT PP18-7, observed in the wild)
+                        ///< D-number
   uint8_t  varLen;
 } ppvAst_t;
 
@@ -110,13 +110,11 @@ typedef struct {
   char     binding[PPV_MAX_DEPTH][PPV_NAME_MAX];    ///< construct variables in scope
   bool_t   bindingSynth[PPV_MAX_DEPTH];             ///< true = an invented sum counter
   uint8_t  bindingCount;
-  /* AUDIT PP18-3. ENTER pushes the SAME node twice, so the tree is a DAG
-   * and the layout pass would visit a shared child once per path: 2^k
-   * for k dups. Exhausting the 72-node layout pool does not stop it,
-   * because ppNewBox returning PP_NONE is a per-call value and not a
-   * latch — so the walk keeps doubling through failures that cost
-   * nothing. This IS the latch. Visits are counted so a pin can assert
-   * the bound rather than a wall-clock time. */
+  /* ENTER pushes the same node twice, so the tree is a DAG: laying it out
+   * naively visits a shared child once per path, 2^k for k dups. Pool
+   * exhaustion does not stop that on its own, because ppNewBox returns
+   * PP_NONE per call without latching. layoutFull is that latch.
+   * layoutVisits is counted so a test can assert the bound. */
   bool_t   layoutFull;
   uint32_t layoutVisits;
 } ppvCtx_t;
@@ -189,12 +187,10 @@ static uint8_t ppvLeaf(ppvCtx_t *ctx, uint8_t kind, const char *text, uint16_t l
   return n;
 }
 
-/* AUDIT PP18RR1-3. The drop threshold is the LIVE stack depth, not the
- * compile-time slot count: under SSIZE4 the hardware drops at four
- * (getStackTop() == REGISTER_T) while this mirror kept eight, so a chain of
- * five distinct literals drew operands the real stack had already dropped —
- * 1+2+3+4+5 for a program that returns 16. The array stays eight wide; only
- * the effective depth follows the flag. */
+/* How many stack levels the machine currently has: four under SSIZE4,
+ * eight otherwise. The array is always eight wide; only the effective
+ * depth follows the flag, so the mirror drops its bottom entry where the
+ * hardware does. */
 static uint8_t ppvLiveStackSlots(void) {
   int16_t n = (int16_t)(getStackTop() - REGISTER_X + 1);
   if(n < 1) {
@@ -440,14 +436,10 @@ static bool_t ppvBody(ppvCtx_t *ctx, uint16_t bodyIdx, const char *var,
   sub.depth        = 0;
   sub.liftDisabled = false;
   sub.saturated    = false;
-  /* ONE shared VAR node on every level, which is what this comment
-   * always claimed and what the code did not do (AUDIT PP18-8): the
-   * allocation sat inside the loop and spent eight of the 48 arena
-   * nodes per construct body. Five disjoint sums exhausted the arena and
-   * declined a formula the walker can draw perfectly well. The seeding
-   * is about what the program can READ, and it reads the same variable
-   * from every level, so one node is not an optimisation — it is the
-   * accurate model. */
+  /* One shared VAR node on every level, not one per level. The seeding
+   * models what the body can READ, and it reads the same variable from
+   * every level, so sharing is the accurate model rather than a saving —
+   * and it keeps a construct body to one arena node instead of eight. */
   uint8_t seed = ppvLeaf(ctx, PPA_VAR, var, (uint16_t)strlen(var), PPV_F_BOUND);
   for(uint8_t i = 0; i < PPV_STACK_SLOTS; i++) {
     if(!ppvPush(ctx, &sub, seed)) {
@@ -529,25 +521,19 @@ static bool_t ppvIntegral(ppvCtx_t *ctx, ppvStack_t *stk, const uint8_t *pa) {
                       PPV_NIL, false);
 }
 
-/* Is this name already a variable somewhere in the tree we have built?
+/* Is this name already a free variable somewhere in the tree built so far?
  *
- * AUDIT PP18-9: the counter was checked only against ENCLOSING constructs,
- * which is empty at top level — so a program whose loop count lives in a
- * variable called `n` drew SUM(n x n; n; 1; n), with the free variable
- * sitting in the upper-limit slot of the operator that binds it. Nothing
- * on screen told the two `n`s apart. The rule DESIGN.md states is about
- * shadowing in the drawn formula; the limits are inside the operator's
- * visual scope, so they are part of it. */
+ * An invented counter must not collide with a name the program itself
+ * uses, or the drawing shows the same letter for two different things
+ * with nothing to tell them apart. Enclosing constructs are checked
+ * separately, through ctx->binding. */
 static bool_t ppvNameUsedInAst(const ppvCtx_t *ctx, const char *name) {
   uint16_t len = (uint16_t)strlen(name);
   for(uint8_t i = 0; i < ctx->astUsed; i++) {
     const ppvAst_t *a = &ctx->ast[i];
-    /* AUDIT R2-4: only FREE variables collide. A seeded read carries
-     * PPV_F_BOUND and a closed sibling construct's counter is out of
-     * scope by the time we are choosing again — counting either spent
-     * the four-name pool on scopes nobody can confuse, and a fifth
-     * disjoint sum declined with nothing to collide with. Enclosing
-     * constructs are handled separately, by ctx->binding. */
+    /* Only FREE variables collide. A seeded read carries PPV_F_BOUND, and
+     * a closed sibling's counter is out of scope by now; counting either
+     * would spend the four-name pool on scopes nobody can confuse. */
     if(a->kind == PPA_VAR && (a->flags & PPV_F_BOUND) == 0
         && a->textLen == len
         && memcmp(ctx->pool + a->textOff, name, len) == 0) {
@@ -557,15 +543,13 @@ static bool_t ppvNameUsedInAst(const ppvCtx_t *ctx, const char *name) {
   return false;
 }
 
-/* Does this name occur inside ONE subtree — as a free variable, or as
- * another construct's bound variable?
+/* Does this name occur inside ONE subtree — free, or as another
+ * construct's bound variable?
  *
- * AUDIT PP18R3-5: R2-4 was right that a CLOSED sibling's counter is
- * reusable and wrong to drop the check altogether. A construct that ends
- * up inside the next operator's LIMITS is not closed in any sense that
- * matters: it is drawn within that operator's visual scope, which is the
- * same reason PP18-9 counted the limits at all. The distinction is not
- * "already built" but "about to be drawn inside me", and the limit
+ * A closed sibling's counter is reusable, but a construct that ends up
+ * inside the next operator's LIMITS is not closed in any sense that
+ * matters: it will be drawn within that operator's visual scope. The test
+ * is "about to be drawn inside me", not "already built", and the limit
  * operands are exactly the subtrees that will be. */
 static bool_t ppvNameInSubtree(const ppvCtx_t *ctx, uint8_t n, const char *name) {
   if(n == PPV_NIL || n >= PPV_AST_NODES) {
@@ -590,10 +574,9 @@ static bool_t ppvNameInSubtree(const ppvCtx_t *ctx, uint8_t n, const char *name)
 }
 
 /* A construct whose variable has no name in the program needs one
- * invented. Shared by SUM/PROD (whose counter arrives in a filled stack)
- * and, since AUDIT R2-1, by a derivative over a body that declares no
- * MVAR — the same situation for the same reason. NULL if all four
- * candidates are genuinely taken. */
+ * invented. Used by SUM/PROD, whose counter arrives in a filled stack,
+ * and by a derivative over a body that declares no MVAR — the same
+ * situation. NULL if all four candidates are genuinely taken. */
 static const char *ppvInventName(const ppvCtx_t *ctx,
                                  uint8_t r1, uint8_t r2, uint8_t r3) {
   static const char *const cands[] = { "n", "m", "k", "j" };
@@ -612,28 +595,21 @@ static const char *ppvInventName(const ppvCtx_t *ctx,
 
 /* Which variable does the derivative actually vary?
  *
- * NOT the f' parameter — that was AUDIT PP18-1, and the picture it drew
- * meant something the program did not compute. `calcDeriv` asks
- * `deriv_pgm_variable(label)` (differentiate.c), which walks the BODY
- * program's own leading MVAR declarations and returns the one matching
- * the f' parameter, else the FIRST declared, else INVALID_VARIABLE. This
- * mirrors that walk, including REM transparency.
+ * NOT the f' parameter. calcDeriv asks deriv_pgm_variable(label), which
+ * walks the BODY program's own leading MVAR declarations and returns the
+ * one matching the f' parameter, else the first declared, else
+ * INVALID_VARIABLE. This mirrors that walk, including REM transparency.
  *
- * When no MVAR is declared the function returns "none" rather than an
- * error, and the CALLER invents a name. AUDIT R2-1: the first version of
- * this fix declined instead, on the reasoning that upstream varies
- * nothing — which is false. _differentiatorIteration's fnFillStack is
- * UNCONDITIONAL; only the STO into the named variable is guarded. So a
- * body that takes its argument off the stack, the ordinary RPN function
- * shape, is differentiated correctly and returns 6 while the decline
- * refused to draw it at all. The stack IS a channel, and a body reading
- * it positionally is in exactly the position a SUM body is in: no name
- * in the program, so the picture invents one.
+ * With no MVAR declared it returns "none" rather than an error, and the
+ * caller invents a name. Declining instead would be wrong: fnFillStack
+ * is unconditional in _differentiatorIteration and only the STO into the
+ * named variable is guarded, so a body that takes its argument off the
+ * stack differentiates correctly. Such a body is in the same position as
+ * a SUM body — no name in the program — so the picture invents one.
  *
- * The REM arm is NOT pinned: a REM step's tail is sized through
- * literalTailBytes, and a hand-built fixture byte cannot reach the shape
- * without reproducing that encoding. It mirrors upstream by
- * construction; recorded as a gap rather than claimed as tested. */
+ * The REM arm is not covered by a test: a REM step's tail is sized
+ * through literalTailBytes, which a hand-built fixture cannot reach
+ * without reproducing that encoding. */
 static bool_t ppvDerivVariable(ppvCtx_t *ctx, uint16_t bodyIdx,
                                const char *param, char *out) {
   if(bodyIdx >= numberOfLabels) {
@@ -658,10 +634,9 @@ static bool_t ppvDerivVariable(ppvCtx_t *ctx, uint16_t bodyIdx,
     char nm[PPV_NAME_MAX];
     xcopy(nm, step + 4, len);
     nm[len] = 0;
-    /* AUDIT R2-3: drawability is a property of the name we END UP with,
-     * not of every declaration we walk past. Refusing here aborted the
-     * whole picture over a declaration the scan was not going to use —
-     * upstream's own walk has no such notion and does not stop. */
+    /* Drawability is a property of the name we END UP with, not of every
+     * declaration walked past — upstream's walk has no such notion and
+     * does not stop. It is judged once, below. */
     if(strcmp(nm, param) == 0) {
       if(!ppvNameIsDrawable(nm)) {
         ppvDecline(ctx, PPV_D_NAME);
@@ -670,12 +645,9 @@ static bool_t ppvDerivVariable(ppvCtx_t *ctx, uint16_t bodyIdx,
       strcpy(out, nm);      // the match wins over the first, as upstream
       return true;
     }
-    /* AUDIT PP18R3-2: record the first declaration WHATEVER it looks
-     * like. Making drawability a conjunct here skipped an undrawable
-     * declaration and picked the second — so the mirror stopped
-     * mirroring, and upstream differentiated the first while the picture
-     * named the second. Drawability is judged once, below, against the
-     * name we actually end up with. */
+    /* Record the first declaration whatever it looks like. Skipping an
+     * undrawable one here would pick the second, while upstream still
+     * differentiates the first — the mirror would stop mirroring. */
     if(first[0] == 0) {
       strcpy(first, nm);
     }
@@ -723,7 +695,7 @@ static bool_t ppvDerivative(ppvCtx_t *ctx, ppvStack_t *stk, const uint8_t *pa,
   uint16_t bodyIdx = ctx->latchedDrv;
   // the point comes off the stack first: an invented name must not
   // collide with anything drawn inside this operator, and the point is
-  // drawn inside it (AUDIT PP18R3-5)
+  // drawn inside it
   uint8_t at;
   if(!ppvPop(ctx, stk, &at)) {
     return false;
@@ -746,19 +718,17 @@ static bool_t ppvDerivative(ppvCtx_t *ctx, ppvStack_t *stk, const uint8_t *pa,
       return false;
     }
     strcpy(sampled, inv);
-    invented = true;   // AUDIT PP18R3-1, see the ppvBody call below
+    invented = true;   // arms the shadow guard at the ppvBody call below
   }
   if(ppvNameInList(ctx->binding, ctx->bindingCount, sampled)) {
     ppvDecline(ctx, PPV_D_COLLISION);
     return false;
   }
   uint8_t body;
-  /* AUDIT PP18R3-1: `synthetic` is what arms the shadow guard in the RCL
-   * arm, and an INVENTED name is exactly the case it exists for. Passing
-   * false unconditionally meant a body recalling a real variable spelled
-   * like the invented counter was drawn as if it were the counter — the
-   * very confusion V6 and V71 forbid for sums. A name that came from the
-   * body's own MVAR is real and must NOT arm it. */
+  /* `synthetic` arms the shadow guard in the RCL arm, and an INVENTED
+   * name is exactly what it exists for: without it, a body recalling a
+   * real variable spelled like the counter draws as the counter. A name
+   * that came from the body's own MVAR is real and must not arm it. */
   if(!ppvBody(ctx, bodyIdx, sampled, invented, &body)) {
     return false;
   }
@@ -835,21 +805,17 @@ static bool_t ppvMonadicName(uint16_t op, char *out) {
  * metadata to infer from — TICKS is the counterexample that would break
  * one, looking inert and pushing a value nobody can predict. */
 
-/* AUDIT PP18RR1-11. The lift latch used to be cleared by a single statement
- * AFTER the switch — which seventeen arms skipped by returning, so the
- * invariant held only because each of those arms happened to be lift-neutral
- * or to own the latch itself. PP18-5 shipped a bug of exactly that shape and
- * was fixed by hand-inserting clears into the three arms that had it.
+/* Items that must NOT have the lift latch cleared after them.
  *
- * Upstream's shape is a dispatch epilogue no item can skip, so that is the
- * shape used here: the arms live in ppvStepArm and may return freely, and
- * ppvStep applies the epilogue afterwards. A new arm added tomorrow gets the
- * clear whether it breaks or returns; the exceptions are a NAMED list rather
- * than an emergent property of control flow.
+ * Upstream clears stack lift in a dispatch epilogue no item can skip, and
+ * this mirrors that: the arms live in ppvStepArm and may return freely,
+ * ppvStep applies the epilogue afterwards. A new arm gets the clear
+ * whether it breaks or returns, and the exceptions are this list rather
+ * than a property of control flow.
  *
- * The exceptions: the declaration/display items, which upstream marks
- * SLS_UNCHANGED and which must leave a pending lift alone, and ENTER, which
- * is the one item that ARMS the latch. */
+ * The exceptions are the declaration and display items, which upstream
+ * marks SLS_UNCHANGED and which must leave a pending lift alone, and
+ * ENTER, which is the item that ARMS the latch. */
 static bool_t ppvLiftNeutral(uint16_t op) {
   switch(op) {
     case ITM_NULL: case ITM_LBL: case ITM_MVAR: case ITM_REM:
@@ -863,19 +829,16 @@ static bool_t ppvLiftNeutral(uint16_t op) {
 
 static void ppvStepArm(ppvCtx_t *ctx, ppvStack_t *stk, uint16_t op, const uint8_t *pa);
 
-/* AUDIT PP18RR1-3, second half. The hardware stack is ALWAYS exactly its
- * configured depth: an operation that consumes operands pulls the rest down
- * and T duplicates itself into the vacated slot. The mirror modelled a
- * variable-depth stack that simply got shorter, so a chain long enough to
- * saturate it ran out of operands and declined where the machine kept
- * computing with replicated copies of T — under SSIZE4 that is five
- * literals, which is an ordinary program.
+/* T replication. The hardware stack is always exactly its configured
+ * depth: an operation that consumes operands pulls the rest down and T
+ * duplicates itself into the vacated slot, so a long chain keeps
+ * computing with copies of T rather than running out of operands.
  *
- * Replication only applies once the model has actually held a full stack.
- * Before that the deeper registers hold whatever preceded the program, which
- * a static walk cannot know, and the underflow decline is the honest answer.
+ * This only applies once the model has actually held a full stack. Before
+ * that the deeper registers hold whatever preceded the program, which a
+ * static walk cannot know, so the underflow decline is the honest answer.
  *
- * This lives in the epilogue for the same reason the lift clear does: the
+ * It lives in the epilogue for the same reason the lift clear does: the
  * arms that drop are many and the rule is one. */
 static void ppvRefillFromT(ppvStack_t *stk) {
   if(!stk->saturated) {
@@ -916,13 +879,9 @@ static void ppvStepArm(ppvCtx_t *ctx, ppvStack_t *stk, uint16_t op, const uint8_
       // the dup shares the operand node; the tree is a DAG here and
       // both back ends only ever read it
       if(ppvPush(ctx, stk, stk->ast[stk->depth - 1])) {
-        /* AUDIT PP18RR1-2. Classic ENTER clears FLAG_ASLIFT, so the next
-         * lifting read OVERWRITES X. Under eRPN a running program's ENTER
-         * dups AND re-sets the latch (keyboard.c's FLAG_ERPN && PGM_RUNNING
-         * arm), so the next read LIFTS instead — and the walker, which
-         * modelled classic unconditionally, drew 1+2x3 for a program that
-         * returns 8. The capture engine already models this branch; the
-         * mirror now reads the same flag. */
+        /* Classic ENTER clears FLAG_ASLIFT, so the next lifting read
+         * OVERWRITES X. Under eRPN a running program's ENTER dups AND
+         * re-sets the latch, so the next read LIFTS instead. */
         stk->liftDisabled = !getSystemFlag(FLAG_ERPN);
       }
       return;
@@ -1029,7 +988,7 @@ static void ppvStepArm(ppvCtx_t *ctx, ppvStack_t *stk, uint16_t op, const uint8_
 
     case ITM_PGMINT: {
       uint16_t idx;
-      stk->liftDisabled = false;   // AUDIT PP18-5, see ITM_XEQ
+      stk->liftDisabled = false;   // clear BEFORE the nested walk, see ITM_XEQ
       if(ppvLabelIndex(ctx, pa, &idx)) {
         // NOT restored when a construct returns: currentSolverProgram is
         // a persistent global upstream, so a callee's relatch is exactly
@@ -1041,15 +1000,11 @@ static void ppvStepArm(ppvCtx_t *ctx, ppvStack_t *stk, uint16_t op, const uint8_
 
     case ITM_XEQ: {
       uint16_t idx;
-      /* AUDIT PP18-5, and still load-bearing after PP18RR1-11 moved the
-       * epilogue into ppvStep. These clears are about ORDER, not about
-       * reaching the epilogue: they run BEFORE the nested ppvWalk, so a
-       * callee never inherits an ENTER latch armed in its caller. The
-       * epilogue cannot do that job — it runs after the arm returns.
-       * The original defect: an ENTER before one of these stayed armed and
-       * the next lifting read OVERWROTE the dup instead of pushing — a
-       * false D10 decline at top level, and inside a seeded construct body
-       * a silent wrong drawing, a x (a+b) drawn as x x (a+b). */
+      /* This clear is about ORDER, not about reaching the epilogue: it
+       * runs BEFORE the nested walk, so a callee never inherits an ENTER
+       * latch armed in its caller. The epilogue cannot do that job — it
+       * runs after the arm returns. Without it, an armed latch makes the
+       * callee's next lifting read overwrite the dup instead of pushing. */
       stk->liftDisabled = false;
       if(ppvLabelIndex(ctx, pa, &idx)) {
         ppvWalk(ctx, idx, stk);   // a subroutine shares its caller's stack
@@ -1059,7 +1014,7 @@ static void ppvStepArm(ppvCtx_t *ctx, ppvStack_t *stk, uint16_t op, const uint8_
 
     case ITM_PGMDRV: {
       uint16_t idx;
-      stk->liftDisabled = false;   // AUDIT PP18-5, see ITM_XEQ
+      stk->liftDisabled = false;   // clear BEFORE the nested walk, see ITM_XEQ
       if(ppvLabelIndex(ctx, pa, &idx)) {
         ctx->latchedDrv = idx;
       }
@@ -1200,8 +1155,8 @@ static uint8_t ppvAstToNodes(ppvCtx_t *ctx, uint8_t n,
       if(body == PP_NONE || from == PP_NONE
           || (to == PP_NONE && a->item != ITM_F1DRV)
           || (a->child[3] != PPV_NIL && step == PP_NONE)) {
-        ctx->layoutFull = true;   // AUDIT PP18-10: `step` was the one
-        return PP_NONE;           // operand not checked
+        ctx->layoutFull = true;   // every operand is checked, `step` included
+        return PP_NONE;
       }
       // The parser scopes an additive body by sniffing its runs for a
       // +/- joiner, because a parse has no precedence to consult. We do,
@@ -1232,18 +1187,12 @@ static uint8_t ppvAstToNodes(ppvCtx_t *ctx, uint8_t n,
       uint8_t kind = isInt ? PPQ_BIG_INTEG
                    : isDrv ? PPQ_BIG_DERIV
                    : ((a->item == ITM_SIGMAn) ? PPQ_BIG_SUM : PPQ_BIG_PROD);
-      /* AUDIT PP18-4: a big operator is NOT an atom, whatever the
-       * function-entry default says. Its body is drawn to the RIGHT of
-       * the stroke and extends as far as the body goes, so a factor or
-       * an exponent placed beside it binds INTO the body: `SUM n x 2`
-       * reads as SUM(n x 2), and (1+2+3)^2 drew exactly the picture
-       * 1^2+2^2+3^2 deserves. Reporting ADD makes ppfBuildOp bracket it
-       * under x, / and ^ — and leaves it bare as the left operand of a
-       * +, which is the one place convention already scopes it.
-       *
-       * The guard for stacked powers 40 lines up found this same class
-       * and enumerated the two OP1 members in front of it instead of the
-       * class; that is why the construct member shipped. */
+      /* A big operator is NOT an atom. Its body is drawn to the RIGHT of
+       * the stroke and extends as far as the body goes, so a factor or an
+       * exponent beside it binds INTO the body: `SUM n x 2` reads as
+       * SUM(n x 2). Reporting ADD makes ppfBuildOp bracket it under x, /
+       * and ^, and leaves it bare as the left operand of a +, which is
+       * the one place convention already scopes it. */
       *outPrec = PPF_PREC_ADD;
       return ppqBuildBigop(kind, a->item, body, varTiny, varCtx,
                            from, to, step,
@@ -1610,11 +1559,8 @@ static bool_t ppvPaintFullScreen(ppvCtx_t *ctx, uint8_t root) {
     if(m->width > SCREEN_WIDTH - 4 || m->ascent + m->descent > 167 - 21 + 1) {
       continue;
     }
-    // AUDIT PP18-2: the clear happens HERE, once the fit is known. It
-    // used to run first, so a layout that did not fit left the owner a
-    // framed blank screen with X's answer erased, no error and no
-    // D-number — held until EXIT. Nothing is erased until there is
-    // something to put in its place.
+    // The clear happens HERE, once the fit is known: nothing is erased
+    // until there is something to put in its place.
     lcd_fill_rect(0, 16, SCREEN_WIDTH, SCREEN_HEIGHT - 16, LCD_SET_VALUE);
     drawSinglePixelFullWidthLine(20);
     drawSinglePixelFullWidthLine(168);
@@ -1702,10 +1648,9 @@ void fnPrettyVisual(uint16_t label) {
     temporaryInformation = TI_SHOWNOTHING;
   }
   else if(!ppvPaintFullScreen(&ctx, root)) {
-    // Neither surface can hold it. PP17 had a linear line of last resort
-    // here and PP18 deleted it with the text; the honest replacement is
-    // an error, not a blank held screen (AUDIT PP18-2). Nothing has been
-    // painted, so X still shows what the program returned.
+    // Neither surface can hold it. An error is the honest answer, not a
+    // blank held screen: nothing has been painted, so X still shows what
+    // the program returned.
     displayCalcErrorMessage(ERROR_INVALID_DATA_TYPE_FOR_OP, ERR_REGISTER_LINE, REGISTER_X);
     #if (EXTRA_INFO_ON_CALC_ERROR == 1)
       sprintf(errorMessage, "too large to draw (D%u)", (unsigned)PPV_D_TOOBIG);
