@@ -214,14 +214,11 @@ void fnEqCalc(uint16_t unusedButMandatoryParameter) {
 
 
 
-/* PP17: the ONE function-name test the renderer, the evaluator and the
- * program walker all call — the same role ppEqConstructIs plays for the
- * constructs. It mirrors _parseWord's PARSER_HINT_FUNCTION resolution
- * exactly: the alias table first, then catalog and softmenu names gated
- * on EIM_ENABLED and a parameterless item. Mirroring rather than
- * inventing is the point — a name any one of the three accepts has to be
- * a name all three accept, or a program draws and will not compute, or
- * computes and will not draw. Returns the item id, or -1. */
+/* pretty-print package: the one function-name test the renderer, the
+ * evaluator and the program walker all call. It mirrors _parseWord's
+ * PARSER_HINT_FUNCTION resolution: the alias table first, then catalog
+ * and softmenu names gated on EIM_ENABLED and a parameterless item.
+ * Returns the item id, or -1. */
 int16_t ppEqFunctionItem(const char *name) {
   for(uint32_t i = 0; functionAlias[i].name[0] != 0; ++i) {
     if(compareString(functionAlias[i].name, name, CMP_NAME) == 0) {
@@ -687,10 +684,10 @@ void showEquation(uint16_t equationId, uint16_t startAt, uint16_t cursorAt, bool
     }
 
     if((!dryRun) && (*cursorShown || cursorAt == EQUATION_NO_CURSOR)) {
-      /* pretty-print package: 2D strip rendering when not editing; a
+      /* pretty-print package: 2D strip rendering when not editing. A
        * false return paints nothing and the linear line runs unchanged.
-       * The enclosed upstream line keeps its own indentation so the patch
-       * carries no whitespace-only hunk. */
+       * The enclosed upstream line keeps its own indentation so the
+       * patch carries no whitespace-only hunk. */
       if(cursorAt != EQUATION_NO_CURSOR || !prettyTryEquation(tmpString, (int16_t)(1 + X_OFF))) {
       showString(tmpString, &standardFont, 1 + X_OFF, SCREEN_HEIGHT - SOFTMENU_HEIGHT * 3 + 2 , vmNormal, true, true);
       }
@@ -737,8 +734,8 @@ static void _menuItem(int16_t item, char *bufPtr) {
 #define PARSER_OPERATOR_ITM_XFACT              5006
 #define PARSER_OPERATOR_ITM_END_OF_FORMULA     5007
 
-/* pretty-print package (PP14): equation-language big operators — the
- * implementation block sits at the end of this file */
+/* pretty-print package: equation-language big operators. The
+ * implementation block sits at the end of this file. */
 static int16_t ppEqBigopIntercept(const char *strPtr, uint16_t parseMode, char *mvarBuffer, bool_t wordEmpty);
 
 static uint32_t _operatorPriority(uint16_t func) {
@@ -1366,9 +1363,9 @@ void parseEquation(uint16_t equationId, uint16_t parseMode, char *buffer, char *
       ++strPtr;
     }
 
-    /* pretty-print package (PP14): SUM/PROD/DERIV/INTEG constructs are
-     * consumed whole (XEQ) or name-skipped (MVAR); only at a word
-     * boundary, so a variable ending in one of the names never matches */
+    /* pretty-print package: SUM/PROD/DERIV/INTEG constructs are
+     * consumed whole, only at a word boundary, so a variable ending in
+     * one of the names never matches */
     {
       int16_t ppAdv = ppEqBigopIntercept(strPtr, parseMode, mvarBuffer, bufPtr == buffer);
       if(ppAdv < 0) {
@@ -1714,45 +1711,31 @@ void parseEquation(uint16_t equationId, uint16_t parseMode, char *buffer, char *
 }
 
 
-/* ==== pretty-print package (PP14): equation-language big operators ======
+/* ==== pretty-print package: equation-language big operators =============
  * SUM(body;var;from;to[;step])  PROD(body;var;from;to[;step])
  * DERIV(body;var;at[;order])    INTEG(body;var;from;to)
  *
- * The separator is ';' — a hard parse error in the base grammar, so the
- * syntax space is free and it can never collide with a radix mark. The
- * parser's whole state lives in its caller's mvarBuffer, so nested slice
- * evaluation is re-entrant with private buffers; a body slice becomes a
- * HIDDEN formula slot appended at the list end (fnEqNew opens the editor,
- * deleteEquation resets currentSolverVariable — both unusable here) and
- * every buffer is a transient pool block freed on all exits: zero
- * resident BSS. Live blocks never relocate (free-list allocator), so the
- * outer parse's string pointer stays valid across the appends.
- * Design: design-docs/pretty-print/DESIGN.md §PP14. */
+ * The separator is ';', a hard parse error in the base grammar. A body
+ * slice becomes a hidden formula slot appended at the list end, and
+ * every buffer is a transient pool block freed on all exits. Live
+ * blocks never relocate, so the outer parse's string pointer stays
+ * valid across the appends. Design: DESIGN.md §6. */
 
 #define PPEQ_STATE_BYTES (PARSER_OPERATOR_STACK_SIZE * 2 + REAL34_SIZE_IN_BYTES * (2 + 2 * PARSER_NUMERIC_STACK_SIZE) + 4)
 #define PPEQ_WORD_BYTES  256
 #define PPEQ_SNAP_BYTES  (AIM_BUFFER_LENGTH + PPEQ_STATE_BYTES)
-// The depth cap is only a runaway backstop: the REAL guard is measured
-// stack consumption (below), so render and eval nesting limits match.
+// The depth cap is only a runaway backstop. The real guard is the
+// stack-consumption test below.
 #define PPEQ_MAX_DEPTH   8
 
 void _fnIntegrate(uint16_t labelOrVariable, bool_t XY);   // integrate.c, external but not in its header
 
 static uint8_t ppEqDepth = 0;
 
-/* Stack-consumption guard. The engines the constructs delegate to carry
- * heavy frames, and the device stack is a scarce OS-provided resource —
- * upstream's own answer is the blunt MAX_ENGINE_NESTING_DEPTH 1. Inside
- * the constructs we substitute a sharper fence: the outermost intercept
- * records the stack pointer, every deeper level measures consumption
- * against an allowance sized from the measured ultimate-tower cost (the
- * sim's 64-bit frames are fatter than the ARM's, so the allowance that
- * passes the sim test over-provisions the device). A breach refuses the
- * construct cleanly; it never dives on hope. */
-// Measured: the reference tower INTEG(DERIV(SUM/PROD...)) high-waters
-// 5.3 KB on the 64-bit sim (ARM frames are smaller), so 8 KB admits
-// roughly twice the reference depth before refusing — and caps the
-// construct burn well inside a DMCP-class program stack.
+/* Stack-consumption guard: the outermost intercept records the stack
+ * pointer, and every deeper level measures consumption against the
+ * allowance. A breach refuses the construct cleanly. The allowance is
+ * sized from the measured reference tower (DESIGN.md §6). */
 #define PPEQ_STACK_ALLOWANCE 8000
 static const char *ppEqStackBase = NULL;
 
@@ -1770,8 +1753,8 @@ static void ppEqSyntaxError(const char *what) {
   #endif // (EXTRA_INFO_ON_CALC_ERROR == 1)
 }
 
-/* append a hidden formula slot at the LIST END holding text; 0xffff on
- * failure (error already raised by setEquation) */
+/* Append a hidden formula slot at the list end holding text. Returns
+ * 0xffff on failure, with the error already raised. */
 static uint16_t ppEqTempAppend(const char *text) {
   formulaHeader_t *newPtr;
   if(lastErrorCode != ERROR_NONE) {
@@ -1796,7 +1779,7 @@ static uint16_t ppEqTempAppend(const char *text) {
   uint16_t slot = (uint16_t)(numberOfFormulae - 1);
   setEquation(slot, text);
   if(lastErrorCode != ERROR_NONE) {
-    // roll the append back; the slot may or may not hold data
+    // roll the append back. The slot can hold partial data.
     if(allFormulae[slot].sizeInBlocks > 0) {
       freeC47Blocks(TO_PCMEMPTR(allFormulae[slot].pointerToFormulaData), allFormulae[slot].sizeInBlocks);
     }
@@ -1808,11 +1791,11 @@ static uint16_t ppEqTempAppend(const char *text) {
   return slot;
 }
 
-/* tail-delete the hidden slot WITHOUT deleteEquation's
- * currentSolverVariable/graphVariabl1 resets */
+/* Tail-delete the hidden slot without deleteEquation's
+ * currentSolverVariable/graphVariabl1 resets. */
 static void ppEqTempDelete(uint16_t slot) {
   if(slot != (uint16_t)(numberOfFormulae - 1)) {
-    return;   // discipline: the temp slot is always last
+    return;   // the temp slot is always last
   }
   if(allFormulae[slot].sizeInBlocks > 0) {
     freeC47Blocks(TO_PCMEMPTR(allFormulae[slot].pointerToFormulaData), allFormulae[slot].sizeInBlocks);
@@ -1824,9 +1807,9 @@ static void ppEqTempDelete(uint16_t slot) {
   }
 }
 
-/* evaluate the hidden slot with private transient buffers; the result is
- * read from the slice's own numeric stack (END_OF_FORMULA leaves the
- * value in place). Real path only in v1: a complex result errors. */
+/* Evaluate the hidden slot with private transient buffers. The result
+ * is read from register X. `im` is optional: pass NULL to refuse a
+ * complex result. */
 static bool_t ppEqEvalSlot(uint16_t slot, real34_t *re, real34_t *im) {
   char *mvarBuffer;   // the PARSER_* macros bind to this name
   char *blk = allocC47Blocks(TO_BLOCKS(PPEQ_WORD_BYTES + PPEQ_STATE_BYTES));
@@ -1837,10 +1820,8 @@ static bool_t ppEqEvalSlot(uint16_t slot, real34_t *re, real34_t *im) {
   mvarBuffer = blk + PPEQ_WORD_BYTES;
   parseEquation(slot, EQUATION_PARSER_XEQ, blk, mvarBuffer);
   bool_t ok = false;
-  // END_OF_FORMULA pops the numeric stack after writing REGISTER_X, so X
-  // is where the slice's value survives (the differentiator reads it the
-  // same way). `im` is optional: callers that cannot use a complex value
-  // pass NULL and a complex result is refused for them.
+  // END_OF_FORMULA pops the numeric stack after writing REGISTER_X, so
+  // X is where the slice's value survives
   if(lastErrorCode == ERROR_NONE && getRegisterDataType(REGISTER_X) == dtReal34) {
     real34Copy(REGISTER_REAL34_DATA(REGISTER_X), re);
     if(im != NULL) {
@@ -1865,7 +1846,7 @@ static bool_t ppEqEvalSlot(uint16_t slot, real34_t *re, real34_t *im) {
   return ok;
 }
 
-/* evaluate a text slice (not NUL-terminated) via a temp slot */
+/* Evaluate a text slice (not NUL-terminated) via a temp slot. */
 static bool_t ppEqEvalSlice(const char *src, uint16_t len, real34_t *re) {
   // limits, steps and orders are always real: a complex one is refused
   char text[PPEQ_WORD_BYTES];
@@ -1884,11 +1865,10 @@ static bool_t ppEqEvalSlice(const char *src, uint16_t len, real34_t *re) {
   return ok;
 }
 
-/* DERIV/INTEG delegate to the upstream engines against the temp slot so
- * the numbers match the interactive surfaces exactly. The outer parse's
- * buffers (tmpString + state at tmpString+AIM_BUFFER_LENGTH — every XEQ
- * caller uses them) and the solver globals are snapshotted around the
- * call; the X-register flow is the engines' own. */
+/* DERIV/INTEG delegate to the upstream engines against the temp slot,
+ * so the numbers match the interactive surfaces. The outer parse's
+ * buffers (tmpString + state at tmpString+AIM_BUFFER_LENGTH) and the
+ * solver globals are snapshotted around the call. */
 static bool_t ppEqDelegate(uint8_t kind, uint16_t order, uint16_t bodySlot,
                            calcRegister_t var, const real34_t *a, const real34_t *b,
                            real34_t *re) {
@@ -1912,18 +1892,17 @@ static bool_t ppEqDelegate(uint8_t kind, uint16_t order, uint16_t bodySlot,
 
   bool_t ok = false;
   bool_t wasRefused = false;
-  // Establish both globals BEFORE the call and restore the caller's run
-  // state after. engineNestingWasRefused has one writer of `false` in
-  // the tree, so a stale `true` from an earlier refusal would be read as
-  // THIS call's verdict; programRunStop has the same shape.
+  // Establish both globals before the call and restore the caller's
+  // run state after: a stale value from an earlier refusal must not be
+  // read as this call's verdict.
   uint16_t savedRunStop = programRunStop;
   engineNestingWasRefused = false;
   if(ppEqStackExceeded()) {
     ppEqSyntaxError("not enough free stack for this nesting");
   }
   else if(kind == 2) {   // DERIV at point a
-    // the engine RCLs the point from the solver VARIABLE (covDerivEq
-    // stores X there first); feed both channels, direct writes
+    // the engine recalls the point from the solver variable: feed both
+    // channels with direct writes
     reallocateRegister(REGISTER_X, dtReal34, 0, amNone);
     real34Copy(a, REGISTER_REAL34_DATA(REGISTER_X));
     reallocateRegister(var, dtReal34, 0, amNone);
@@ -1935,14 +1914,13 @@ static bool_t ppEqDelegate(uint8_t kind, uint16_t order, uint16_t bodySlot,
       fn1stDerivEq(NOPARAM);
     }
   }
-  else {            // INTEG over [a, b] — XY=false: limits from the reserved vars
+  else {            // INTEG over [a, b], XY=false: limits from the reserved vars
     real34Copy(a, REGISTER_REAL34_DATA(RESERVED_VARIABLE_LLIM));
     real34Copy(b, REGISTER_REAL34_DATA(RESERVED_VARIABLE_ULIM));
     _fnIntegrate((uint16_t)var, false);
   }
-  // a REFUSED engine (upstream's nesting guard) leaves no result: X is
-  // stale and must not be read as one. PGM_WAITING counts as a refusal
-  // only if THIS call introduced it.
+  // a refused engine leaves no result: X is stale. PGM_WAITING counts
+  // as a refusal only if this call introduced it.
   if(engineNestingWasRefused
       || (programRunStop == PGM_WAITING && savedRunStop != PGM_WAITING)) {
     wasRefused = true;
@@ -1953,7 +1931,7 @@ static bool_t ppEqDelegate(uint8_t kind, uint16_t order, uint16_t bodySlot,
     ok = true;
   }
 
-  programRunStop = savedRunStop;   // the caller's run state is the caller's
+  programRunStop = savedRunStop;   // restore the caller's run state
   real34Copy(&savedUlim, REGISTER_REAL34_DATA(RESERVED_VARIABLE_ULIM));
   real34Copy(&savedLlim, REGISTER_REAL34_DATA(RESERVED_VARIABLE_LLIM));
   currentFormula = savedFormula;
@@ -1979,10 +1957,9 @@ static int16_t ppEqBigopIntercept(const char *strPtr, uint16_t parseMode, char *
     return 0;
   }
   if(parseMode != EQUATION_PARSER_XEQ) {
-    // MVAR scan: consume the WHOLE span — the base grammar rejects the
-    // ';' separators (the differentiator's entry parse runs MVAR mode
-    // and errored on every construct). Construct-internal variables are
-    // not enumerated; the constructs bind their own.
+    // MVAR scan: consume the whole span, because the base grammar
+    // rejects the ';' separators. Construct-internal variables are not
+    // enumerated: the constructs bind their own.
     const char *q = strPtr + nameLen + 1;
     int d = 0;
     while(*q != 0) {
@@ -2073,7 +2050,7 @@ static int16_t ppEqBigopIntercept(const char *strPtr, uint16_t parseMode, char *
 
   ++ppEqDepth;
 
-  // numeric arguments evaluate first (they may be expressions)
+  // numeric arguments evaluate first (they can be expressions)
   real34_t argA, argB, argS;
   bool_t ok = ppEqEvalSlice(argStart[2], argLen[2], &argA);
   if(ok && kind != 2 && nArgs >= 4) {
@@ -2098,15 +2075,10 @@ static int16_t ppEqBigopIntercept(const char *strPtr, uint16_t parseMode, char *
   real34_t result, resultI;
   real34SetZero(&resultI);
   if(ok) {
-    // the bound variable's own value is kept and put back (the
-    // differentiate.c probe idiom); binding is a DIRECT register write —
-    // no dispatch runs inside the evaluation
-    // The test must ask what saveRegisterSnapshot COVERS, not what
-    // converts to a real: a narrower test (getRegisterAsRealQuiet
-    // refuses a complex with a non-zero imaginary part) leaves a bound
-    // variable unsnapshotted, and the counter then overwrites a value
-    // that is never put back. Where nothing covers it, refuse rather
-    // than clobber.
+    // The bound variable's own value is kept and put back. Binding is
+    // a direct register write: no dispatch runs inside the evaluation.
+    // The test asks what saveRegisterSnapshot covers. Where nothing
+    // covers it, the intercept refuses.
     snap_t savedVarSnap;
     uint32_t varType = getRegisterDataType(var);
     bool_t restoreVar = (varType == dtReal34 || varType == dtComplex34
@@ -2116,15 +2088,15 @@ static int16_t ppEqBigopIntercept(const char *strPtr, uint16_t parseMode, char *
       saveRegisterSnapshot(var, &savedVarSnap);
     }
     else {
-      // a string/matrix/date variable cannot be snapshotted, so binding
-      // the loop counter to it would destroy it with no way back
+      // a string/matrix/date variable cannot be snapshotted, and
+      // binding the loop counter to it destroys it with no way back
       ppEqSyntaxError("the loop variable holds a value that cannot be saved and restored");
       ok = false;
     }
 
     if(kind <= 1 && ok) {
-      // the counter walk and accumulator discipline are
-      // _programmableSumProd's own: real accumulation under ctxtReal75,
+      // the counter walk and accumulator discipline follow
+      // _programmableSumProd: accumulation under ctxtReal75,
       // sign-aware termination, a misdirected range refused
       char bodyText[PPEQ_WORD_BYTES];
       if(argLen[0] == 0 || argLen[0] >= sizeof(bodyText)) {
@@ -2139,11 +2111,10 @@ static int16_t ppEqBigopIntercept(const char *strPtr, uint16_t parseMode, char *
           ok = false;
         }
         else {
-          // Complex accumulation, on upstream's own terms: its
-          // _programmableSumProd latches over to complex the moment a
-          // term has an imaginary part, but only if FL_CPXRES allows —
-          // otherwise a complex term is a domain error. Same rule here,
-          // so a package-side SUM behaves like the built-in one.
+          // Complex accumulation follows _programmableSumProd: latch
+          // to complex when a term has an imaginary part, but only if
+          // FLAG_CPXRES allows. Otherwise a complex term is a domain
+          // error.
           real_t acc, accI, term, termI;
           real34_t counter, cmp, sgn, next;
           const bool_t cpxAllowed = getSystemFlag(FLAG_CPXRES);
@@ -2225,10 +2196,8 @@ static int16_t ppEqBigopIntercept(const char *strPtr, uint16_t parseMode, char *
       }
     }
     else if(ok) {
-      // The snapshot refusal above sets ok = false; this arm must READ
-      // it, or DERIV/INTEG runs anyway and reallocateRegister destroys
-      // the value the refusal exists to protect. (The SUM/PROD arm is
-      // already safe: its loop is `while(ok)`.)
+      // The snapshot refusal above sets ok = false, and this arm must
+      // read it, or DERIV/INTEG runs anyway.
       char bodyText[PPEQ_WORD_BYTES];
       if(argLen[0] == 0 || argLen[0] >= sizeof(bodyText)) {
         ppEqSyntaxError("big-operator body too long");

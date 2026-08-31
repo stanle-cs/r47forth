@@ -3,10 +3,14 @@
 
 /**
  * \file prettyTest.c
- * testSuite coverage drivers for the pretty-print package. Registered in
- * testSuite.c's funcTestNoParam with coverageDriver = 1 and driven by
- * testSuite/tests/pretty_print.txt. Test-only code: never built for the
- * device. Every driver writes its failure count into X as a long integer.
+ * Coverage drivers for the pretty-print package test suite.
+ * testSuite.c registers each driver in funcTestNoParam with
+ * coverageDriver = 1. testSuite/tests/pretty_print.txt drives them.
+ * This file builds only under PC_BUILD.
+ * Each driver writes its failure count into X as a long integer.
+ * Some drivers check that pretty-print declines to render an input.
+ * A decline returns false and draws nothing. Only the program
+ * walker's decline also carries a reason code and a step number.
  */
 
 #include "c47.h"
@@ -63,8 +67,8 @@ void prettyTestMeasure(uint16_t unusedButMandatoryParameter) {
   (void)unusedButMandatoryParameter;
   ppTestFailures = 0;
 
-  // M1: FRAC(3,4), numeric context, standard children — the exact numbers
-  // the inline X-line pin (P1-P3) is derived from.
+  // M1: FRAC(3,4), numeric context, standard children. Sets the exact
+  // numbers the inline X-line pins P1-P3 use.
   ppReset();
   uint8_t frac = ppNewBox(PP_FRAC, PP_FONT_NUMERIC);
   uint8_t num  = ppNewRun("3", 1, PP_FONT_STANDARD);
@@ -81,7 +85,7 @@ void prettyTestMeasure(uint16_t unusedButMandatoryParameter) {
     if(f->descent !=  6) ppTestFail("M1 descent != 6");   // fracGap+1 below the bar (symmetric clearance)
   }
 
-  // M2: HBOX[RUN("1", numeric), FRAC(3,4)] — mixed-number shape.
+  // M2: HBOX[RUN("1", numeric), FRAC(3,4)], mixed-number shape.
   ppReset();
   uint8_t box = ppNewBox(PP_HBOX, PP_FONT_NUMERIC);
   uint8_t one = ppNewRun("1", 1, PP_FONT_NUMERIC);
@@ -135,16 +139,11 @@ void prettyTestMeasure(uint16_t unusedButMandatoryParameter) {
     }
   }
 
-  /* M9 (PP18RR4-7) — the PP_RAD index descent, which shipped with nothing
-   * asserting it: deleting the guard left the whole suite green. M5 builds
-   * a one-child radical and never enters the indexed arm; FV8 is the only
-   * indexed root and asserts a signature string, which reads no metrics.
+  /* M9: the PP_RAD index descent.
    *
-   * xth-root of 8 by 1/2: radicand 8 is ascent 12 / descent 0, the FRAC
-   * index is ascent 20 / descent 8 at relBase -2, so the index's ink
-   * bottom is 6 rows below the baseline and the box must say so. Without
-   * the guard the box reports descent 0 and every band check downstream
-   * accepts a box the index leaves. */
+   * Radicand 8 has ascent 12 and descent 0. The FRAC index has ascent
+   * 20 and descent 8, at relBase -2, so its ink bottom sits 6 rows
+   * below the baseline. The box descent must cover that. */
   ppReset();
   {
     uint8_t rad = ppNewBox(PP_RAD, PP_FONT_STANDARD);
@@ -165,8 +164,6 @@ void prettyTestMeasure(uint16_t unusedButMandatoryParameter) {
       if(i->descent == 0) {
         ppTestFail("M9 setup: the index has no descent, so this pin cannot see the defect");
       }
-      /* The property, not the number: the box must contain the index's
-       * ink bottom. Stated this way it survives a font change. */
       int16_t idxBottom = (int16_t)(i->relBase + i->descent);
       if(r->descent < idxBottom) {
         ppTestFailInt("M9 the box does not cover the index's ink bottom",
@@ -175,7 +172,7 @@ void prettyTestMeasure(uint16_t unusedButMandatoryParameter) {
     }
   }
 
-  // M5: radical over a numeric digit — the standalone-√2 shape.
+  // M5: radical over a numeric digit, the standalone-√2 shape.
   ppReset();
   {
     uint8_t rad = ppNewBox(PP_RAD, PP_FONT_NUMERIC);
@@ -191,15 +188,12 @@ void prettyTestMeasure(uint16_t unusedButMandatoryParameter) {
     }
   }
 
-  // M6: exponent form — mantissa ·₁₀⁴⁰ becomes SUP(base "…·10", exp "40").
+  // M6: exponent form, mantissa ·₁₀⁴⁰ becomes SUP(base "…·10", exp "40").
   ppReset();
   {
-    /* This fixture was hand-fed WITHOUT the trailing hair
-     * space, so it exercised an alphabet the builder never emits and five
-     * audit rounds read past a parser that rejected every real string.
-     * supNumberToDisplayString ends with strcat(STD_SPACE_HAIR) = a0 0a,
-     * unconditionally; carry it, as the sibling ppParseIrfrac fixture
-     * already carries its own trailing spaces. */
+    /* supNumberToDisplayString always appends STD_SPACE_HAIR (a0 0a).
+     * The fixture carries that trailing hair space, the same as the
+     * sibling ppParseIrfrac fixture. */
     static const char expForm[] = "1.5" "\x80\xb7" "\xa4\x7d" "\xa1\x64" "\xa1\x60" "\xa0\x0a";
     static const char expBase[] = "1.5" "\x80\xb7" "10";
     if(!ppParseExponent(expForm, PP_FONT_NUMERIC, PP_FONT_STANDARD, &root)) {
@@ -218,7 +212,7 @@ void prettyTestMeasure(uint16_t unusedButMandatoryParameter) {
     }
   }
 
-  // M7: IRFRAC √3/2 — RAD inside the numerator of a FRAC.
+  // M7: IRFRAC √3/2, RAD inside the numerator of a FRAC.
   ppReset();
   {
     static const char rt3over2[] = "\xa2\x1a" "\xa0\x83" "/" "\xa0\x82";
@@ -248,7 +242,7 @@ void prettyTestMeasure(uint16_t unusedButMandatoryParameter) {
     }
   }
 
-  // M8: IRFRAC 3×π/4 accepted; paren-power and bare-name forms decline.
+  // M8: IRFRAC 3×π/4 accepted, paren-power and bare-name forms decline.
   ppReset();
   {
     static const char threePiOver4[] = "3" "\x80\xd7" "\x83\xc0" "/" "\xa0\x84";
@@ -291,28 +285,24 @@ void prettyTestMeasure(uint16_t unusedButMandatoryParameter) {
     ppTestFail("M4 sup after slash accepted");
   }
 
-  /* M8 — the substituted-glyph class. The engine derives
-   * every metric from &numericFont, clears exactly the box it measured, and
-   * paints with noPreClear; upstream's showGlyphCode may substitute a glyph
-   * from ANOTHER table for the same code. Where the substitute's row metrics
-   * differ, ink lands outside the cleared box.
+  /* M8: the substituted-glyph class. The engine derives every metric
+   * from &numericFont, clears exactly the box it measured, and paints
+   * with noPreClear. Upstream's showGlyphCode can substitute a glyph
+   * from another table for the same code. If the substitute's row
+   * metrics differ, ink can land outside the cleared box.
    *
-   * This is the R1-13 class (checkHP, which doubles glyph rows) at its
-   * sibling flag. The rule the class needs: for every substitution this
-   * engine's fonts can undergo, either the package declines, or the measured
-   * box contains the substitute's ink. checkHP takes the decline arm;
-   * FLAG_BOLD was ruled on 2026-08-29 to keep DISPLAYING, so the paint
-   * entries suppress the substitution instead and the plain face is used
-   * throughout.
+   * For every substitution the fonts can undergo, the package must
+   * either decline, or the measured box must contain the substitute's
+   * ink. FLAG_BOLD keeps displaying, so the paint entries suppress the
+   * substitution and use the plain face.
    *
-   * Part 1 pins WHY the suppression is needed, against the live font tables
-   * rather than a remembered number — if a future font makes the two tables
-   * agree, this assertion fires and the suppression can go. Part 2 pins the
-   * consequence: the drawn output is identical with the flag set or clear. */
+   * Part 1 checks the live font tables for the substitution the
+   * suppression exists for. Part 2 checks that drawn output is
+   * identical with FLAG_BOLD set or clear. */
   {
-    // the same probes showGlyphCode itself makes: findGlyph for the
-    // measured font, findGlyphExact for the bold substitution (a miss
-    // returns -1 so it can never alias glyph index 0)
+    // The same probes showGlyphCode uses: findGlyph for the measured
+    // font, findGlyphExact for the bold substitution. A miss returns
+    // -1, so it can never alias glyph index 0.
     int16_t pi = findGlyph(&numericFont, '0');
     int16_t bi = findGlyphExact(&numericFontBold, '0');
     const glyph_t *plain = (pi < 0) ? NULL : &numericFont.glyphs[pi];
@@ -325,13 +315,10 @@ void prettyTestMeasure(uint16_t unusedButMandatoryParameter) {
       ppTestFail("M8 bold and plain row metrics now agree — the FLAG_BOLD suppression is obsolete, re-derive the class");
     }
 
-    /* The property, after the 2026-08-29 ruling that BOLD must still draw:
-     * pretty print's output does not depend on FLAG_BOLD. Paint suppresses
-     * the substitution so the plain face is used throughout, which is what
-     * keeps paint on the same font table the metrics were derived from.
-     * Comparing the two renderings pins that directly — before the fix the
-     * bold glyphs changed the pixels (and spilled outside the cleared box);
-     * a regression that reinstates the substitution reddens this. */
+    /* Pretty-print output does not depend on FLAG_BOLD. Paint
+     * suppresses the substitution, so paint stays on the same font
+     * table as the metrics. The test compares the two renderings and
+     * requires identical pixels. */
     bool_t  hadFract = getSystemFlag(FLAG_FRACT);
     bool_t  boldWas  = getSystemFlag(FLAG_BOLD);
     uint8_t modeWas  = calcMode;
@@ -339,10 +326,10 @@ void prettyTestMeasure(uint16_t unusedButMandatoryParameter) {
     temporaryInformation = TI_NO_INFO;
     lastErrorCode        = 0;
     setSystemFlag(FLAG_FRACT);
-    /* The bold substitution is gated on font == &numericFont, and only a
-     * MIXED number's head is numeric — ppParseFraction skips the head
-     * entirely when there is none. Without PROPFR the drawing has no
-     * numeric run and this pin compares two identical pictures. */
+    /* The bold substitution triggers only when font == &numericFont.
+     * Only a MIXED number's head is numeric: ppParseFraction skips the
+     * head when there is none. Without PROPFR the drawing has no
+     * numeric run, and the pin compares two identical pictures. */
     bool_t hadPropfr = getSystemFlag(FLAG_PROPFR);
     setSystemFlag(FLAG_PROPFR);
     prettySetEnabled(true);
@@ -479,16 +466,16 @@ void prettyTestPixels(uint16_t unusedButMandatoryParameter) {
            top, bottom, left, right, any);
   }
 
-  // P5: with the package off, upstream's diagonal form paints — row 149
-  // must NOT be a full lit run across the pretty span.
+  // P5: with the package off, upstream's diagonal form paints. Row 149
+  // must not be a full lit run across the pretty span.
   prettySetEnabled(false);
   ppTestClearBand();
   refreshRegisterLine(REGISTER_X);
   if(ppTestRowAllLit(149, x0, x1)) ppTestFail("P5 upstream form identical to bar");
   prettySetEnabled(true);
 
-  // P4 (PP2): √2 via IRFRAC — vinculum at rows 131-132 (baseline 160,
-  // numeric radicand ink top 134, radGap 1, vincThick 2), gap row 133.
+  // P4: √2 via IRFRAC. Vinculum at rows 131-132 (baseline 160, numeric
+  // radicand ink top 134, radGap 1, vincThick 2), gap row 133.
   {
     bool_t hadIrfrac = getSystemFlag(FLAG_IRFRAC);
     uint8_t hadIrStatus = IrFractionsCurrentStatus;
@@ -499,7 +486,8 @@ void prettyTestPixels(uint16_t unusedButMandatoryParameter) {
     ppTestClearBand();
     refreshRegisterLine(REGISTER_X);
 
-    // find the vinculum: a lit run of >= 10 px at row 131 in the right half
+    // Find the vinculum: a lit run of at least 10 px at row 130, checked
+    // again at row 131 across the same span.
     uint32_t runLen = 0, bestLen = 0, bestEnd = 0;
     for(uint32_t x = 200; x < SCREEN_WIDTH; x++) {
       if(lcd_buffer_pixel_on(x, 130)) {
@@ -516,9 +504,9 @@ void prettyTestPixels(uint16_t unusedButMandatoryParameter) {
     else {
       uint32_t vx0 = bestEnd - bestLen + 1, vx1 = bestEnd;
       if(!ppTestRowAllLit(131, vx0, vx1)) ppTestFail("P4 vinculum row 131 missing");
-      // gap/ink probes stay in the radicand's columns (right end of the
-      // run) — the sign's own diagonal legitimately crosses the gap rows
-      // on the left. Two clear rows now (radGap+1).
+      // Gap and ink probes stay in the radicand's columns, the right end
+      // of the run. The root sign's diagonal can cross the gap rows on
+      // the left. radGap+1 gives two clear rows.
       if(ppTestRowAnyLit(132, vx1 - 8, vx1)) ppTestFail("P4 gap row 132 not clear");
       if(ppTestRowAnyLit(133, vx1 - 8, vx1)) ppTestFail("P4 gap row 133 not clear");
       if(!ppTestRectAnyLit(134, 159, vx1 - 10, vx1)) ppTestFail("P4 radicand ink missing");
@@ -536,9 +524,9 @@ void prettyTestPixels(uint16_t unusedButMandatoryParameter) {
     clearSystemFlag(FLAG_FRACT);
   }
 
-  // P6 (polish): the vinculum carries the sign's stroke weight — two
-  // lit rows over a standard-font radicand (it was 1 px against the
-  // glyph's 2 px strokes)
+  // P6 (polish): the vinculum matches the root sign's stroke weight,
+  // two lit rows over a standard-font radicand (the glyph's stroke is
+  // 2 px).
   {
     ppReset();
     uint8_t arg = ppNewRun("2", 1, PP_FONT_STANDARD);
@@ -555,9 +543,9 @@ void prettyTestPixels(uint16_t unusedButMandatoryParameter) {
         const ppNode_t *n = ppNodeAt(rad);
         lcd_fill_rect(0, 60, SCREEN_WIDTH, 80, LCD_SET_VALUE);
         ppPaintAt(rad, 30, 120);
-        // vinculum rows: the top two rows of the node's ink, probed at
-        // the vinculum's RIGHT end (the sign glyph's own hook lights
-        // rows near its column and masked the first probe)
+        // Vinculum rows: the top two rows of the node's ink, probed at
+        // the vinculum's right end. The root sign's hook lights columns
+        // near its own column, so a probe there gives a false read.
         uint32_t vtop = (uint32_t)(120 - n->ascent);
         uint32_t rx = (uint32_t)(30 + n->width - 2);
         if(!ppTestRowAnyLit(vtop, rx - 2, rx)) {
@@ -571,8 +559,8 @@ void prettyTestPixels(uint16_t unusedButMandatoryParameter) {
   }
 
   // P5 (polish): the integral sign's hooks reach sideways from the
-  // spine — the top hook right, the bottom hook left. A bare vertical
-  // bar (hooks dropped) fails both reach probes.
+  // spine, the top hook right, the bottom hook left. A bare vertical
+  // bar with no hooks fails both reach probes.
   {
     ppReset();
     uint8_t body = ppNewRun("1", 1, PP_FONT_STANDARD);
@@ -591,7 +579,8 @@ void prettyTestPixels(uint16_t unusedButMandatoryParameter) {
         ppPaintAt(big, 30, 120);
         uint32_t top = (uint32_t)(120 - n->ascent);
         uint32_t bot = (uint32_t)(120 + n->descent - 1);
-        // spine column is x+7; the hook tips reach >= 3 px sideways
+        // The spine column is x+7. The hook tips reach at least 3 px
+        // sideways.
         if(!ppTestRowAnyLit(top, 30 + 7 + 3, 30 + 7 + 8)) {
           ppTestFail("P5 top hook does not reach right");
         }
@@ -723,7 +712,7 @@ void prettyTestFallback(uint16_t unusedButMandatoryParameter) {
   temporaryInformation = TI_NO_INFO;
   lastErrorCode = 0;
 
-  // F1: unsupported type (string in X) — enabled and disabled renders must
+  // F1: unsupported type, string in X. Enabled and disabled renders must
   // be bit-identical.
   setSystemFlag(FLAG_FRACT);
   reallocateRegister(REGISTER_X, dtString, TO_BLOCKS(4), amNone);
@@ -737,7 +726,7 @@ void prettyTestFallback(uint16_t unusedButMandatoryParameter) {
   prettySetEnabled(true);
   if(!ppTestSnapsEqual()) ppTestFail("F1 string band differs");
 
-  // F2: plain real (FRACT and IRFRAC off, no exponent form) — every
+  // F2: plain real (FRACT and IRFRAC off, no exponent form). Every
   // parser declines, identity holds.
   {
     bool_t hadIrfrac = getSystemFlag(FLAG_IRFRAC);
@@ -757,7 +746,7 @@ void prettyTestFallback(uint16_t unusedButMandatoryParameter) {
     }
   }
 
-  // F3: displayValueX parity — the pretty path runs the same builder, so
+  // F3: displayValueX parity. The pretty path runs the same builder, so
   // the ASCII mirror must match upstream's byte for byte.
   char dvOn[DISPLAY_VALUE_LEN];
   setSystemFlag(FLAG_FRACT);
@@ -778,15 +767,16 @@ void prettyTestFallback(uint16_t unusedButMandatoryParameter) {
 }
 
 /* ==== prettyTestCapture =================================================
- * Drives the REAL interactive paths: digits through addItemToNimBuffer
- * (which itself opens NIM from CM_NORMAL), operator keys close NIM at the
- * addItemToNimBuffer tail exactly as a keypress does, then the item runs
- * through runFunction -> reallyRunFunction where the STAGE/DONE hooks
- * live. Expected signatures are built from indexOfItems catalog names at
- * runtime so font/name changes never turn these red. */
+ * Drives the real interactive paths. Digits go through
+ * addItemToNimBuffer, which opens NIM from CM_NORMAL. Operator keys
+ * close NIM at the addItemToNimBuffer tail, the same as a keypress.
+ * The item then runs through runFunction and reallyRunFunction, where
+ * the STAGE and DONE hooks live. Expected signatures come from
+ * indexOfItems catalog names at runtime, so font or name changes never
+ * turn these tests red. */
 
-// the layout-sig helpers live with prettyTestFormula below; the PP12
-// capture traces decode history entries through them
+// The layout-sig helpers live with prettyTestFormula below. Capture
+// traces decode history entries through them.
 static void ppfTestSigNode(uint8_t n, char *out, size_t cap);
 static void ppfTestExpect(const char *what, uint8_t root, const char *expected);
 static bool_t ppfTestPowersScoped(uint8_t n);
@@ -799,12 +789,8 @@ static void ppcTestSigNode(uint8_t n, char *out, size_t cap) {
   }
   const ppcNode_t *nd = ppcNodeAt(n);
   if(n == PPC_UNKNOWN) {
-    // This used to print "#", the same character PPN_VAL
-    // prints — so no signature pin could tell a truthful value leaf from
-    // the unknown sentinel, which is precisely the distinction the
-    // binding invariant turns on ("degrades to a truthful value leaf, or
-    // the whole shadow invalidates"). Three pins asserting "#" were in
-    // fact asserting either-of-two-states.
+    // "~" for UNKNOWN, "#" for a value leaf: the signature must tell
+    // them apart.
     strcat(out, "~");
     return;
   }
@@ -922,8 +908,8 @@ static void ppcTestExpectSig(const char *what, const char *expected) {
   }
 }
 
-/* Does the measured tree hold a run with exactly this text? For pins that
- * care a decode REACHED the picture, not where it landed. */
+/* Does the measured tree hold a run with exactly this text? For pins
+ * that care only that a decode reached the picture. */
 static bool_t ppTreeHasRun(uint8_t n, const char *text) {
   if(n == PP_NONE) {
     return false;
@@ -947,18 +933,14 @@ static bool_t ppTreeHasRun(uint8_t n, const char *text) {
  * the program-file format and import it through the official loader,
  * which appends it and registers the global label. The Test-suffixed
  * name is the one the test HAL maps ioPathLoadProgram to. */
-/* Fixture labels must be unique across this file. findNamedLabel returns
- * the FIRST match in label order and nothing clears program memory between
- * fixtures, so a duplicate silently points one pin at another pin's
- * program: V72 failed as a lift-latch regression ~960 lines from the
- * fixture that took its name. Identical bytes under the same name are a
- * re-run of the same fixture, not a collision. */
+/* Fixture labels must be unique across this file: findNamedLabel
+ * returns the first match, and nothing clears program memory between
+ * fixtures. Identical bytes under the same name are accepted as a
+ * re-run. */
 static void ppcTestNoteLabel(const uint8_t *pgm, size_t n) {
-  /* Sized against the suite (83 distinct labels today) with headroom, and
-   * the overflow arm FAILS: a registry that silently stops registering
-   * reports the same green as one that is working. The first version held
-   * 48 and dropped 37 names, including the VXA/VXB pair it was written
-   * for. */
+  /* Sized against the suite (83 distinct labels today) with headroom.
+   * The overflow arm fails on purpose: a registry that silently stops
+   * registering reports the same green as one that works. */
   #define PPC_LABEL_SEEN_MAX 160
   static char     seenName[PPC_LABEL_SEEN_MAX][8];
   static uint32_t seenSum[PPC_LABEL_SEEN_MAX];
@@ -1034,7 +1016,7 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
   const char *nSIN  = indexOfItems[ITM_sin].itemCatalogName;
   const char *n1ONX = indexOfItems[ITM_1ONX].itemCatalogName;
 
-  // T1: 2 ENTER 3 + 4 x — one formula, consuming continues it
+  // T1: 2 ENTER 3 + 4 x, one formula. A consumed root continues it.
   ppcTestReset();
   ppcTestType("2");
   ppcTestOp(ITM_ENTER);
@@ -1046,7 +1028,7 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
   ppcTestExpectSig("T1 chained sig", expect);
   ppcTestExpectHist("T1 hist", 0);
 
-  // T2: supersession — a new root not consuming (2+3) emits it
+  // T2: supersession, a new root not consuming (2+3) emits it
   ppcTestReset();
   ppcTestType("2");
   ppcTestOp(ITM_ENTER);
@@ -1076,7 +1058,7 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
   sprintf(expect, "2 2 %s", nMULT);
   ppcTestExpectSig("T4 dup", expect);
 
-  // T5: monadic result consumed by a dyadic — one formula
+  // T5: monadic result consumed by a dyadic, one formula
   ppcTestReset();
   ppcTestType("5");
   ppcTestOp(ITM_1ONX);
@@ -1086,7 +1068,7 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
   ppcTestExpectSig("T5 chain through monadic", expect);
   ppcTestExpectHist("T5 hist", 0);
 
-  // T6: CLX displaces — the natural explicit terminator
+  // T6: CLX displaces, the natural explicit terminator
   ppcTestReset();
   ppcTestType("2");
   ppcTestOp(ITM_ENTER);
@@ -1120,7 +1102,7 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
   sprintf(expect, "5 4 %s", nADD);
   ppcTestExpectSig("T8 abort", expect);
 
-  // T9: swap mirrored — operand order flips
+  // T9: swap mirrored, operand order flips
   ppcTestReset();
   ppcTestType("2");
   ppcTestOp(ITM_ENTER);
@@ -1153,9 +1135,9 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
   lastErrorCode = 0;
   ppcTestExpectSig("T11 after error", "-");
 
-  // T12: arena exhaustion invalidates mid-chain, then the engine rebuilds
-  // truthfully from value-leaf upgrades — the tail of the chain reads
-  // "VAL 1 + 1 +", which is honest (# is register Y's live value)
+  // T12: arena exhaustion invalidates mid-chain, then the engine
+  // rebuilds from value-leaf upgrades. The tail of the chain reads
+  // "# 1 + 1 +", with # for register Y's live value.
   ppcTestReset();
   ppcTestType("1");
   ppcTestOp(ITM_ENTER);
@@ -1189,10 +1171,10 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
   ppcTestExpectSig("T14 after unknown", "-");
   ppcTestExpectHist("T14 hist", 1);
 
-  // T15: eRPN ENTER does not dup — the consumed Y upgrades to a value.
-  // nimWhenButtonPressed is keyboard-owned; the driver mimics the real
-  // keypress (a NIM was open when ENTER went down) so fnKeyEnter's eRPN
-  // condition — and the shadow's mirror of it — sees the true state.
+  // T15: eRPN ENTER does not dup, the consumed Y upgrades to a value.
+  // nimWhenButtonPressed is keyboard-owned. The driver mimics the real
+  // keypress (a NIM was open when ENTER went down), so fnKeyEnter's
+  // eRPN condition, and the shadow's mirror of it, sees the true state.
   ppcTestReset();
   setSystemFlag(FLAG_ERPN);
   ppcTestType("5");
@@ -1204,7 +1186,7 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
   ppcTestExpectSig("T15 eRPN", expect);
   clearSystemFlag(FLAG_ERPN);
 
-  // T17 (PP9): a numbered-register recall keeps its NAME in the chain
+  // T17: a numbered-register recall keeps its NAME in the chain
   ppcTestReset();
   ppcTestType("3");
   ppcTestOpParam(ITM_STO, 5);
@@ -1215,7 +1197,7 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
   ppcTestExpectSig("T17 RCL name", expect);
   ppcTestExpectHist("T17 hist", 0);
 
-  // T18 (PP9): recalling a STACK register deep-copies its tree; using the
+  // T18: recalling a STACK register deep-copies its tree. Using the
   // copy supersedes (emits) the original still sitting higher up
   ppcTestReset();
   ppcTestType("2");
@@ -1229,7 +1211,7 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
   ppcTestExpectSig("T18 RCL stack copy", expect);
   ppcTestExpectHist("T18 hist", 1);
 
-  // T19 (PP9): RCL+ builds a dyadic node with the plain operator
+  // T19: RCL+ builds a dyadic node with the plain operator
   ppcTestReset();
   ppcTestType("10");
   ppcTestOpParam(ITM_STO, 7);
@@ -1238,7 +1220,7 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
   sprintf(expect, "5 R07 %s", nADD);
   ppcTestExpectSig("T19 RCL-arith", expect);
 
-  // T20 (PP9): x<>reg emits the departing tree and leaves a truthful
+  // T20: x<>reg emits the departing tree and leaves a truthful
   // value leaf for the register's old content
   ppcTestReset();
   ppcTestType("2");
@@ -1252,15 +1234,11 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
   ppcTestExpectSig("T20 x<>reg", expect);
   ppcTestExpectHist("T20 hist", 1);
 
-  /* T20b — FILL displaces, it does not delete. FILL
-   * overwrites Y..top with X, which is displacement by DESIGN.md's own
-   * segmentation rule, so a finished formula sitting in a slot >= 1 must be
-   * FILED, exactly as the CLSTK wipe site files it. The DONE arm frees those
-   * slots, and ppcFreeTree clears ppcCurrent when it frees the live root, so
-   * before the fix the formula vanished: T-line blank, no PHIST row.
-   * The CLSTK control below is the decisive half — identical shadow state
-   * through a wipe site that DOES displace — so a regression that breaks
-   * filing everywhere reddens both, not just one. */
+  /* T20b: FILL displaces, it does not delete. FILL overwrites Y..top
+   * with X: displacement under DESIGN.md's segmentation rule.
+   * A finished formula in a slot >= 1 must be filed, the same as the
+   * CLSTK wipe site files it. The CLSTK control below checks the same
+   * shadow state through a wipe site that does displace. */
   ppcTestReset();
   ppcTestType("2");
   ppcTestOp(ITM_ENTER);
@@ -1280,19 +1258,11 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
   ppcTestExpectHist("T20b control: CLSTK files it", 1);
 
   // T21: RCL-arith against a slot that is UNKNOWN.
-  // ppcDeepCopy returns PPC_UNKNOWN unchanged, and the guard beside it
-  // tests only PPC_NIL, so the sentinel is stored as a child. The
-  // out-of-family reader predicted an out-of-bounds index and a crash.
-  // It is instead the designed truthful degradation — every consumer
-  // screens PPC_UNKNOWN — and this test pins that: no crash, and
-  // nothing claiming to be a formula.
-  // this pin was vacuous for three rounds. Every assertion
-  // below used to sit behind `if(ppcCurrentFormulaRoot() != PPC_NIL)`,
-  // and that accessor withholds any tree containing PPC_UNKNOWN — so the
-  // guard was false BY CONSTRUCTION and the body never ran. It would
-  // have passed identically with ITM_RCLADD removed from the classifier.
-  // The four asserts now name the four separate things the comment above
-  // claims, in order, through the raw accessor.
+  // ppcDeepCopy returns PPC_UNKNOWN unchanged. The guard beside it
+  // tests only PPC_NIL, so the sentinel is stored as a child. Every
+  // consumer screens PPC_UNKNOWN, so no crash follows and nothing
+  // claims to be a formula. The four asserts below check that, in
+  // order, through the raw accessor.
   ppcTestReset();
   ppcTestType("5");
   ppcTestOpParam(ITM_RCLADD, (uint16_t)REGISTER_Z);   // slot 2 is UNKNOWN
@@ -1300,7 +1270,7 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
     char sig[128];
     ppcTestSig(sig, sizeof(sig));                     // must not crash
 
-    // (1) the operation WAS classified and did build a tree
+    // (1) the operation was classified and built a tree
     uint8_t raw = ppcTestCurrentRaw();
     if(raw == PPC_NIL) {
       ppTestFail("T21 RCL-arith built no tree at all — fixture never reached the state under test");
@@ -1325,11 +1295,11 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
     ppcTestExpectHist("T21 nothing emitted", 0);
   }
 
-  // T22 (class test): the recorded "= result" must be
-  // the value the formula actually had. ppcTestExpectHist compares
-  // COUNTS and cannot see this class, which is how `2 + 3.7 = 5.` was
-  // filed permanently: the PPC_INVALIDATE emit runs at DONE, after the
-  // dispatch has overwritten the register it read.
+  // T22 (class test): the recorded "= result" must be the value the
+  // formula actually had. ppcTestExpectHist compares counts only and
+  // cannot see this class. The PPC_INVALIDATE emit RAN at DONE then,
+  // after dispatch had overwritten the register it read. It now emits
+  // at STAGE, while the register still holds the formula's value.
   {
     ppcTestReset();
     ppcTestType("2");
@@ -1345,9 +1315,9 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
     else {
       uint8_t root;
       ppReset();
-      // withResult=true: if a result was recorded it becomes an " = x"
-      // tail. The truthful outcomes are "no result recorded" or
-      // "= 5.7"; recording the post-dispatch 5 is the defect.
+      // withResult=true: if a result was recorded, it becomes an
+      // " = x" tail. The correct outcomes are "no result recorded" or
+      // "= 5.7". The post-dispatch value 5 must not appear.
       if(ppfBuildEntry(e, PP_FONT_STANDARD, PP_FONT_STANDARD, true, &root)) {
         char sig[192];
         sig[0] = 0;
@@ -1361,43 +1331,36 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
     lastErrorCode = 0;
   }
 
-  /* T22b — a complex operand must be CAPTURED, not
-   * silently withheld. A complex34 is 32 bytes against a 16-byte node, so
-   * ppcValLeafFromRegister used to return PPN_OPAQUE, and one opaque leaf
-   * poisons the tree for both surfaces: ppcCurrentFormulaRoot returns NIL
-   * (T line blank) and ppcEmit refuses it (no history row) — with
-   * lastErrorCode 0 and no decline shown anywhere. DESIGN.md 3 promised a
-   * two-child header for exactly this; PPN_VAL2 is it.
+  /* T22b: a complex operand must be captured. A
+   * complex34 is 32 bytes against a 16-byte node. PPN_VAL2 is the
+   * two-child header DESIGN.md section 3 defines for it.
    *
-   * The reaching input is the finding's own: put a complex in Y, leave the
-   * shadow UNKNOWN there, then multiply — STAGE's ppcEnsureKnown(1) must
-   * snapshot the complex rather than give up on the formula. */
+   * Fixture: put a complex in Y, leave the shadow UNKNOWN there, then
+   * multiply. STAGE's ppcEnsureKnown(1) must snapshot the complex. */
   {
     ppcTestReset();
-    /* The complex goes in X, not Y: typing the next literal LIFTS, so the
-     * complex is what ends up in Y and therefore what the multiply's STAGE
-     * must snapshot. The first version of this fixture seeded Y directly,
-     * the lift carried the complex to Z, and the multiply then operated on
-     * two ordinary reals — so it passed with the fix disabled. */
+    /* The complex goes in X, not Y. Typing the next literal lifts, so
+     * the complex ends up in Y. The multiply's STAGE must snapshot it
+     * there. */
     reallocateRegister(REGISTER_X, dtComplex34, 0, amNone);
     int32ToReal34(2, REGISTER_REAL34_DATA(REGISTER_X));
     int32ToReal34(3, REGISTER_IMAG34_DATA(REGISTER_X));
-    ppcShadowInvalidate();          // both slots UNKNOWN, as the reported path had them
+    ppcShadowInvalidate();          // both slots UNKNOWN
     ppcTestType("4");               // lifts: X=4, Y=the complex
     if(getRegisterDataType(REGISTER_Y) != dtComplex34) {
       ppTestFail("T22b setup: Y is not complex after the lift — fixture cannot reach the defect");
     }
     ppcTestOp(ITM_MULT);
-    /* The T-line half: the tree is no longer poisoned by an opaque leaf. */
+    /* The T-line half: the tree must not be poisoned by an opaque leaf. */
     if(ppcCurrentFormulaRoot() == PPC_NIL) {
       ppTestFail("T22b a complex operand still withholds the whole formula");
     }
-    /* The LIVE half (PP18RR4-2) is NOT pinned. ppfFromCaptureNode now
-     * reassembles the PPN_VAL2 continuation, which stops a 16-byte
-     * overread past nd->payload, but asserting the DRAWN text needs C47's
-     * complex formatting spelled out and a guessed expectation would only
-     * enshrine whatever ppfFormatStaged happens to emit. Pin it against
-     * the formatter's real output when someone has it. */
+    /* The LIVE half is not pinned. ppfFromCaptureNode reassembles the
+     * PPN_VAL2 continuation, which avoids a 16-byte overread past
+     * nd->payload. Asserting the drawn text needs C47's complex
+     * formatting spelled out, and a guessed expectation only
+     * enshrines whatever ppfFormatStaged emits. Pin it against the
+     * formatter's real output when available. */
     {
       uint8_t live = PP_NONE;
       ppReset();
@@ -1406,24 +1369,14 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
       }
     }
 
-    /* The history half. A formula files on DISPLACEMENT, not on completion,
-     * so the wipe is part of the fixture rather than an afterthought — the
-     * first version of this pin checked the ring while the formula was still
-     * open and failed for that reason, not for the defect's. */
+    /* The history half. A formula files on displacement, so the wipe
+     * is part of the fixture. */
     ppcTestOp(ITM_CLSTK);
     ppcTestExpectHist("T22b the complex formula files", 1);
   }
 
-  /* T23b — the filed "= result" must be the formula's own
-   * value, not what STO just wrote over it. PPC_STO_NOP had no STAGE arm, so
-   * its displacement ran at DONE — after fnStore had already copied X into
-   * the target — and ppcEmit read the register afterwards. The ring then
-   * permanently recorded 2+3 = 9, and the browser's ENTER recalls that 9 for
-   * a formula whose value is 5. T23 cannot see it: its displaced slot holds
-   * a bare literal, and ppcEmit returns early on a non-op root.
-   *
-   * The pin reads the FILED entry, not the live tree, because the defect is
-   * in what was written to the ring. */
+  /* T23b: the filed "= result" must stay the formula's own value
+   * after a later STO. The pin reads the filed entry. */
   {
     ppcTestReset();
     ppcTestType("2");
@@ -1450,12 +1403,11 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
     }
   }
 
-  /* T24c (PP18RR4-3) — a stacked power must bracket its base on the
-   * CAPTURE surfaces too. PP_SUP puts the outer exponent at the same
-   * height as the inner one, so an unbracketed 3 cubed cubed draws flat
-   * and reads as 3^33 for a value of 3^9. The walker had a local guard;
-   * the two capture call sites did not, and the rule now lives in the
-   * builder so none of them needs one. */
+  /* T24c: a stacked power must bracket its base on the capture
+   * surfaces too. PP_SUP puts the outer exponent at the same height as
+   * the inner one, so an unbracketed 3 cubed cubed draws flat and
+   * reads as 3^33 for a value of 3^9. The builder brackets the base,
+   * so no call site needs its own guard. */
   {
     ppcTestReset();
     ppcTestType("3");
@@ -1471,19 +1423,11 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
     }
   }
 
-  /* T26 (PP18RR6-1) — a short integer through ppfBuildEntry. Nothing in
-   * this file drove a dtShortInteger leaf at all, so the arm that formats
-   * one was covered by no pin: it handed a 200-byte buffer to a builder
-   * that lays its digits out from ERROR_MESSAGE_LENGTH/2 upward, writing
-   * 56 bytes past the end, three times per history row.
-   *
-   * This pin drives that arm — nothing did, at all — and it does NOT
-   * detect the overflow: measured, the pre-fix call stays green here,
-   * because the simulator build sets b_sanitize=none (the ASAN_OPTIONS on
-   * the test command line is meson boilerplate). The guard against
-   * regression is the _Static_assert beside the call, not this test. The
-   * operand's spelling depends on the base, so the assertion is that the
-   * entry decodes to text at all. */
+  /* T26: a short integer through ppfBuildEntry. dtShortInteger
+   * formatting uses tmpString, sized against ERROR_MESSAGE_LENGTH and
+   * checked by a _Static_assert in prettyFormula.c.
+   * The operand's spelling depends on the base, so the assertion is
+   * only that the entry decodes to text at all. */
   {
     ppcTestReset();
     ppcTestType("10");
@@ -1511,15 +1455,11 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
     ppcTestReset();
   }
 
-  /* T25 (PP18RR5-1, PP18RR5-3) — the CLASS, over every producer of a PP_SUP.
-   * T24c pinned one operator on one surface, and the rule was stated for
-   * all of them: ITM_YX built the same node kind twelve lines away and
-   * still bracketed by precedence, so 2 ENTER 3 yx 2 yx drew 2 to the 32.
-   * Rows are (steps, expected signature); ppfTestPowersScoped then checks
-   * the property over each row's WHOLE tree, which catches a nested
-   * producer inside a shape a row already types. It does NOT reach a new
-   * producer no row drives — a fourth PP_SUP arm still needs its own
-   * row here. */
+  /* T25: the class, over every producer of a PP_SUP. Rows are (steps,
+   * expected signature). ppfTestPowersScoped checks the property over
+   * each row's whole tree, which catches a nested producer inside a
+   * shape a row already types. It does not reach a new producer that
+   * no row drives, a fourth PP_SUP arm still needs its own row here. */
   {
     static const struct { const char *what; uint16_t op1; const char *lit; uint16_t op2; const char *sig; } powRows[] = {
       { "T25 x2 over x2",  ITM_SQUARE, NULL, ITM_SQUARE, "S(P(S(3|2))|2)" },
@@ -1547,10 +1487,10 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
       }
     }
 
-    /* yx over yx: two operands, so the base is built by the OP2 arm from a
-     * node the OP2 arm built. This is the shape the finding was reported
-     * against, and it reaches the same builder on both capture surfaces —
-     * the live tree here, the filed entry below through the token decoder. */
+    /* yx over yx: two operands, so the base is built by the OP2 arm
+     * from a node the OP2 arm built. It reaches the same builder on
+     * both capture surfaces: the live tree here, the filed entry
+     * below through the token decoder. */
     ppcTestReset();
     ppcTestType("2");
     ppcTestOp(ITM_ENTER);
@@ -1579,19 +1519,18 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
       ppTestFail("T25 the FILED power's base is itself a power, unbracketed");
     }
 
-    /* PP18RR5-3: the base need not be a PP_SUP node. A leaf read from a
-     * REGISTER is formatted for display, so a large value arrives as one
-     * flat run already ending in the superscript digits of its own
-     * exponent, and a kind test reads (1x10^50) squared as an exponent of
-     * 502. A TYPED literal keeps its typed text and never has the tail,
-     * which is why this row recalls instead of typing. The SUB-10 glyph is
-     * the reach check: without it the row would pass while testing nothing. */
-    /* PP18RR6-2: the class is not "already a power", it is "the base run
-     * is not a visual atom". A typed negative reads as a term, and the
-     * capture leaf used to report ATOM for it while the walker reported
-     * ADD for the same numeral — so 5 +/- x² drew -5² for a value of 25
-     * on the capture surfaces and (-5)² in VISUAL. Both leaves now ask
-     * ppfTextIsAtom, so they cannot disagree. */
+    /* The base need not be a PP_SUP node. A leaf read from a
+     * register is formatted for display. A large value arrives as one
+     * flat run that ends in its own exponent's superscript digits,
+     * and a kind test reads (1x10^50) squared as an exponent of 502.
+     * A typed literal keeps its typed text and never has the tail, so
+     * this row uses RCL.
+     * The SUB-10 glyph is the reach check: without it the row passes
+     * while testing nothing. */
+    /* The class is not "already a power", it is "the base run is not
+     * a visual atom". A typed negative reads as a term. Both the
+     * capture leaf and the walker ask ppfTextIsAtom, so they cannot
+     * disagree. */
     ppcTestReset();
     ppcTestType("5");
     addItemToNimBuffer(ITM_CHS);
@@ -1611,9 +1550,9 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
       }
     }
 
-    /* The TYPED form of the same value is the other half of the class: it
-     * keeps the owner's text, so its exponent is ASCII (1.e+50) and the
-     * glyph test is blind to it. Same picture defect, different alphabet. */
+    /* The typed form of the same value is the other half of the class.
+     * It keeps the owner's text, so its exponent is ASCII (1.e+50),
+     * and the glyph test cannot see it. */
     ppcTestReset();
     ppcTestType("1");
     addItemToNimBuffer(ITM_EXPONENT);
@@ -1662,19 +1601,15 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
         ppTestFail("T25 the squared scientific value is not a power");
       }
       else if(base == NULL || base->kind != PP_PAREN) {
-        // structural, not a glyph test: the row must not agree with the
-        // predicate it exists to check
+        // a structural check
         ppTestFail("T25 a squared scientific value draws its two exponents as one");
       }
     }
   }
 
-  /* T23c — a slot must be maintained wherever its register
-   * is writable, not only where the LIVE stack reaches. Under SSIZE4 the
-   * guards stopped covering A..D while the slots stayed live and upstream
-   * kept those registers writable, so a STO to A was ignored and the stale
-   * tree reappeared the moment SSIZE8 came back. The finding's own sequence:
-   * fill the slots under SSIZE8, switch to SSIZE4, store over A, and the
+  /* T23c: a slot must be maintained wherever its register is
+   * writable, even where the live stack does not reach. Fixture: fill
+   * the slots under SSIZE8, switch to SSIZE4, store over A. The
    * shadow must no longer claim to know slot 4. */
   {
     bool_t ss8Was = getSystemFlag(FLAG_SSIZE8);
@@ -1699,10 +1634,10 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
     ppcTestOpParam(ITM_STO, (uint16_t)REGISTER_A);    // upstream writes A = 5
     setSystemFlag(FLAG_SSIZE8);                       // and A is a stack register again
 
-    /* Degraded means UNKNOWN: what it must NOT be is the tree it held
-     * before the store. PPC_NIL is NOT accepted as degraded — it is also
-     * what ppcTestSlotRaw returns out of range, so accepting it would let
-     * the pin pass on a slot that was never populated. */
+    /* Degraded means UNKNOWN. What it must not be is the tree it held
+     * before the store. PPC_NIL is not accepted as degraded: it is
+     * also what ppcTestSlotRaw returns out of range, so accepting it
+     * lets the pin pass on a slot that was never populated. */
     if(!slot4WasKnown) {
       ppTestFail("T23c setup: slot 4 never held a tree, so the guard below cannot be seen");
     }
@@ -1716,7 +1651,7 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
   }
 
   // T23: STO to a STACK register changes a value the shadow
-  // claims. 7 ENTER 2 ENTER 3 + STO Y x — the display showed 7·(2+3)=25.
+  // claims. 7 ENTER 2 ENTER 3 + STO Y x: the display shows 7·(2+3)=25.
   {
     ppcTestReset();
     ppcTestType("7");
@@ -1728,10 +1663,8 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
     ppcTestOpParam(ITM_STO, (uint16_t)REGISTER_Y);  // Y := 5
     ppcTestOp(ITM_MULT);                         // X = 5*5 = 25
     {
-      // this asserted only that "7" was ABSENT, which an
-      // empty signature satisfies — it would have passed if capture had
-      // stopped working entirely. Assert the whole truthful shape: the
-      // overwritten Y degraded to a value leaf, times the live (2+3).
+      // Assert the whole truthful shape: the overwritten Y degraded to
+      // a value leaf, times the live (2+3).
       char expect23[64];
       sprintf(expect23, "# 2 3 %s %s",
               indexOfItems[ITM_ADD].itemCatalogName,
@@ -1755,11 +1688,8 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
     }
   }
 
-  // T25: a formula too WIDE for the screen must still be
-  // in the browser and pannable. It used to be rejected at both font
-  // rungs, so an ordinary long sum was not panned, not truncated, not
-  // marked — absent, and as the only row the band came back with zero
-  // lit pixels. Height stays a hard limit; width does not.
+  // T25: a formula too wide for the screen must still be in the
+  // browser and pannable. Height stays a hard limit, width does not.
   {
     ppcTestReset();
     ppcTestType("1234567890123456");
@@ -1785,11 +1715,9 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
     }
   }
 
-  // T26: the literal-length boundary. The leaf holds two
-  // 15-byte payloads = 30 characters. 30 must round-trip exactly; 31
-  // was the one length admitted and silently truncated (aux recorded
-  // 15, so nothing downstream could tell) and must now withhold the
-  // formula instead of lying about it.
+  // T26: the literal-length boundary. The leaf holds two 15-byte
+  // payloads, 30 characters. 30 must round-trip exactly. 31 must
+  // withhold the formula.
   {
     static const char d30[] = "123456789012345678901234567890";
     static const char d31[] = "1234567890123456789012345678901";
@@ -1810,9 +1738,7 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
     ppcTestType("2");
     ppcTestOp(ITM_ADD);
     {
-      // absence of the truncated text was satisfied by any
-      // signature at all. The ruled outcome is stronger and exact — the
-      // formula is WITHHELD, so the signature is empty.
+      // The formula is withheld, so the signature is empty.
       ppcTestExpectSig("T26 a 31-character literal withholds the formula", "-");
 
       char sig[128];
@@ -1823,11 +1749,9 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
     }
   }
 
-  // T27: a superseded formula must be RECALLABLE, not just
-  // truthful. R1-5 stopped the post-dispatch register being read as the
-  // result; emitting with -1 fixed the lie but recorded no result at
-  // all, so the browser's ENTER could never recall the entry. The emit
-  // now happens at STAGE, where the register still holds the value.
+  // T27: a superseded formula must still be recallable.
+  // The emit happens at STAGE, where the register still holds the
+  // value.
   {
     ppcTestReset();
     ppcTestType("2");
@@ -1850,7 +1774,7 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
         char sig[192];
         sig[0] = 0;
         ppfTestSigNode(root, sig, sizeof(sig));
-        // it must carry a result, and that result must be the TRUE one
+        // it must carry a result, and that result must be the true one
         if(strstr(sig, "=") == NULL) {
           ppTestFail("T27 the filed formula has no result and can never be recalled");
         }
@@ -1862,11 +1786,9 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
     lastErrorCode = 0;
   }
 
-  // T28: ppfBuildRow has two callers and only one can pan.
-  // Widening acceptance for the browser turned the pager's honest
-  // omission into a silent CLIP, which shows a formula that is not the
-  // one the owner computed. The same wide row must be accepted for the
-  // panning caller and refused for the one that cannot.
+  // T28: ppfBuildRow has two callers, and only one can pan. The same
+  // wide row must be accepted for the panning caller and refused for
+  // the one that cannot.
   {
     ppcTestReset();
     ppcTestType("1234567890123456");
@@ -1888,15 +1810,10 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
     }
   }
 
-  // T29: the browser's pan must reach the code AND
-  // the paint must survive a negative origin. Two defects met here: the
-  // R3-7 containment guard swallowed `.d` (UP/DOWN are matched earlier
-  // in that chain and ENTER/EXIT/BACKSPACE have their own cases, but
-  // `.d` has neither), and every rule this engine paints is an
-  // lcd_fill_rect whose uint32_t coordinates turn a negative x into a
-  // huge one, dropping the rule WHOLE while glyph ink clipped fine.
-  // Measured before the fix: 1243 lit pixels with one solid run
-  // unpanned, 910 and NO solid run after panning.
+  // T29: the browser's pan must reach the code, and the paint must
+  // survive a negative origin. lcd_fill_rect takes uint32_t
+  // coordinates, so a negative x wraps to a huge one and drops the
+  // whole rule, while glyph ink still clips.
   {
     int16_t hadScrUpd = screenUpdatingMode;
     uint16_t hadMode = calcMode;
@@ -1951,15 +1868,13 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
     lastErrorCode = 0;
   }
 
-  // P13: repainting the X line must not leave the PREVIOUS
-  // value's ink behind. R3-13 stopped each glyph clearing its whole font
-  // box and made it clear only the measured ink box instead — which is
-  // safe ONLY because the register line's own refresh clears the band
-  // first. Upstream's clearRegisterLine() calls are commented out at
-  // their call sites, so that dependency is worth holding rather than
-  // assuming: measured, a 35-digit value then a 3-glyph one repainted
-  // over it leaves 467 lit pixels, exactly what the short value paints
-  // onto a freshly cleared band.
+  // P13: repainting the X line must not leave the previous value's
+  // ink behind. This is safe only because the register line's own
+  // refresh clears the band first. Upstream's clearRegisterLine()
+  // calls are commented out at their call sites, so this dependency
+  // matters. Measured: a 35-digit value, then a 3-glyph one repainted
+  // over it, leaves 467 lit pixels. A short value on a freshly
+  // cleared band paints the same count.
   {
     ppTestSetRealX("0.16666666666666666666666666666666667");
     ppTestClearBand();
@@ -1991,13 +1906,14 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
     }
   }
 
-  // P12: a fraction's numerator ink must not depend on which
-  // glyph the denominator is. Nothing about FRAC layout gives the
-  // denominator any say over the rows above the bar — num.relBase is
+  // P12: a fraction's numerator ink must not depend on which glyph
+  // the denominator is. Nothing about FRAC layout gives the
+  // denominator any say over the rows above the bar. num.relBase is
   // barTopRel - fracGap - num.descent, none of which reads the
-  // denominator — so the same numerator over three denominators of very
+  // denominator. The same numerator over three denominators of very
   // different ink height must light exactly the same pixels. Measured
-  // over the numerator's OWN columns, so re-centring cannot flatter it.
+  // over the numerator's own columns, so re-centering cannot flatter
+  // it.
   {
     const char *dens[3] = { "8", "x", "." };
     uint32_t ink[3] = { 0, 0, 0 };
@@ -2038,9 +1954,10 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
     }
   }
 
-  // T16: abort while ASLIFT is set (straight after an operator result) —
-  // the deferred-lift design absorbs the upstream undo() for free; a
-  // shadow that lifts at NIM open strands the tree one slot up
+  // T16: abort while ASLIFT is set (straight after an operator
+  // result). The deferred-lift design absorbs the upstream undo() for
+  // free. A shadow that lifts at NIM open strands the tree one slot
+  // up.
   ppcTestReset();
   ppcTestType("2");
   ppcTestOp(ITM_ENTER);
@@ -2053,7 +1970,7 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
   ppcTestExpectSig("T16 abort under lift", expect);
   ppcTestExpectHist("T16 hist", 0);
 
-  /* ==== PP12: big operators ============================================ */
+  /* ==== Big operators ================================================== */
 
   // the label program: LBL "P" / x^2 / END (the pgmT shape from upstream's
   // covProgramFlow, with a package-local label name)
@@ -2071,9 +1988,9 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
   }
   else {
     // The integral/sum dispatches retarget the solver at label P and
-    // clear SOLVER_STATUS_USES_FORMULA; later suite files (deriv_cov)
+    // clear SOLVER_STATUS_USES_FORMULA. Later suite files (deriv_cov)
     // assume the status they inherited. Drivers restore what they
-    // touch — the same rule that covers aimBuffer.
+    // touch, the same rule that covers aimBuffer.
     uint16_t savedSolverStatus   = currentSolverStatus;
     uint16_t savedSolverProgram  = currentSolverProgram;
     uint16_t savedSolverVariable = currentSolverVariable;
@@ -2109,10 +2026,10 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
     ppcTestOp(ITM_CLX);
     ppcTestExpectHist("B3 emitted on displacement", 1);
 
-    // B4: decode the history entry through the layout builder; the sig
-    // pins limit ORDER (under=from, over=to), the label-name decode and
-    // the node shape. withResult=false: the real34 result's display
-    // form is pinned by the B1 value check, not by string shape.
+    // B4: decode the history entry through the layout builder. The
+    // sig pins limit ORDER (under=from, over=to), the label-name
+    // decode, and the node shape. withResult=false: the B1 value
+    // check already pins the real34 result.
     {
       uint16_t elen, eseq;
       const uint8_t *e = ppcHistoryEntry(0, &elen, &eseq);
@@ -2129,10 +2046,11 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
         }
         else {
           // B8: pixel pin for the stroke-drawn operator. Probe rows
-          // [base-12, base-2] x cols [x, x+22]: the glyph box is at
-          // most colW wide (~13 here) and the body run starts past
-          // colW + 3 (body ink shares these rows — a wider probe let
-          // it mask a stroke deletion), the limits sit above/below.
+          // [base-12, base-2], cols [x, x+22]. The glyph box is at
+          // most colW wide (about 13 here), and the body run starts
+          // past colW + 3. Body ink shares these ROWS, so the narrow
+          // column bound is what excludes it. A wider probe once
+          // masked a stroke deletion.
           lcd_fill_rect(0, 60, SCREEN_WIDTH, 84, LCD_SET_VALUE);
           ppPaintAt(root, 10, 120);
           if(!ppTestRectAnyLit(108, 118, 10, 22)) {
@@ -2142,7 +2060,7 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
       }
     }
 
-    // B5: the BIGOP result chains like any operand; no early emission
+    // B5: the BIGOP result chains like any operand, no early emission
     ppcTestReset();
     ppcTestType("1");
     ppcTestOp(ITM_ENTER);
@@ -2158,12 +2076,9 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
     ppcTestOp(ITM_CLX);
     ppcTestExpectHist("B5 chained formula emitted", 1);
 
-    // B10: a big operator whose program fails PART WAY
-    // THROUGH must leave no formula behind. The hooks nest — a
-    // dispatch runs a program whose every step re-enters them — and
-    // DONE used to be consumed by the FIRST nested step, so its error
-    // check ran at step 1 and a later failure was never seen: the
-    // shadow kept claiming a finished sum the register did not hold.
+    // B10: a big operator whose program fails partway through must
+    // leave no formula behind. The hooks nest: a dispatch runs a
+    // program whose every step re-enters them.
     {
       static const uint8_t pgmE[] = {
         ITM_LBL, STRING_LABEL_VARIABLE, 1, 'E',
@@ -2182,28 +2097,21 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
         ppcTestOp(ITM_ENTER);
         ppcTestType("1");
         ppcTestOpParam(ITM_SIGMAn, (uint16_t)eLbl);
-        // this is the ONLY pin for R1-3's
-        // dispatch-depth pairing, and it used to assert only INSIDE
-        // `if(lastErrorCode != ERROR_NONE)` — so if the program ever
-        // stopped failing mid-loop the pin vanished silently and the
-        // suite still passed. Assert that we REACHED the failure.
+        // The only pin for the dispatch-depth pairing. Assert that we
+        // reached the failure.
         if(lastErrorCode == ERROR_NONE) {
           ppTestFail("B10 fixture no longer fails mid-loop; the depth pin is not being exercised");
         }
         else {
-          // the run failed: nothing may claim to describe the register
+          // the run failed: nothing claims to describe the register
           ppcTestExpectSig("B10 failed sum left a formula behind", "-");
         }
         lastErrorCode = 0;
       }
     }
 
-    // B11: the browser must be able to RECALL a formula
-    // containing a big operator. Two decoders read one token stream —
-    // the renderer knew all eight tokens, the recall decoder knew seven
-    // and bailed on the eighth, before reaching the result that follows
-    // it. So the row displayed with its "= result" and ENTER silently
-    // put nothing in X.
+    // B11: the browser must be able to recall a formula containing a
+    // big operator. Two decoders read one token stream.
     ppcTestReset();
     ppcTestType("1");
     ppcTestOp(ITM_ENTER);
@@ -2236,10 +2144,9 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
     }
 
     #if defined(OPTION_INFSUMS)
-    // B9: the early-stop sum captures like any other sum — it reads the
+    // B9: the early-stop sum captures like any other sum. It reads the
     // same three stack levels, so its node carries the real limits the
-    // user gave it. Before this it fell to the default rule and simply
-    // invalidated the shadow (truthful, but nothing shown).
+    // user gave it.
     ppcTestReset();
     ppcTestType("1");
     ppcTestOp(ITM_ENTER);
@@ -2247,11 +2154,8 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
     ppcTestOp(ITM_ENTER);
     ppcTestType("1");
     ppcTestOpParam(ITM_SIGMAnINF, (uint16_t)bigLbl);
-    // this assertion used to sit under
-    // `if(lastErrorCode == ERROR_NONE)` and the error was then cleared,
-    // so if the dispatch ever failed the test asserted NOTHING and still
-    // passed. A fixture must prove it reached the state it claims to
-    // test. Assert the run succeeded, then assert what it produced.
+    // A fixture must prove it reached the state it claims to test.
+    // Assert the run succeeded, then assert what it produced.
     if(lastErrorCode != ERROR_NONE) {
       ppTestFailInt("B9 the infinite sum did not run", 0, (int32_t)lastErrorCode);
       lastErrorCode = 0;
@@ -2294,9 +2198,9 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
       }
     }
 
-    // B6b: the label-param form is SETUP, not integration — no result
-    // exists, so no node may claim one (it still consumed X,Y as
-    // limits: the shadow invalidates rather than guess)
+    // B6b: the label-param form is setup only. No result
+    // exists, so no node claims one. It still consumed X and Y as
+    // limits, so the shadow invalidates.
     ppcTestReset();
     ppcTestType("5");
     ppcTestOp(ITM_ENTER);
@@ -2304,8 +2208,8 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
     ppcTestOpParam(ITM_INTEGRAL_YX, (uint16_t)bigLbl);
     ppcTestExpectSig("B6b setup form does not lie", "-");
 
-    // B7: a non-unit step is visible in the under-limit (or the display
-    // would lie): 1 ENTER 9 ENTER 2 -> n=1,(delta)2 under, 9 over
+    // B7: a non-unit step is visible in the under-limit, or the
+    // display lies: 1 ENTER 9 ENTER 2 -> n=1,(delta)2 under, 9 over
     ppcTestReset();
     ppcTestType("1");
     ppcTestOp(ITM_ENTER);
@@ -2330,14 +2234,13 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
       }
     }
 
-    /* B10: the captured big operator used as an OPERAND,
-     * built through the CAPTURE ENGINE's own precedence threading rather
-     * than a precedence this pin supplies. A big operator's body is
-     * drawn to the RIGHT of the stroke, so a factor beside it binds INTO
-     * the body unless it brackets. That is PP18-4's defect, fixed in the
-     * walker and left standing at the neighbour — where every PSHOW and
-     * PHIST of a programmed sum reaches the very same builder. Its own
-     * capture, so it disturbs nothing above it. */
+    /* B10: the captured big operator used as an operand, built
+     * through the capture engine's own precedence threading. A big
+     * operator's body is drawn to
+     * the right of the stroke, so a factor beside it binds into the
+     * body unless it brackets. Every PSHOW and PHIST of a programmed
+     * sum reaches the same builder. Its own capture, so it disturbs
+     * nothing above it. */
     ppcTestReset();
     ppcTestType("1");
     ppcTestOp(ITM_ENTER);
@@ -2366,12 +2269,12 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
     currentMvarLabel      = savedMvarLabel;
   }
 
-  // T24: R/S resumes a stopped program that then rewrites
-  // the stack with every step out of scope, so nothing tells the shadow.
-  // XEQ is the same operation by the other key and is US_ENABLED, so the
-  // default rule covered it; R/S is US_UNCHANGED and was not. Pins the
-  // classification: after R/S nothing may still claim to describe a
-  // register.
+  // T24: R/S resumes a stopped program that then rewrites the stack
+  // with every step out of scope, so nothing tells the shadow. XEQ is
+  // the same operation by the other key and is US_ENABLED, so the
+  // default rule covers it. R/S is US_UNCHANGED, so the default rule
+  // alone ignores it. Pins the classification: after R/S nothing
+  // still claims to describe a register.
   ppcTestReset();
   ppcTestType("2");
   ppcTestOp(ITM_ENTER);
@@ -2391,12 +2294,10 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
     ppcTestReset();
   }
 
-  /* T24b: SST is the third member of R1-7's set. fnSst
-   * only sets PGM_SINGLE_STEP; the key handler then runs one program step
-   * with PGM_RUNNING, so every nested hook fails ppcScopeOk and returns
-   * without mirroring OR invalidating — the step's stack motion is recorded
-   * nowhere. Identical to T24 but for the item, which is the point: R/S
-   * invalidated and SST did not. */
+  /* T24b: SST. fnSst only sets PGM_SINGLE_STEP. The key handler then
+   * runs one program step with PGM_RUNNING, so every nested hook fails
+   * ppcScopeOk and returns without mirroring or invalidating. The
+   * step's stack motion is recorded nowhere. */
   ppcTestReset();
   ppcTestType("2");
   ppcTestOp(ITM_ENTER);
@@ -2419,15 +2320,16 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
 
 
 /* ==== prettyTestFormula =================================================
- * Layout signatures: RUN -> its text with spaces stripped; HBOX ->
- * [children space-joined]; FRAC -> F(a|b); SUP -> S(a|b); RAD -> R(a);
+ * Layout signatures: RUN -> its text with spaces stripped. HBOX ->
+ * [children space-joined]. FRAC -> F(a|b). SUP -> S(a|b). RAD -> R(a).
  * PAREN -> P(a). Expected strings build from catalog names at runtime. */
 
-/* The PP18RR5-1 property, checked over a WHOLE tree so one function serves
- * every surface: a PP_SUP whose base already carries an exponent draws both
- * exponents at the same height and reads as one number, so every producer
- * of a PP_SUP must bracket such a base. A base carries an exponent when it
- * is a PP_SUP or a run whose text ends in superscript glyphs. */
+/* One check over a whole tree, so one function serves every surface.
+ * A PP_SUP whose base already carries an exponent draws both
+ * exponents at the same height and reads as one number. Every
+ * producer of a PP_SUP must bracket such a base. A base carries an
+ * exponent when it is a PP_SUP or a run whose text ends in
+ * superscript glyphs. */
 static bool_t ppfTestRunEndsSup(uint8_t n) {
   const ppNode_t *nd = ppNodeAt(n);
   if(nd == NULL || nd->kind != PP_RUN) {
@@ -2608,7 +2510,7 @@ void prettyTestFormula(uint16_t unusedButMandatoryParameter) {
   uint8_t root;
   const char *nADD  = indexOfItems[ITM_ADD].itemCatalogName;
 
-  // FV1: precedence parens — (2+3)×4
+  // FV1: precedence parens, (2+3)×4
   ppcTestReset();
   ppcTestType("2");
   ppcTestOp(ITM_ENTER);
@@ -2668,7 +2570,7 @@ void prettyTestFormula(uint16_t unusedButMandatoryParameter) {
     }
   }
 
-  // FV4: sqrt scopes without parens; square wraps in SUP
+  // FV4: sqrt scopes without parens, square wraps in SUP
   ppcTestReset();
   ppcTestType("2");
   ppcTestOp(ITM_SQUAREROOTX);
@@ -2681,7 +2583,7 @@ void prettyTestFormula(uint16_t unusedButMandatoryParameter) {
     ppfTestExpect("FV4 sqrt+square", root, "S(R(2)|2)");
   }
 
-  // FV5: PHIST pager paints frames and arms the protocol; PCLR empties
+  // FV5: PHIST pager paints frames and arms the protocol. PCLR empties
   ppcTestReset();
   ppcTestType("2");
   ppcTestOp(ITM_ENTER);
@@ -2707,7 +2609,7 @@ void prettyTestFormula(uint16_t unusedButMandatoryParameter) {
   screenHoldsDrawnPixels = false;
 
   // FV6: a formula too tall for the pager's standard rung must still
-  // show — the tiny rung re-fonts the whole tree. Build the 3-level
+  // show. The tiny rung re-fonts the whole tree. Build the 3-level
   // continued fraction 1/(2+3/(4+5/6)) through the real key paths.
   ppcTestReset();
   ppcTestType("6");
@@ -2738,9 +2640,9 @@ void prettyTestFormula(uint16_t unusedButMandatoryParameter) {
   screenUpdatingMode = SCRUPD_AUTO;
   screenHoldsDrawnPixels = false;
 
-  // FV12 (PP10): selection clamps at the last row and ENTER recalls the
+  // FV12: selection clamps at the last row, and ENTER recalls the
   // selected entry's result into X, restoring the mode and wiping the
-  // shadow (the recall bypassed item dispatch)
+  // shadow. The recall bypasses item dispatch.
   ppcTestReset();
   ppcTestType("2");
   ppcTestOp(ITM_ENTER);
@@ -2763,8 +2665,8 @@ void prettyTestFormula(uint16_t unusedButMandatoryParameter) {
   if(!ppTestIsLonI(REGISTER_X, 5)) ppTestFail("FV12 recalled result not in X");
   if(ppcCurrentFormulaRoot() != PPC_NIL) ppTestFail("FV12 shadow not invalidated after recall");
 
-  // FV7 (PP6): sqrt over a fraction — the synthesized tall sign; measure
-  // must succeed and the sign strokes must leave ink left of the vinculum
+  // FV7: sqrt over a fraction, the synthesized tall sign. Measure must
+  // succeed, and the sign strokes must leave ink left of the vinculum.
   ppcTestReset();
   ppcTestType("2");
   ppcTestOp(ITM_ENTER);
@@ -2786,9 +2688,8 @@ void prettyTestFormula(uint16_t unusedButMandatoryParameter) {
         lcd_fill_rect(0, 60, 120, 80, LCD_SET_VALUE);
         const ppNode_t *n7 = ppNodeAt(root7);
         ppPaintAt(root7, 10, 100);
-        // columns 10..17 hold ONLY the stroke sign — the vinculum starts
-        // at column 19 (child relX-1) and once satisfied this pin by
-        // accident (MUT-23 stayed green)
+        // Columns 10..17 hold only the stroke sign. The vinculum
+        // starts at column 19 (child relX-1).
         if(!ppTestRectAnyLit((uint32_t)(100 - n7->ascent), (uint32_t)(100 + n7->descent - 1), 10, 17)) {
           ppTestFail("FV7 synthesized sign missing");
         }
@@ -2797,7 +2698,7 @@ void prettyTestFormula(uint16_t unusedButMandatoryParameter) {
     }
   }
 
-  // FV8 (PP6): xth-root carries its index at the crook
+  // FV8: xth-root carries its index at the crook
   ppcTestReset();
   ppcTestType("27");
   ppcTestOp(ITM_ENTER);
@@ -2814,8 +2715,8 @@ void prettyTestFormula(uint16_t unusedButMandatoryParameter) {
     }
   }
 
-  // FV9 (PP6): log with a subscript base; the script is LOWERED (a SUB
-  // node's descent grows — a SUP-flipped mutation zeroes it)
+  // FV9: log with a subscript base. The script is lowered: a SUB
+  // node's descent grows, unlike a SUP node's.
   ppcTestReset();
   ppcTestType("8");
   ppcTestOp(ITM_ENTER);
@@ -2830,9 +2731,8 @@ void prettyTestFormula(uint16_t unusedButMandatoryParameter) {
     else {
       ppfTestExpect("FV9 log base", root9, "[U(log|2) P(8)]");
       if(ppMeasure(root9, 0)) {
-        // assert the SCRIPT node itself is lowered: relBase must be
-        // positive (the root-descent version was satisfied by 'log's own
-        // descender — MUT-25 stayed green)
+        // Assert the script node itself is lowered: relBase must be
+        // positive.
         const ppNode_t *r9 = ppNodeAt(root9);
         uint8_t sub9 = r9->firstChild;
         uint8_t script9 = (sub9 != PP_NONE) ? ppNodeAt(ppNodeAt(sub9)->firstChild)->nextSibling : PP_NONE;
@@ -2844,7 +2744,7 @@ void prettyTestFormula(uint16_t unusedButMandatoryParameter) {
     }
   }
 
-  // FV10 (PP6): absolute-value bars
+  // FV10: absolute-value bars
   ppcTestReset();
   ppcTestType("5");
   ppcTestOp(ITM_MAGNITUDE);
@@ -2868,7 +2768,7 @@ void prettyTestFormula(uint16_t unusedButMandatoryParameter) {
     }
   }
 
-  // FV11 (PP8): the T-line live formula is OFF by default (identity with
+  // FV11: the T-line live formula is off by default (identity with
   // forced-off), shows the open formula when toggled on, and never
   // hijacks the X line
   {
@@ -2898,8 +2798,8 @@ void prettyTestFormula(uint16_t unusedButMandatoryParameter) {
     if(!ppTestSnapsEqual()) {
       ppTestFail("FV11 T-line not OFF by default");
     }
-    // toggled ON: the T line must DIFFER from the value render (the
-    // formula "2+3" paints instead of T's value)
+    // toggled ON: the T line must DIFFER from the value render,
+    // because the formula "2+3" paints there
     prettySetTline(true);
     lcd_fill_rect(0, PPT_T_TOP, SCREEN_WIDTH, PPT_T_ROWS, LCD_SET_VALUE);
     refreshRegisterLine(REGISTER_T);
@@ -2922,8 +2822,8 @@ void prettyTestFormula(uint16_t unusedButMandatoryParameter) {
     prettySetTline(false);
   }
 
-  // FV13 (PP11): the master toggle is the REAL system flag — the toggle
-  // item flips it, and a reset restores the default-ON
+  // FV13: the master toggle is the real system flag. The toggle item
+  // flips it, and a reset restores the default-ON.
   {
     bool_t before = getSystemFlag(FLAG_PRETTYP);
     fnPrettyToggle(NOPARAM);
@@ -2941,10 +2841,10 @@ void prettyTestFormula(uint16_t unusedButMandatoryParameter) {
     }
   }
 
-  // FV14 (PP15): the T line is a REAL flag too, and its default is
-  // reached by the OPPOSITE route to the master toggle's — a reset
-  // wipes the flags, and OFF is already the T line's default, so it
-  // must NOT be re-set afterwards the way FLAG_PRETTYP is.
+  // FV14: the T line is a real flag too, and its default is reached
+  // by the opposite route to the master toggle's. A reset wipes the
+  // flags, and OFF is already the T line's default, so it must not be
+  // re-set afterward the way FLAG_PRETTYP is.
   {
     prettySetTline(false);
     if(getSystemFlag(FLAG_PTLINE)) {
@@ -2965,13 +2865,12 @@ void prettyTestFormula(uint16_t unusedButMandatoryParameter) {
     }
   }
 
-  // FV17 (PP16): the two toggles in our own menu SHOW their state. The
+  // FV17: the two toggles in our own menu show their state. The
   // generic checkbox path only fires for fnGetSystemFlag items inside
-  // one particular menu, so ours is a package-local branch — and this
-  // pins it by rendering the softkey row twice with the flag opposite
-  // and comparing ink. A filled box carries more ink than an outline;
-  // per the harness rule the assert is on ORDERING, never a literal
-  // count, so a font change cannot turn it red.
+  // one particular menu, so ours is a package-local branch. This pins
+  // it by rendering the softkey row twice with the flag opposite and
+  // comparing ink. A filled box carries more ink than an outline. Per
+  // the harness rule the assert is on ordering.
   {
     int16_t hadScrUpd = screenUpdatingMode;
     bool_t hadP = getSystemFlag(FLAG_PRETTYP);
@@ -3005,9 +2904,9 @@ void prettyTestFormula(uint16_t unusedButMandatoryParameter) {
       ppTestFail("FV17 the PPON softkey did not render at all");
     }
     else if(inkOn < inkOff + 8) {
-      // measured margin is 33 px (291 filled vs 258 outline); 8 is a
+      // Measured margin is 33 px (291 filled vs 258 outline). 8 is a
       // floor that still catches "the indicator stopped moving" without
-      // pinning a literal count the font owns
+      // pinning a literal count the font owns.
       ppTestFailInt("FV17 the state indicator does not track the flag",
                     (int32_t)inkOff + 8, (int32_t)inkOn);
     }
@@ -3017,11 +2916,8 @@ void prettyTestFormula(uint16_t unusedButMandatoryParameter) {
     calcMode = hadMode;
   }
 
-  // FV16 (PP15): the cold-start path initialises our data WITHOUT
-  // touching the user's flags. Before the ppcInit/prettyReset split the
-  // first dispatch after a cold start force-set the master flag, which
-  // silently overwrote a saved preference — the persistence PP11
-  // claimed to deliver.
+  // FV16: the cold-start path initializes our data without touching
+  // the user's flags.
   {
     clearSystemFlag(FLAG_PRETTYP);   // a user who turned it OFF
     setSystemFlag(FLAG_PTLINE);      // and turned the T line ON
@@ -3037,16 +2933,16 @@ void prettyTestFormula(uint16_t unusedButMandatoryParameter) {
   }
 
   // FV18: the builder must never report success with a child
-  // silently missing. ppfParen ALLOCATES, and PP_HBOX is the one variadic
-  // container — ppMeasure checks arity for FRAC/SUP/SUB/RAD/BARS/PAREN/
-  // BIGOP but cannot for HBOX — so an unchecked append there measures and
-  // paints as a finished formula with an operand simply absent. LOGXY is
-  // the shape: "log2" with no argument, reported true.
+  // silently missing. ppfParen allocates, and PP_HBOX is the one
+  // variadic container. ppMeasure checks arity for
+  // FRAC/SUP/SUB/RAD/BARS/PAREN/BIGOP but cannot for HBOX, so an
+  // unchecked append there measures and paints as a finished formula
+  // with an operand absent. LOGXY is the shape: "log2" with no
+  // argument, reported true.
   //
-  // The fixture starves the pool by EXACTLY one node, calibrated at
-  // runtime rather than hardcoded, and asserts both halves: with the
-  // measured node count the build succeeds (so the calibration is real),
-  // and one node short it must FAIL rather than yield a partial tree.
+  // The fixture starves the pool by one node, measured at runtime,
+  // and asserts both halves: with the measured node count the build
+  // succeeds, and one node short it must fail.
   {
     ppcTestReset();
     ppcTestType("8");
@@ -3068,7 +2964,7 @@ void prettyTestFormula(uint16_t unusedButMandatoryParameter) {
         ppTestFailInt("FV18 implausible node count", PP_POOL_NODES, used);
       }
       else {
-        // one node short: the LAST allocation in ppfBuildOp2 is ppfParen
+        // one node short: the last allocation in ppfBuildOp2 is ppfParen
         ppReset();
         for(uint8_t i = 0; i < (uint8_t)(PP_POOL_NODES - (used - 1)); i++) {
           if(ppNewBox(PP_HBOX, PP_FONT_STANDARD) == PP_NONE) {
@@ -3085,24 +2981,23 @@ void prettyTestFormula(uint16_t unusedButMandatoryParameter) {
     ppReset();
   }
 
-  // FV19: the browser's softkey containment is a RANGE, and
-  // this pins our calcMode inside it. Upstream's three softkey gates
+  // FV19: the browser's softkey containment is a range, and this pins
+  // our calcMode inside it. Upstream's three softkey gates
   // (btnFnPressed, btnFnReleased, executeFunction) enumerate its own
-  // browsers by name; a package browser is covered only by the shared
-  // `calcMode < 19 /* package browsers 19-23, claims registry */` clause
-  // both sibling packages carry byte-identically. Renumber
-  // CM_PRETTY_BROWSER below 19 and softkeys silently start executing
-  // underneath the browser again — including our own PCLR, which would
-  // wipe the history being browsed. Nothing else would go red.
+  // browsers by name. A package browser is covered only by the shared
+  // `calcMode < 19 /* package browsers 19-23, claims registry */`
+  // clause both sibling packages carry byte-identically. Renumber
+  // CM_PRETTY_BROWSER below 19 and softkeys silently run underneath
+  // the browser again. Our own PCLR then wipes the browsed history.
+  // Nothing else goes red.
   if(CM_PRETTY_BROWSER < 19 || CM_PRETTY_BROWSER > 23) {
     ppTestFailInt("FV19 calcMode is outside the package-browser range the softkey gates protect",
                   20, (int32_t)CM_PRETTY_BROWSER);
   }
 
-  // FV15 (PP15): the softmenu claims are actually wired — the package's
-  // own menu resolves with its six entries, and both parent slots hold
-  // what the claims registry says they hold. Pins the menu tables the
-  // way the pixel pins pin the renderer: by looking, not by trusting.
+  // FV15: the softmenu claims are actually wired. The package's own
+  // menu resolves with its six entries, and both parent slots hold
+  // what the claims registry says they hold.
   {
     const int16_t *ppItems = NULL;
     int16_t ppCount = 0;
@@ -3119,7 +3014,7 @@ void prettyTestFormula(uint16_t unusedButMandatoryParameter) {
     else {
       // 12, not 6: VISUAL sits on the f-shifted row (a softmenu's slots
       // 6-11 ARE the f row), and upstream menus are padded to a multiple
-      // of six rather than left ragged
+      // of six
       static const int16_t want[12] = { ITM_PSHOW,  ITM_PHIST, ITM_PCLR,
                                         ITM_EQSHW,  ITM_PPON,  ITM_PTLIN,
                                         ITM_VISUAL, ITM_NULL,  ITM_NULL,
@@ -3155,30 +3050,25 @@ void prettyTestFormula(uint16_t unusedButMandatoryParameter) {
     }
   }
 
-  // FV20 (owner report 2026-08-27): EXIT would not dismiss the EQSHW
-  // screen; only BACKSPACE did. Both full-screen surfaces hold their
-  // pixels with the fnPixel protocol, but upstream's EXIT arm
-  // (keyboard.c:2533) only dismisses a held screen when
+  // FV20: both full-screen surfaces hold their pixels with the
+  // fnPixel protocol. Upstream's EXIT arm (keyboard.c:2533) dismisses
+  // a held screen only when
   //   temporaryInformation != TI_NO_INFO || showScreenDismissed
-  // and showScreenDismissed is itself latched from SHOWMODE at
-  // btnPressed (keyboard.c:1808). Painting without a temporaryInformation
-  // left BOTH terms false, so EXIT fell through to the menu arm and the
-  // pixels stayed. BACKSPACE worked only because its own arm refreshes
-  // unconditionally, which is why the defect looked EQSHW-specific.
+  // showScreenDismissed is latched from SHOWMODE at btnPressed
+  // (keyboard.c:1808).
   //
-  // The pin is a CONTRACT pin, and deliberately so: the EXIT arm lives in
-  // keyboard.c's static executeFunction, reachable only from GTK button
-  // events that the testSuite binary has no path to raise. So this
-  // asserts the state the surface must LEAVE BEHIND for that arm to fire
-  // — the exact term that was missing — rather than the keypress itself.
+  // The EXIT arm lives in keyboard.c's static executeFunction,
+  // reachable only from GTK button events the testSuite binary has no
+  // path to raise. This pin asserts the state the surface must leave
+  // behind for that arm to fire.
   {
     ppcTestReset();
     calcMode = CM_NORMAL;
     bool_t hadFract = getSystemFlag(FLAG_FRACT);
     setSystemFlag(FLAG_FRACT);
     prettySetEnabled(true);
-    ppTestSetRealX("0.75");     // a LonI never pretties, so it would
-                                // fall back to SHOW and prove nothing
+    ppTestSetRealX("0.75");     // a LonI never pretties: it falls
+                                // back to SHOW and proves nothing
 
     temporaryInformation = TI_NO_INFO;
     screenHoldsDrawnPixels = false;
@@ -3193,9 +3083,8 @@ void prettyTestFormula(uint16_t unusedButMandatoryParameter) {
       ppTestFail("FV20 PSHOW screen is not a SHOWMODE screen — no showScreenDismissed latch");
     }
 
-    // setEquation dereferences allFormulae, which is NULL until a slot
-    // exists — the covDerivEq idiom, and the same NULL that has bitten
-    // a probe placed before any equation was created.
+    // setEquation dereferences allFormulae, NULL until a slot
+    // exists. This is the covDerivEq idiom.
     uint16_t hadMode = calcMode;
     if(numberOfFormulae == 0) {
       fnEqNew(NOPARAM);
@@ -3265,7 +3154,7 @@ void prettyTestEquation(uint16_t unusedButMandatoryParameter) {
     ppfTestExpect("EQ3 radical", root, "R([x + 1])");
   }
 
-  // EQ4: declines — no 2D gain, dangling operator, ellipsis, unknown glyph
+  // EQ4: declines: no 2D gain, dangling operator, ellipsis, unknown glyph
   ppReset();
   if(ppqParse("A+B", PP_FONT_STANDARD, PP_FONT_TINY, &root))            ppTestFail("EQ4 no-frac accepted");
   ppReset();
@@ -3275,11 +3164,11 @@ void prettyTestEquation(uint16_t unusedButMandatoryParameter) {
   ppReset();
   if(ppqParse("\x83\xc0" "/2", PP_FONT_STANDARD, PP_FONT_TINY, &root))  ppTestFail("EQ4 unknown glyph accepted");
 
-  /* EQ4b — radix parity. The evaluator treats ',' and '.'
-   * as the same radix mark, so an acceptor whose verdict changes between the
-   * two for identical mathematics is a defect by definition. Both forms must
-   * parse AND draw the same picture; the dot form is the control, so a
-   * regression that breaks both still reddens this. */
+  /* EQ4b: radix parity. The evaluator treats ',' and '.' as the same
+   * radix mark, so an acceptor whose verdict changes between the two
+   * for identical mathematics is a defect by definition. Both forms
+   * must parse and draw the same picture. The dot form is the
+   * control, so a regression that breaks both still reddens this. */
   {
     char sigDot[192], sigComma[192];
     uint8_t dotRoot = PP_NONE, commaRoot = PP_NONE;
@@ -3300,10 +3189,8 @@ void prettyTestEquation(uint16_t unusedButMandatoryParameter) {
       ppfTestSigNode(commaRoot, sigComma, sizeof(sigComma));
     }
 
-    /* Assert the PROPERTY, not a signature literal: the drawing keeps the
-     * owner's own radix spelling, so normalise that one character and the
-     * two pictures must be identical. A literal here would only enshrine
-     * whatever the code happens to emit. */
+    /* The drawing keeps the owner's own radix spelling. Normalize
+     * that one character, and the two pictures must be identical. */
     for(char *q = sigComma; *q != 0; q++) {
       if(*q == ',') {
         *q = '.';
@@ -3316,13 +3203,11 @@ void prettyTestEquation(uint16_t unusedButMandatoryParameter) {
     }
   }
 
-  /* EQ4c — exponent-sign parity. The equation builder
-   * emits BOTH signs (_showExponent writes STD_SUP_PLUS for an explicit '+'),
-   * but PPQ_IS_SUP admitted only STD_SUP_MINUS, so one glyph decided whether
-   * the whole equation kept its 2D strip. Same class as EQ4b's radix: the
-   * acceptor's alphabet was narrower than the producer's emit-set.
-   * The minus form is the control — it parsed before the fix and must keep
-   * parsing, so a regression that breaks both still reddens this. */
+  /* EQ4c: exponent-sign parity. The equation builder emits both signs
+   * (_showExponent writes STD_SUP_PLUS for an explicit '+'), and
+   * PPQ_IS_SUP admits both STD_SUP_PLUS and STD_SUP_MINUS. Same class
+   * as EQ4b's radix: the acceptor's alphabet must match the
+   * producer's emit-set. */
   {
     char sigMinus[192], sigPlus[192];
     uint8_t mRoot = PP_NONE, pRoot = PP_NONE;
@@ -3349,11 +3234,11 @@ void prettyTestEquation(uint16_t unusedButMandatoryParameter) {
     }
   }
 
-  /* EQ4d (PP18RR5-1) — the EQN grammar is the third producer of a PP_SUP,
-   * so it carries the same rule: a base that already ends in exponent
-   * glyphs must be bracketed, or 1x10^5 raised to 2 draws its two exponents
-   * at one height. The number scanner swallows the SUB-10 tail into the
-   * run, so the kind test alone cannot see it — ppfPowBase reads the run. */
+  /* EQ4d: the EQN grammar is a producer of a PP_SUP, so it carries the
+   * same rule. A base that already ends in exponent glyphs must be
+   * bracketed, or 1x10^5 raised to 2 draws its two exponents at one
+   * height. The number scanner swallows the SUB-10 tail into the run,
+   * so the kind test alone cannot see it. ppfPowBase reads the run. */
   {
     ppReset();
     uint8_t eRoot = PP_NONE;
@@ -3366,14 +3251,13 @@ void prettyTestEquation(uint16_t unusedButMandatoryParameter) {
     }
   }
 
-  /* EQ9b — the linear fallback must not lie by truncation.
-   * An equation with no fraction, radical or script is refused by the 2D
-   * grammar by construction, so it lands on the fallback; if it is wider
-   * than the screen, showString's NO_LF arm paints past the edge and
-   * bitblt24 drops the tail silently. The sibling pager refuses that shape
-   * outright, but this surface exists to avoid a blank band, so
-   * the honest answer is a marker — upstream's own answer at the same shape.
-   * Asserted on the fit itself rather than on pixels. */
+  /* EQ9b: the linear fallback must not lie by truncation. An equation
+   * with no fraction, radical, or script is refused by the 2D grammar
+   * by construction, so it lands on the fallback. If it is wider than
+   * the screen, showString's NO_LF arm paints past the edge, and
+   * bitblt24 drops the tail silently. The sibling pager refuses that
+   * shape outright, but this surface must show something, so it
+   * paints a marker. Asserted on the fit. */
   {
     static const char wide[] = "AREA=LENGTH+WIDTH+CORRECTION+OFFSET+FACTOR+MARGIN";
     char cut[256];
@@ -3418,8 +3302,8 @@ void prettyTestEquation(uint16_t unusedButMandatoryParameter) {
     lcd_fill_rect(0, 171, SCREEN_WIDTH, 23, LCD_SET_VALUE);
   }
 
-  // EQ6 (PP7): the nested equation that must DECLINE in the strip parses
-  // and fits the full view at standard fonts — and stays full-size (a
+  // EQ6: the nested equation that must decline in the strip parses
+  // and fits the full view at standard fonts, and stays full-size (a
   // strip-font mutation shrinks the outer stack below 25 px)
   ppReset();
   {
@@ -3437,7 +3321,7 @@ void prettyTestEquation(uint16_t unusedButMandatoryParameter) {
     }
   }
 
-  // EQ7 (PP7): EQSHW renders the nested equation between its frames and
+  // EQ7: EQSHW renders the nested equation between its frames and
   // arms the manual-paint protocol
   {
     int16_t hadScrUpd = screenUpdatingMode;
@@ -3471,8 +3355,8 @@ void prettyTestEquation(uint16_t unusedButMandatoryParameter) {
     screenHoldsDrawnPixels = hadHolds;
   }
 
-  // EQ8 (PP7): interactive integrate mode frames the integrand with the
-  // stroke-drawn big ∫ — ink appears left of the plain render's block
+  // EQ8: interactive integrate mode frames the integrand with the
+  // stroke-drawn big ∫. Ink appears left of the plain render's block.
   {
     uint16_t hadStatus = currentSolverStatus;
     int16_t hadScrUpd = screenUpdatingMode;
@@ -3497,8 +3381,8 @@ void prettyTestEquation(uint16_t unusedButMandatoryParameter) {
     screenHoldsDrawnPixels = hadHolds;
   }
 
-  // EQ9 (PP7): an unparseable equation still shows its linear line in the
-  // full view — the always-show-something fallback
+  // EQ9: an unparseable equation still shows its linear line in the
+  // full view, the always-show-something fallback
   {
     int16_t hadScrUpd = screenUpdatingMode;
     bool_t hadHolds = screenHoldsDrawnPixels;
@@ -3514,7 +3398,7 @@ void prettyTestEquation(uint16_t unusedButMandatoryParameter) {
     screenHoldsDrawnPixels = hadHolds;
   }
 
-  /* ==== PP13: solver-surface frames ==================================== */
+  /* ==== Solver-surface frames ========================================== */
   {
     uint16_t hadStatus = currentSolverStatus;
     uint16_t hadVar = currentSolverVariable;
@@ -3535,8 +3419,8 @@ void prettyTestEquation(uint16_t unusedButMandatoryParameter) {
       ppfTestExpect("EQ10 integral frame", ppqFrameIntegral(eq), "B([F(1|x) dx]|0.|1.)");
     }
 
-    // EQ11: without INTERACTIVE the limits are not the session's — the
-    // bare stroke integral, as PP7 shipped it
+    // EQ11: without INTERACTIVE the limits are not the session's, so
+    // it falls back to the bare stroke integral.
     currentSolverStatus = SOLVER_STATUS_EQUATION_INTEGRATE;
     ppReset();
     if(!ppqParse("1/X", PP_FONT_STANDARD, PP_FONT_TINY, &eq)) {
@@ -3571,14 +3455,14 @@ void prettyTestEquation(uint16_t unusedButMandatoryParameter) {
     currentSolverVariable = hadVar;
   }
 
-  /* ==== PP14: equation-language big operators ========================== */
+  /* ==== Equation-language big operators ================================ */
   {
     uint16_t hadStatus = currentSolverStatus;
     uint16_t hadVar = currentSolverVariable;
     uint16_t hadProgram = currentSolverProgram;
 
     if(numberOfFormulae == 0) {
-      fnEqNew(NOPARAM);          // the covDerivEq idiom; leaves EIM state
+      fnEqNew(NOPARAM);          // the covDerivEq idiom, leaves EIM state
     }
     calcMode = CM_NORMAL;
     aimBuffer[0] = 0;
@@ -3620,7 +3504,7 @@ void prettyTestEquation(uint16_t unusedButMandatoryParameter) {
       }
     }
 
-    // EQ16: DERIV delegates to the upstream engine — exact for a cubic
+    // EQ16: DERIV delegates to the upstream engine, exact for a cubic
     // (deriv_cov's own pin), both orders
     setEquation(currentFormula, "DERIV(X^3;X;2)");
     lastErrorCode = 0;
@@ -3667,7 +3551,7 @@ void prettyTestEquation(uint16_t unusedButMandatoryParameter) {
       }
     }
 
-    // EQ18: constructs nest; the argument slicer must honour paren depth
+    // EQ18: constructs nest. The argument slicer must honor paren depth
     setEquation(currentFormula, "SUM(SUM(Y;Y;1;X);X;1;3)");
     lastErrorCode = 0;
     fnEqCalc(NOPARAM);
@@ -3709,24 +3593,19 @@ void prettyTestEquation(uint16_t unusedButMandatoryParameter) {
       }
     }
 
-    // EQ22 (capacity): the ultimate nesting — an integral wrapping a
+    // EQ22 (capacity): the ultimate nesting, an integral wrapping a
     // second derivative of [a Σ-with-√-fraction over a multiplication,
     // times a ∏ with a nested power fraction]. Pins the raised
     // PP_MAX_DEPTH and the 64-node pool: it must parse, measure, use
     // most of the pool, and fit the EQSHW band at full size.
     //
-    // The fixture is the string a user can actually TYPE, and EQ33
-    // evaluates this same expression. It used to be written in the
-    // DISPLAY alphabet — bare "\xa2\x1a" and the superscript-2 glyph —
-    // which renders identically but is not input syntax: the root is a
-    // function alias needing parentheses (functionAlias[], beside log10)
-    // and the superscript glyph appears in equation.c only in
-    // commented-out lines, where the power operator is '^'. So the old
-    // fixture drew a formula that could never be computed, and this pin
-    // said nothing about that because it never evaluated it. Indices are
-    // lowercase and DISTINCT from the outer variable: the constructs
-    // shadow correctly (same-variable and distinct-variable forms agree
-    // to 34 digits), but distinct indices let a reader see that.
+    // The fixture is the string a user can actually type, and EQ33
+    // evaluates this same expression. The root is a function alias
+    // that needs parentheses (functionAlias[], beside log10), and the
+    // power operator is '^'. Indices are lowercase and distinct from
+    // the outer variable. The constructs shadow correctly (same-
+    // variable and distinct-variable forms agree to 34 digits), and
+    // distinct indices let a reader see that.
     {
       uint8_t root;
       ppReset();
@@ -3761,9 +3640,8 @@ void prettyTestEquation(uint16_t unusedButMandatoryParameter) {
       }
     }
 
-    // EQ23-EQ25: the stored-alphabet arms EQSHW now reads (the display
-    // string truncates long equations for the strip — found by the
-    // ultimate demo declining through the real surface)
+    // EQ23-EQ25: the stored-alphabet arms EQSHW reads. The display
+    // string truncates long equations for the strip.
     {
       uint8_t root;
       ppReset();
@@ -3790,13 +3668,11 @@ void prettyTestEquation(uint16_t unusedButMandatoryParameter) {
       }
     }
 
-    // EQ29: the whole user journey for a construct, through the REAL
+    // EQ29: the whole user journey for a construct, through the real
     // key path. Types SUM(X;X;1;3) one softkey at a time into the
-    // equation editor (the ';' lives in the ALPHA punctuation menu),
-    // runs the commit ENTER runs — setEquation plus the MVAR
-    // variable-hunting parse, which is the gate Bug 1 broke and which
-    // would have bounced the user back into the editor — then
-    // evaluates. 1+2+3 = 6.
+    // equation editor (the ';' lives in the ALPHA punctuation menu).
+    // The commit runs setEquation plus the MVAR variable-hunting
+    // parse, then evaluates. 1+2+3 = 6.
     {
       uint16_t hadMode = calcMode;
       bool_t hadKIC = fnKeyInCatalog;
@@ -3843,10 +3719,10 @@ void prettyTestEquation(uint16_t unusedButMandatoryParameter) {
       lastErrorCode = 0;
     }
 
-    // EQ30: a construct whose body is COMPLEX accumulates complex, on
-    // upstream's own terms — its _programmableSumProd latches over the
-    // moment a term has an imaginary part, but only if FL_CPXRES allows.
-    // SUM(X*i;X;1;3) = (1+2+3)i = 6i.
+    // EQ30: a construct whose body is complex accumulates complex, on
+    // upstream's own terms. Its _programmableSumProd latches over the
+    // moment a term has an imaginary part, but only if FL_CPXRES
+    // allows. SUM(X*i;X;1;3) = (1+2+3)i = 6i.
     {
       bool_t hadCpx = getSystemFlag(FLAG_CPXRES);
       setSystemFlag(FLAG_CPXRES);
@@ -3867,7 +3743,7 @@ void prettyTestEquation(uint16_t unusedButMandatoryParameter) {
       }
       lastErrorCode = 0;
       // and with complex results refused, the same body is a domain
-      // error rather than a silently-real answer
+      // error
       clearSystemFlag(FLAG_CPXRES);
       setEquation(currentFormula, "SUM(X" STD_CROSS "i;X;1;3)");
       lastErrorCode = 0;
@@ -3884,25 +3760,19 @@ void prettyTestEquation(uint16_t unusedButMandatoryParameter) {
       }
     }
 
-    // EQ31: a construct must never destroy the value the
-    // loop variable already held. The old test for "can I put this
-    // back?" asked whether the value converts to a real, which refuses
-    // a complex — so a variable holding 7+4i took no snapshot and was
-    // overwritten by the counter. Class test: every type
+    // EQ31: a construct must never destroy the value the loop
+    // variable already held. Class test: every type
     // saveRegisterSnapshot covers must survive a construct.
     {
       calcRegister_t vA = findOrAllocateNamedVariable("A");
-      // complex — the reported case
+      // complex value
       reallocateRegister(vA, dtComplex34, 0, amNone);
       int32ToReal34(7, REGISTER_REAL34_DATA(vA));
       int32ToReal34(4, REGISTER_IMAG34_DATA(vA));
       setEquation(currentFormula, "SUM(A;A;1;2)");
       lastErrorCode = 0;
       fnEqCalc(NOPARAM);
-      // this used to assert only that A was
-      // unchanged, which a REFUSED construct satisfies without ever
-      // exercising the save/restore it exists to test — and R3-1 has
-      // since made refusal a real path. Prove the sum RAN: 1+2 = 3.
+      // Prove the sum ran: 1+2 = 3.
       {
         real34_t want3;
         int32ToReal34(3, &want3);
@@ -3928,7 +3798,7 @@ void prettyTestEquation(uint16_t unusedButMandatoryParameter) {
           ppTestFail("EQ31 complex loop variable not restored to 7+4i");
         }
       }
-      // long integer — the other branch of the old test, must still work
+      // long integer: this branch must still work
       reallocateRegister(vA, dtLongInteger, 0, amNone);
       ppTestWriteLonI(vA, 12345);
       setEquation(currentFormula, "SUM(A;A;1;2)");
@@ -3942,12 +3812,10 @@ void prettyTestEquation(uint16_t unusedButMandatoryParameter) {
       int32ToReal34(0, REGISTER_REAL34_DATA(vA));
     }
 
-    // EQ32: the refusal verdict must be about THIS call.
-    // Nothing on the derivative path clears engineNestingWasRefused
-    // (solve.c holds the tree's only `= false`), so one earlier refused
-    // nesting used to make every later DERIV construct discard a
-    // correct answer. Same shape for a pre-existing PGM_WAITING, which
-    // was also silently overwritten.
+    // EQ32: the refusal verdict must be about this call. Nothing on
+    // the derivative path clears engineNestingWasRefused (solve.c
+    // holds the tree's only `= false`). Same shape for a pre-existing
+    // PGM_WAITING.
     {
       engineNestingWasRefused = true;          // as an earlier refusal leaves it
       setEquation(currentFormula, "DERIV(X^3;X;2)");
@@ -3965,9 +3833,9 @@ void prettyTestEquation(uint16_t unusedButMandatoryParameter) {
       // The caller's run state is the caller's. A pre-existing
       // PGM_WAITING means an abort is genuinely in flight (the engine
       // itself raises SOLVER_ABORT there, differentiate.c:402), so the
-      // construct failing is CORRECT — what was not correct was
-      // silently rewriting the state to PGM_STOPPED on the way out.
-      programRunStop = PGM_WAITING;            // pre-existing, not ours
+      // construct failing is correct. The state must not be silently
+      // rewritten to PGM_STOPPED on the way out.
+      programRunStop = PGM_WAITING;            // simulates a pre-existing WAITING
       setEquation(currentFormula, "DERIV(X^3;X;2)");
       lastErrorCode = 0;
       fnEqCalc(NOPARAM);
@@ -3979,12 +3847,13 @@ void prettyTestEquation(uint16_t unusedButMandatoryParameter) {
       lastErrorCode = 0;
     }
 
-    // EQ26: the render/eval parity ruling — an integral of a numeric
+    // EQ26: the render/eval parity ruling, an integral of a numeric
     // second derivative whose body holds a construct, over limits away
-    // from zero (a limit AT zero collapses the relative-step stencil at
-    // the integrator's endpoint-clustered nodes; upstream's interactive
-    // d²/dx² at 1E-24 fails the same way — documented caveat).
-    // g = SUM(X;X;1;3)/(X+2) = 6/(x+2): integral of g'' over [1,2]
+    // from zero. A limit at zero collapses the relative-step stencil
+    // at the integrator's endpoint-clustered nodes. Upstream's
+    // interactive d²/dx² at 1E-24 fails the same way (documented
+    // caveat).
+    // g = SUM(X;X;1;3)/(X+2) = 6/(x+2). Integral of g'' over [1,2]
     // = g'(2)-g'(1) = 7/24.
     setEquation(currentFormula, "INTEG(DERIV(SUM(X;X;1;3)/(X+2);X;X;2);X;1;2)");
     lastErrorCode = 0;
@@ -4006,10 +3875,10 @@ void prettyTestEquation(uint16_t unusedButMandatoryParameter) {
     }
     lastErrorCode = 0;
 
-    // EQ33 (2026-08-27): the capacity expression EQ22 renders must also
-    // evaluate. Hand-checked factor by factor: the sum is 3.759490707,
-    // the product 1.857588228, and the second derivative of 1/(x(x+1))
-    // at x=2 is 0.175925926; the integral of that constant over [0,1]
+    // EQ33: the capacity expression EQ22 renders must also evaluate.
+    // Hand-checked factor by factor: the sum is 3.759490707, the
+    // product 1.857588228, and the second derivative of 1/(x(x+1)) at
+    // x=2 is 0.175925926. The integral of that constant over [0,1]
     // leaves it unchanged.
     setEquation(currentFormula,
       "INTEG(DERIV("
@@ -4035,16 +3904,13 @@ void prettyTestEquation(uint16_t unusedButMandatoryParameter) {
     }
     lastErrorCode = 0;
 
-    // EQ34 (owner report 2026-08-27): the construct names must accept
-    // lowercase. Upstream's own convention for a name a user types into
-    // an equation is to carry BOTH spellings in the alias table —
-    // functionAlias[] holds "sinh" beside "SINH" and "asinh" beside
-    // "ASINH" (equation.c:41-44) — because CMP_NAME folds superscripts
-    // and struck forms but NOT case. The package matched with a
-    // case-sensitive strncmp on one spelling, so sum(...) and integ(...)
-    // reached _parseWord as unknown words and raised FUNCTION_NOT_FOUND.
-    // Variables were never affected, which is why lowercase indices in
-    // the capacity expression (EQ33) always worked.
+    // EQ34: the construct names must accept lowercase. Upstream's own
+    // convention for a name a user types into an equation is to carry
+    // both spellings in the alias table. functionAlias[] holds "sinh"
+    // beside "SINH" and "asinh" beside "ASINH" (equation.c:41-44),
+    // because CMP_NAME folds superscripts and struck forms but not
+    // case. Variables are not affected, so lowercase indices in the
+    // capacity expression (EQ33) always work.
     {
       static const char * const eq34[] = {
         "sum(X;X;1;3)", "SUM(X;X;1;3)",
@@ -4093,19 +3959,17 @@ void prettyTestEquation(uint16_t unusedButMandatoryParameter) {
         ppTestFail("EQ34 a name ending in a construct name matched");
       }
       // MIXED case is upstream's own no: functionAlias[] carries SINH
-      // and sinh, never Sinh. Pinned so the two spellings stay a ruling
-      // rather than an accident of how the comparison was written.
+      // and sinh, never Sinh.
       ppReset();
       if(ppqParse("Sum(X;X;1;3)", PP_FONT_STANDARD, PP_FONT_TINY, &root)) {
         ppTestFail("EQ34 mixed case matched, which upstream's aliases do not");
       }
     }
 
-    /* EQ35: the EQN parser is the third producer of the
-     * big-operator-as-operand defect. SUM(X;X;1;3)^2 is 36; drawn
-     * without brackets it is the picture of 1^2+2^2+3^2 = 14. The walker
-     * and the capture engine were fixed; this parser has no precedence
-     * value to correct, so the node KIND decides. */
+    /* EQ35: the EQN parser is a producer of the big-operator-as-operand
+     * defect. SUM(X;X;1;3)^2 is 36. Drawn without brackets it is the
+     * picture of 1^2+2^2+3^2 = 14. This parser has no precedence value
+     * to correct, so the node kind decides. */
     {
       uint8_t root;
       ppReset();
@@ -4128,9 +3992,9 @@ void prettyTestEquation(uint16_t unusedButMandatoryParameter) {
       }
     }
 
-    // EQ27: an integral nests inside an integral — the new
+    // EQ27: an integral nests inside an integral. The
     // double-exponential path never increments the engine counter, so
-    // nothing upstream refuses it; the package's stack guard is the
+    // nothing upstream refuses it. The package's stack guard is the
     // bound. Integral over y of (integral of x over [0,1]) = 0.5.
     setEquation(currentFormula, "INTEG(INTEG(X;X;0;1);X;0;1)");
     lastErrorCode = 0;
@@ -4153,11 +4017,11 @@ void prettyTestEquation(uint16_t unusedButMandatoryParameter) {
     lastErrorCode = 0;
 
     // EQ28: the upstream second-derivative defect near zero, and its
-    // upstream-native remedy. The same integral over [0,1] — a range
-    // whose endpoint samples land in the failing band — is garbage with
-    // the default relative step and EXACT once the derivative's own
-    // step variable is set. Pins the remedy so the DESIGN.md guidance
-    // cannot rot.
+    // upstream-native remedy. The same integral over [0,1], a range
+    // whose endpoint samples land in the failing band, is garbage
+    // with the default relative step and exact once the derivative's
+    // own step variable is set. Pins the remedy so the DESIGN.md
+    // guidance cannot rot.
     {
       calcRegister_t vd = findOrAllocateNamedVariable(STD_delta STD_SUB_d);
       reallocateRegister(vd, dtReal34, 0, amNone);
@@ -4198,23 +4062,20 @@ void prettyTestEquation(uint16_t unusedButMandatoryParameter) {
 
 
 /* ==== VISUAL, the RPN-program walker ====================================
- * Most pins here assert the TRANSPILED STRING. That string is NOT the
- * product — since PP18 the product is a node tree, and the text back end
- * exists only under PC_BUILD as a test seam (corrected
- * this header, which used to call the string "the walker's whole
- * product" and would have told the next reader to trust the wrong
- * thing). The string is asserted because it is readable and because it
- * is derived from the same AST the drawing is; what it CANNOT do is
- * catch a fault in the layout pass, which is what the node-shape pins
- * V46-V51, V56, V57, V68, V69, V73 and V74 are for.
+ * Most pins here assert the transpiled string. That string is not the
+ * product: the product is a node tree, and the text back end exists
+ * only under PC_BUILD as a test seam. The string is asserted because
+ * it is readable and because it is derived from the same AST as the
+ * drawing. It cannot catch a fault in the layout pass. The node-shape
+ * pins V46-V51, V56, V57, V68, V69, V73, and V74 are for that.
  *
  * V18 and V65 close the loop from the other side: they evaluate the
  * walker's own output and require it to agree with what the program
- * actually computes. V65 is the one that would have caught PP18-1.
+ * actually computes.
  *
- * Fixtures are the appnote-22 chain (docs/appnotes/sources/AN0022), with
- * package-local label names so no other driver's labels collide; V58
- * loads the real file. */
+ * Fixtures are the appnote-22 chain (docs/appnotes/sources/AN0022),
+ * with package-local label names so no other driver's labels
+ * collide. V58 loads the real file. */
 
 #define PPV2(itm) (uint8_t)(((itm) >> 8) | 0x80), (uint8_t)((itm) & 0xff)
 
@@ -4261,12 +4122,9 @@ static void ppvTestDecline(const char *what, const char *label, uint8_t wantReas
 }
 
 /* Drive VISUAL the way the unit does: the command, ALPHA, the label
- * typed one letter at a time, ENTER. Every other pin calls ppvTranspile
- * or fnPrettyVisual directly, which skips the whole transient-alpha
- * path the item's TM_LBLONLY parameter exists for — and this package
- * has been bitten by exactly that gap before (containment
- * covered only the direct-key half of the keyboard, and the solo gate
- * stayed green because no test drove the other one). */
+ * typed one letter at a time, ENTER. Every other pin calls
+ * ppvTranspile or fnPrettyVisual directly, which skips the whole
+ * transient-alpha path the item's TM_LBLONLY parameter exists for. */
 static void ppvTestKeyIn(const char *label) {
   runFunction(ITM_VISUAL);              // the key press: enters TAM
   tamProcessInput(ITM_alpha);           // ALPHA
@@ -4277,16 +4135,16 @@ static void ppvTestKeyIn(const char *label) {
 }
 
 /* Key a program in through PEM, the way it is actually entered on the
- * unit: every step arrives as runFunction() in CM_PEM, and a step with a
- * parameter goes through the same transient-alpha machinery a user
- * types. This matters beyond "more coverage" — every OTHER fixture here
- * hand-encodes its bytes (ITM_LITERAL, STRING_LONG_INTEGER, 1, '0'), and
- * a hand-encoded literal is only a GUESS at what PEM writes. If the two
- * disagree, the walker passes every pin and still declines the first
- * program a user types. */
-// the global step number of .END. — derived by walking, never counted:
-// fnGotoDot does NOT clamp, and a number past the end walks currentStep
-// to NULL and takes the suite down with it
+ * unit: every step arrives as runFunction() in CM_PEM, and a step
+ * with a parameter goes through the same transient-alpha machinery a
+ * user types. This matters beyond "more coverage": every other
+ * fixture here hand-encodes its bytes (ITM_LITERAL,
+ * STRING_LONG_INTEGER, 1, '0'), and a hand-encoded literal is only a
+ * guess at what PEM writes. If the two disagree, the walker passes
+ * every pin and still declines the first program a user types. */
+// The global step number of .END., derived by walking, never
+// counted. fnGotoDot does not clamp, and a number past the end walks
+// currentStep to NULL and takes the suite down with it.
 static uint16_t ppvLastGlobalStep(void) {
   uint8_t *st = beginOfProgramMemory;
   uint16_t n = 1;
@@ -4312,9 +4170,8 @@ static void ppvPemBegin(void) {
   pemCursorIsZerothStep = false;
   lastErrorCode = ERROR_NONE;
   clearSystemFlag(FLAG_ALPHA);
-  // the LAST global step (.END.), not getNumberOfSteps() — that is the
-  // current PROGRAM's count, and keying from there splices the new steps
-  // into the middle of whatever program is current
+  // Go to the last global step (.END.), so the keyed steps land after
+  // every program.
   fnGotoDot(ppvLastGlobalStep());
 }
 
@@ -4423,12 +4280,10 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
       PPV2(ITM_END),
     };
     /* One level deeper than TRPINT, and nothing draws it but the
-     * full-screen arm: V28 measures the chain at 38/58/78 px standard and
-     * 31/51/71 tiny, so a FOURTH integral is 98 and 91 — past the 72-row
-     * Z/T band at both rungs, inside the 147-row full band at the first.
-     * Without it the success half of ppvPaintFullScreen has no reaching
-     * input: a probe over the whole suite found six calls that paint, and
-     * all six took the stack window. */
+     * full-screen arm. V28 measures the chain at 38/58/78 px standard
+     * and 31/51/71 tiny, so a fourth integral is 98 and 91. That is
+     * past the 72-row Z/T band at both rungs and inside the 147-row
+     * full band at the first. */
     static const uint8_t pgmIZ[] = {          // INT(0..z) IY dy
       ITM_LBL, STRING_LABEL_VARIABLE, 3, 'V','I','Z',
       PPV2(ITM_MVAR), STRING_LABEL_VARIABLE, 1, 'z',
@@ -4471,20 +4326,16 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
     ppcTestWriteAndLoadPgm(pgmFX,  sizeof(pgmFX));
   }
 
-  /* V-MODE — the mode-looped oracle. Four
-   * audit rounds ran every V fixture under the build default only, which is
-   * classic lift and SSIZE8, so two whole configuration branches of the
-   * simulated machine were never exercised. The walker now reads both flags;
-   * these pin that it does, by drawing the SAME program under each setting
-   * and requiring the pictures to DIFFER in the way the machine differs.
+  /* V-MODE: the mode-looped oracle. The walker reads both flags.
+   * These pins draw the same program under each setting and require
+   * the pictures to differ in the way the machine differs.
    *
    * VMEN: 1, 2, ENTER, 3, x, +.
-   *   classic — ENTER clears the lift latch, so the 3 OVERWRITES the dup:
-   *             stack [1,2,3] -> 1 + 2x3, and XEQ returns 7.
-   *   eRPN    — a running program's ENTER dups AND leaves the latch set, so
-   *             the 3 LIFTS: [1,2,2,3] -> 2 + 2x3, and XEQ returns 8.
-   * Before the fix the walker drew the classic picture in both modes, so
-   * under eRPN it asserted 7 for a program returning 8. */
+   *   classic: ENTER clears the lift latch, so the 3 overwrites the
+   *            dup. Stack [1,2,3] -> 1 + 2x3, and XEQ returns 7.
+   *   eRPN:    a running program's ENTER dups and leaves the latch
+   *            set, so the 3 lifts. [1,2,2,3] -> 2 + 2x3, and XEQ
+   *            returns 8. */
   {
     static const uint8_t pgmMEN[] = {
       ITM_LBL, STRING_LABEL_VARIABLE, 4, 'V','M','E','N',
@@ -4514,13 +4365,15 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
     }
   }
 
-  /* V-XEQ (PP18RR4-1) — a callee's trailing ENTER must survive the return.
-   * ITM_XEQ's arm walks the whole subroutine and returns, so an epilogue
-   * that clears the lift latch after the arm erases what the callee armed,
-   * and the caller's next literal pushes where the machine overwrites.
+  /* V-XEQ: a callee's trailing ENTER must survive the return.
+   * ITM_XEQ's arm walks the whole subroutine and returns, so an
+   * epilogue that clears the lift latch after the arm erases what
+   * the callee armed, and the caller's next literal pushes where the
+   * machine overwrites.
    *   LBL VZA: 1 2 XEQ VZB 5 + +      LBL VZB: 4 ENTER
-   * The armed latch makes the 5 overwrite the dup, so the machine holds
-   * [1,2,4,5], adds to 9, adds to 11, and the picture is 2+(4+5). */
+   * The armed latch makes the 5 overwrite the dup, so the machine
+   * holds [1,2,4,5], adds to 9, adds to 11, and the picture is
+   * 2+(4+5). */
   {
     static const uint8_t pgmXB[] = {
       ITM_LBL, STRING_LABEL_VARIABLE, 3, 'V','Z','B',
@@ -4540,10 +4393,11 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
     ppcTestWriteAndLoadPgm(pgmXB, sizeof(pgmXB));
     ppcTestWriteAndLoadPgm(pgmXA, sizeof(pgmXA));
 
-    /* The latch's meaning is mode-dependent, so the picture is too: under
-     * eRPN the callee's ENTER leaves the latch SET, the 5 lifts instead of
-     * overwriting, and 4+(4+5) = 13 is the right answer. Asserting only
-     * one mode leaves the pin true of an ambient this file happens to set. */
+    /* The latch's meaning is mode-dependent, so the picture is too.
+     * Under eRPN the callee's ENTER leaves the latch set, the 5
+     * lifts, and 4+(4+5) = 13 is the right answer.
+     * Asserting only one mode leaves the pin true of an ambient this
+     * file happens to set. */
     bool_t erpnWasX = getSystemFlag(FLAG_ERPN);
 
     clearSystemFlag(FLAG_ERPN);
@@ -4560,15 +4414,15 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
     }
   }
 
-  /* V-DECL (PP18RR5-4) — a declaration item between ENTER and the lifting
-   * read must leave the latch alone. Nothing exercised that: deleting the
-   * six declaration items from ppvLiftNeutral left the whole gate green,
-   * so the exception list was correct but untested. MVAR stands for the
-   * group; the walk never holds more than four entries, so the stack size
-   * cannot change the picture.
-   *   1 2 ENTER MVAR z 5 + +  ->  the 5 overwrites the dup, giving 1+(2+5).
-   * With the item dropped from the list the epilogue clears the latch, the
-   * 5 lifts, and the walker draws 2+(2+5) for a program returning 8. */
+  /* V-DECL: a declaration item between ENTER and the lifting read
+   * must leave the latch alone. MVAR stands for the group. The walk
+   * never holds more than four entries, so the stack size cannot
+   * change the picture.
+   *   1 2 ENTER MVAR z 5 + +  ->  the 5 overwrites the dup:
+   *   1+(2+5).
+   * With the item dropped from the list, the epilogue clears the
+   * latch, the 5 lifts, and the walker draws 2+(2+5) for a program
+   * returning 8. */
   {
     static const uint8_t pgmDC[] = {
       ITM_LBL, STRING_LABEL_VARIABLE, 3, 'V','D','C',
@@ -4590,14 +4444,12 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
     }
   }
 
-  /* V-FILL (PP18RR4-4) — FILL is the only arm that fills the stack without
-   * ppvPush, so it has to arm the saturation latch itself; without that, T
-   * never replicates and the walk declines a program the machine runs.
-   * Eight adds outlive either stack depth, and the replicated T keeps the
-   * same right-nested picture at both, so the assertion is one string and
-   * the stack size is the axis. Under SS=4 the old arm still saturated by
-   * accident — it wrote eight slots, and the first push renormalised —
-   * which is why this pin has to set SS=8 rather than take the battery's. */
+  /* V-FILL: FILL is the only arm that fills the stack without
+   * ppvPush, so it has to arm the saturation latch itself. Without
+   * that, T never replicates, and the walk declines a program the
+   * machine runs. Eight adds outlive either stack depth, and the
+   * replicated T keeps the same right-nested picture at both, so the
+   * assertion is one string and the stack size is the axis. */
   {
     static const uint8_t pgmFL[] = {
       ITM_LBL, STRING_LABEL_VARIABLE, 3, 'V','F','L',
@@ -4627,13 +4479,13 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
     }
   }
 
-  /* V-MODE4 — the stack-DEPTH axis of the same oracle.
+  /* V-MODE4: the stack-depth axis of the same oracle.
    * VM4: 1 2 3 4 5 + + + +.
-   *   SSIZE8 — nothing saturates; all five literals survive, XEQ returns 15.
-   *   SSIZE4 — the fifth literal's lift drops the 1, and each subsequent
-   *            drop replicates T, so the machine adds 2 twice and returns 16.
-   * The walker modelled eight slots and no replication, so under SSIZE4 it
-   * drew the SSIZE8 picture: 15 asserted for a program returning 16. */
+   *   SSIZE8: nothing saturates. All five literals survive, XEQ
+   *           returns 15.
+   *   SSIZE4: the fifth literal's lift drops the 1, and each
+   *           subsequent drop replicates T, so the machine adds 2
+   *           twice and returns 16. */
   {
     static const uint8_t pgmVM4[] = {
       ITM_LBL, STRING_LABEL_VARIABLE, 3, 'V','M','4',
@@ -4649,11 +4501,12 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
 
     bool_t ss8Was = getSystemFlag(FLAG_SSIZE8);
 
-    /* The VALUE is the oracle, not the spelling: the walker keeps the RPN's
-     * own right-nesting (4 5 + 3 + really is 3+(4+5)) rather than flattening
-     * associative chains, so the pictures are parenthesised. 1+(2+(3+(4+5)))
-     * is 15, which is what XEQ returns under SSIZE8; 2+(2+(3+(4+5))) is 16,
-     * which is what it returns under SSIZE4 with T replicated twice. */
+    /* The value is the oracle: the walker keeps the
+     * RPN's own right-nesting (4 5 + 3 + really is 3+(4+5)) and does
+     * not flatten associative chains, so the pictures are
+     * parenthesized. 1+(2+(3+(4+5))) is 15, the value XEQ returns
+     * under SSIZE8. 2+(2+(3+(4+5))) is 16, the value it returns under
+     * SSIZE4 with T replicated twice. */
     setSystemFlag(FLAG_SSIZE8);
     ppvTestExpect("V-MODE4 SSIZE8 keeps all five (=15)", "VM4", "1+(2+(3+(4+5)))");
 
@@ -4668,8 +4521,9 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
     }
   }
 
-  // V1: the ask itself — a double integral recovered from the chain,
-  // limits and d-variables and all, with the title idiom passing through
+  // V1: the ask itself, a double integral recovered from the chain,
+  // limits and d-variables and all, with the title idiom passing
+  // through
   ppvTestExpect("V1 DBLINT", "VDBL", "INTEG(INTEG(t;t;0;x);x;0;2)");
 
   // V2: three coupled levels. Also pins that a STO'd name (ACC) and an
@@ -4677,8 +4531,8 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
   ppvTestExpect("V2 TRPINT", "VTRP", "INTEG(INTEG(INTEG(t;t;0;x);x;0;y);y;0;2)");
 
   // V3: a constructed function. SUB takes Y-X, so operand order shows
-  // here; ENTER dups; MVAR declares nothing the picture carries. ENTER x
-  // is x*x, not x^2 — the walker transpiles structure, never intent.
+  // here. ENTER dups. MVAR declares nothing the picture carries. ENTER
+  // x is x*x, not x^2.
   {
     char want[64];
     sprintf(want, "x%sx-x%sp-2", STD_CROSS, STD_CROSS);
@@ -4728,9 +4582,9 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
     ppcTestWriteAndLoadPgm(pgmBN, sizeof(pgmBN));
     ppcTestWriteAndLoadPgm(pgmS4, sizeof(pgmS4));
   }
-  // V4/V5: the counter has no name in RPN — it arrives in a filled stack
-  // — so the text invents one. A unit step is the evaluator's default
-  // and is left out, which is also the cleaner picture.
+  // V4/V5: the counter has no name in RPN. It arrives in a filled
+  // stack, so the text invents one. A unit step is the evaluator's
+  // default and is left out.
   {
     char want[64];
     sprintf(want, "SUM(n%sn;n;1;5)", STD_CROSS);
@@ -4738,9 +4592,9 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
     sprintf(want, "SUM(n%sn;n;1;9;2)", STD_CROSS);
     ppvTestExpect("V5 sum step 2", "VS2", want);
   }
-  // V6: the invented name must never shadow a real variable spelled the
-  // same way — upstream would read the variable, the text would read the
-  // counter, and nothing on screen would say so
+  // V6: the invented name must never shadow a real variable spelled
+  // the same way. Upstream reads the variable, the text reads the
+  // counter, and nothing on screen says so.
   ppvTestDecline("V6 counter collides with a real variable", "VS4", 12);
 
   /* ---- declines ------------------------------------------------------ */
@@ -4915,8 +4769,8 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
 
   /* ---- shapes the appnote-22 set never reaches --------------------- */
   {
-    // the appnote's OWN PLTINTG integrand: a constructed function inside
-    // an integral, which is the case Jaymos described as "a single
+    // The appnote's own PLTINTG integrand: a constructed function
+    // inside an integral, the case Jaymos described as "a single
     // function ... or nested or serial functions"
     static const uint8_t pgmIG[] = {
       ITM_LBL, STRING_LABEL_VARIABLE, 3, 'V','I','G',
@@ -4926,7 +4780,7 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
       PPV2(ITM_INTEGRAL_YX), STRING_LABEL_VARIABLE, 1, 'x',
       PPV2(ITM_END),
     };
-    // serial, not nested: two subroutines in a row over one stack
+    // serial: two subroutines in a row over one stack
     static const uint8_t pgmAD1[] = {
       ITM_LBL, STRING_LABEL_VARIABLE, 4, 'V','A','D','1',
       ITM_LITERAL, STRING_LONG_INTEGER, 1, '1',
@@ -4946,7 +4800,7 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
       ITM_XEQ, STRING_LABEL_VARIABLE, 4, 'V','D','B','2',
       PPV2(ITM_END),
     };
-    // the product arm, which no pin had reached
+    // the product arm
     static const uint8_t pgmPRD[] = {
       ITM_LBL, STRING_LABEL_VARIABLE, 4, 'V','P','R','D',
       ITM_LITERAL, STRING_LONG_INTEGER, 1, '1',
@@ -4966,8 +4820,8 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
       PPV2(ITM_INTEGRAL_YX), STRING_LABEL_VARIABLE, 1, 't',
       PPV2(ITM_END),
     };
-    // ENTER then a LITERAL: the lift latch. 5 ENTER 3 + is 8, and a
-    // walker that ignored the latch would read 5+5 or 3+3.
+    // ENTER then a LITERAL: the lift latch. 5 ENTER 3 + is 8. A
+    // walker that ignores the latch reads 5+5 or 3+3.
     static const uint8_t pgmLFT[] = {
       ITM_LBL, STRING_LABEL_VARIABLE, 4, 'V','L','F','T',
       ITM_LITERAL, STRING_LONG_INTEGER, 1, '5',
@@ -5002,12 +4856,12 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
     ppcTestWriteAndLoadPgm(pgmPRD, sizeof(pgmPRD));
     ppcTestWriteAndLoadPgm(pgmLIM, sizeof(pgmLIM));
     ppcTestWriteAndLoadPgm(pgmLFT, sizeof(pgmLFT));
-    // The lift latch's whole effect is on stack DEPTH: ENTER-then-replace
-    // and ENTER-then-push agree on the top two values and differ only
-    // underneath, so a pin has to reach PAST them to see it. This one
-    // consumes one more than the correct trace provides — it declines,
-    // and a walker that skipped the latch would find a phantom copy
-    // waiting and print an expression instead.
+    // The lift latch's whole effect is on stack depth: ENTER-then-
+    // replace and ENTER-then-push agree on the top two values and
+    // differ only underneath, so a pin has to reach past them to see
+    // it. This one consumes one more than the correct trace provides.
+    // It declines. A walker that skips the latch finds a phantom copy
+    // waiting and prints an expression instead.
     static const uint8_t pgmLF2[] = {
       ITM_LBL, STRING_LABEL_VARIABLE, 4, 'V','L','F','2',
       ITM_RCL, STRING_LABEL_VARIABLE, 1, 'a',
@@ -5021,14 +4875,14 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
     };
     ppcTestWriteAndLoadPgm(pgmSWP, sizeof(pgmSWP));
     ppcTestWriteAndLoadPgm(pgmDRY, sizeof(pgmDRY));
-    // PP17 widening: functions with a name the evaluator resolves
+    // Functions with a name the evaluator resolves
     static const uint8_t pgmSIN[] = {
       ITM_LBL, STRING_LABEL_VARIABLE, 4, 'V','S','I','N',
       ITM_RCL, STRING_LABEL_VARIABLE, 1, 'x',
       ITM_sin,
       PPV2(ITM_END),
     };
-    static const uint8_t pgmSF[] = {          // SIN(x)/2 — a function inside a fraction
+    static const uint8_t pgmSF[] = {          // SIN(x)/2, a function inside a fraction
       ITM_LBL, STRING_LABEL_VARIABLE, 3, 'V','S','F',
       ITM_RCL, STRING_LABEL_VARIABLE, 1, 'x',
       ITM_sin,
@@ -5061,14 +4915,14 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
       PPV2(ITM_END),
     };
     ppcTestWriteAndLoadPgm(pgmISN, sizeof(pgmISN));
-    static const uint8_t pgmPOW[] = {         // (a^2)^2 — the stacked power
+    static const uint8_t pgmPOW[] = {         // (a^2)^2, the stacked power
       ITM_LBL, STRING_LABEL_VARIABLE, 4, 'V','P','O','W',
       ITM_RCL, STRING_LABEL_VARIABLE, 1, 'a',
       ITM_SQUARE,
       ITM_SQUARE,
       PPV2(ITM_END),
     };
-    // PP18: the derivative family
+    // The derivative family
     static const uint8_t pgmDB[] = {          // f(x) = x*x
       ITM_LBL, STRING_LABEL_VARIABLE, 3, 'V','D','B',
       PPV2(ITM_MVAR), STRING_LABEL_VARIABLE, 1, 'x',
@@ -5175,8 +5029,8 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
     };
     #undef PPV_DUP4
     #undef PPV_REC4
-    // a body that takes its argument off the STACK and
-    // declares no MVAR — the ordinary RPN function shape
+    // A body that takes its argument off the stack and declares no
+    // MVAR, the ordinary RPN function shape
     static const uint8_t pgmB5[] = {
       ITM_LBL, STRING_LABEL_VARIABLE, 3, 'V','B','5',
       ITM_ENTER, ITM_MULT, PPV2(ITM_END),
@@ -5188,8 +5042,8 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
       PPV2(ITM_F1DRV), STRING_LABEL_VARIABLE, 1, 'x',
       PPV2(ITM_END),
     };
-    // no MVAR, and the body recalls a real 'n' — the
-    // name the inventor reaches for first
+    // No MVAR, and the body recalls a real 'n', the name the
+    // inventor reaches for first
     static const uint8_t pgmDN[] = {
       ITM_LBL, STRING_LABEL_VARIABLE, 3, 'V','D','N',
       PPV2(ITM_PGMDRV), STRING_LABEL_VARIABLE, 3, 'V','B','N',
@@ -5197,7 +5051,7 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
       PPV2(ITM_F1DRV), STRING_LABEL_VARIABLE, 1, 'x',
       PPV2(ITM_END),
     };
-    // the FIRST declaration is one we cannot draw
+    // the first declaration is one we cannot draw
     static const uint8_t pgmB6[] = {
       ITM_LBL, STRING_LABEL_VARIABLE, 3, 'V','B','6',
       PPV2(ITM_MVAR), STRING_LABEL_VARIABLE, 2, 'x','1',
@@ -5211,9 +5065,9 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
       PPV2(ITM_F1DRV), STRING_LABEL_VARIABLE, 1, 'z',
       PPV2(ITM_END),
     };
-    // a sum whose UPPER LIMIT is itself a sum. The inner
-    // one is closed by the time the outer chooses, but it is drawn
-    // INSIDE the outer's limit — not a sibling in any sense that matters.
+    // A sum whose upper limit is itself a sum. The inner one is
+    // closed by the time the outer chooses, but it is drawn inside
+    // the outer's limit.
     static const uint8_t pgmNS[] = {
       ITM_LBL, STRING_LABEL_VARIABLE, 3, 'V','N','S',
       ITM_LITERAL, STRING_LONG_INTEGER, 1, '1',
@@ -5232,7 +5086,7 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
     ppcTestWriteAndLoadPgm(pgmB5, sizeof(pgmB5));
     ppcTestWriteAndLoadPgm(pgmD6, sizeof(pgmD6));
     ppcTestWriteAndLoadPgm(pgmD5, sizeof(pgmD5));
-    // a construct used as an OPERAND. The body is empty, so
+    // a construct used as an operand. The body is empty, so
     // it returns the seeded counter and the picture stays small enough to
     // read in a signature.
     static const uint8_t pgmNB[] = {
@@ -5315,8 +5169,8 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
       ITM_MULT,
       PPV2(ITM_END),
     };
-    // PP18-5 cleared the latch at three arms and V72 pinned
-    // one. The other two, same shape.
+    // The latch clears at three arms. V72 pins one. These are the
+    // other two, same shape.
     static const uint8_t pgmXI[] = {          // ENTER then PGMINT
       ITM_LBL, STRING_LABEL_VARIABLE, 3, 'V','X','I',
       ITM_RCL, STRING_LABEL_VARIABLE, 1, 'a',
@@ -5341,8 +5195,8 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
     ppcTestWriteAndLoadPgm(pgmXA, sizeof(pgmXA));
     ppcTestWriteAndLoadPgm(pgmXI, sizeof(pgmXI));
     ppcTestWriteAndLoadPgm(pgmXD, sizeof(pgmXD));
-    // five DISJOINT sums. Each closes before the next opens,
-    // so nothing can confuse their counters and all five may be 'n'.
+    // Five disjoint sums. Each closes before the next opens, so
+    // nothing can confuse their counters and all five can be 'n'.
     #define PPV_SUM1 ITM_LITERAL, STRING_LONG_INTEGER, 1, '1', \
                      ITM_LITERAL, STRING_LONG_INTEGER, 1, '3', \
                      ITM_LITERAL, STRING_LONG_INTEGER, 1, '1', \
@@ -5369,33 +5223,31 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
     // V29: the appnote's own integrand under its own integral
     sprintf(want, "INTEG(x%sx-x%sp-2;x;0;8)", STD_CROSS, STD_CROSS);
     ppvTestExpect("V29 constructed function under an integral", "VIG", want);
-    // V30: SERIAL subroutines, the other half of what was asked for
+    // V30: serial subroutines, the other half of what was asked for
     sprintf(want, "(a+1)%s2", STD_CROSS);
     ppvTestExpect("V30 serial XEQ chain", "VSER", want);
     // V31: the product arm
     sprintf(want, "PROD(n%sn;n;1;4)", STD_CROSS);
     ppvTestExpect("V31 programmed product", "VPRD", want);
-    // V32: a limit that is an expression, not a literal or a bare name
+    // V32: a limit that is a whole expression
     sprintf(want, "INTEG(t;t;0;u%s2)", STD_CROSS);
     ppvTestExpect("V32 computed integration limit", "VLIM", want);
   }
-  // V33: ENTER latches the lift, so the next literal REPLACES X
+  // V33: ENTER latches the lift, so the next literal replaces X
   ppvTestExpect("V33 ENTER then literal", "VLFT", "5+3");
   // V34/V35: stack motions
   ppvTestExpect("V34 x<>y reverses the operands", "VSWP", "b-a");
   ppvTestExpect("V35 DROPY removes the second level", "VDRY", "a+c");
-  // V38: and the latch seen from underneath — see the fixture's note
+  // V38: the latch seen from underneath. See the fixture's note above.
   ppvTestDecline("V38 the lift latch leaves no phantom copy", "VLF2", 10);
 
-  /* ---- PP17 widening: named functions ------------------------------- */
+  /* ---- Named functions ---------------------------------------------- */
   // V40: a function with a name the evaluator resolves is emitted, and
-  // the name is the item's own catalog spelling, not a hand table
+  // the name comes from the item's own catalog spelling
   ppvTestExpect("V40 a named function", "VSIN", "SIN(x)");
-  // V41: the reason the RENDERER gained an f(x) arm. There is no 2D gain
-  // in SIN(x) itself — a drawn one is the same shape as a linear one —
-  // but without the arm the strict parser failed on the trailing '(' and
-  // the WHOLE formula lost its 2D form, fraction and all. This pins that
-  // the fraction survives a function inside it.
+  // V41: this pins that the fraction survives a function inside it.
+  // Without the f(x) arm, the strict parser fails on the trailing
+  // '(', and the whole formula loses its 2D form, fraction and all.
   {
     uint8_t root;
     ppReset();
@@ -5408,20 +5260,18 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
     ppvTestExpect("V41 transpiles to it", "VSF", "SIN(x)/2");
   }
   // V42: a monadic whose catalog spelling is glyphs (e^x) has no name
-  // the grammar can carry, so it declines rather than emit something
-  // that would neither draw nor compute
+  // the grammar can carry, so it declines
   ppvTestDecline("V42 a name the grammar cannot spell", "VEXP", 1);
-  // V43: and the two compose — a function under an integral
+  // V43: the two compose, a function under an integral
   ppvTestExpect("V43 function under an integral", "VISN", "INTEG(SIN(x);x;0;1)");
-  // V45: the cube has a grammar spelling, so it stays 2D rather than
-  // becoming a name
+  // V45: the cube has a grammar spelling, so it stays 2D
   ppvTestExpect("V45 cube", "VCUB", "a^3");
 
-  /* ---- PP18: derivatives ------------------------------------------- */
-  // V52/V53: the point comes off the stack, the program from PGMDRV, and
-  // the order is which item was used. Seeding is the integrator's rule,
-  // which is a measurement and not an analogy — differentiate.c fills
-  // the stack AND stores to the variable, exactly as DEI_xeq_user does.
+  /* ---- Derivatives -------------------------------------------------- */
+  // V52/V53: the point comes off the stack, the program from PGMDRV,
+  // and the order is which item was used. Seeding follows the
+  // integrator's own rule: differentiate.c fills the stack and stores
+  // to the variable, exactly as DEI_xeq_user does.
   {
     char want[64];
     sprintf(want, "DERIV(x%sx;x;3)", STD_CROSS);
@@ -5429,13 +5279,10 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
     sprintf(want, "DERIV(x%sx;x;3;2)", STD_CROSS);
     ppvTestExpect("V53 second derivative", "VDR2", want);
   }
-  // V59-V63: the CLASS. Upstream does not differentiate
-  // with respect to the f' parameter — calcDeriv asks
-  // deriv_pgm_variable(label), which walks the BODY's own MVAR
-  // declarations and returns the one matching the parameter, else the
-  // first declared, else nothing. The old fixture declared MVAR 'x' and
-  // was driven by f' 'x', the single configuration where the two agree,
-  // so every DERIV pin passed a rule that held only for it.
+  // V59-V63: the class. Upstream does not differentiate with respect
+  // to the f' parameter. calcDeriv asks deriv_pgm_variable(label),
+  // which walks the body's own MVAR declarations and returns the one
+  // matching the parameter, else the first declared, else nothing.
   {
     char want[64];
     // CONTROL: parameter matches the declaration
@@ -5446,21 +5293,21 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
     sprintf(want, "DERIV(x%sx;x;3)", STD_CROSS);
     ppvTestExpect("V60 parameter differs, body declares one", "VD2", want);
     // CONTROL: the body RCLs y explicitly while upstream varies x, so
-    // the derivative really is 0 and d/dx(y*y) is the honest picture.
-    // This one was already right and must stay right — a fix that made
-    // every subscript follow the body would break it.
+    // the derivative really is 0 and d/dx(y*y) is the correct picture.
+    // This one must stay right. A fix that makes every subscript
+    // follow the body breaks it.
     sprintf(want, "DERIV(y%sy;x;3)", STD_CROSS);
     ppvTestExpect("V61 body that does not read the sampled variable", "VD3", want);
-    // none match, and the body consumes the STACK: seeding must follow
-    // upstream's choice, so BOTH the body and the subscript become y
+    // None match, and the body consumes the stack. Seeding must
+    // follow upstream's choice, so both the body and the subscript
+    // become y.
     sprintf(want, "DERIV(y%sy;y;3)", STD_CROSS);
     ppvTestExpect("V62 first when none match, stack-consuming body", "VD4", want);
-    // A body declaring no MVAR is still differentiated:
-    // fnFillStack is unconditional, so a body reading the stack varies
-    // correctly and the first fix's decline was a regression. With no
-    // name in the program the picture invents one, exactly as a sum
-    // does. VD5's body RCLs 'v', which upstream never varies, so the
-    // slope really is 0 and d/dn(v*v) is the honest picture.
+    // A body declaring no MVAR is still differentiated. fnFillStack
+    // is unconditional, so a body reading the stack varies correctly.
+    // With no name in the program the picture invents one, exactly as
+    // a sum does. VD5's body RCLs 'v', which upstream never varies,
+    // so the slope really is 0 and d/dn(v*v) is the correct picture.
     {
       char w2[64];
       sprintf(w2, "DERIV(v%sv;n;3)", STD_CROSS);
@@ -5470,16 +5317,15 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
     }
   }
 
-  // V66: ENTER shares its operand node, so the tree is a
-  // DAG and the layout pass would visit a shared child once per PATH —
-  // 2^(k+1)-1 visits for k dups, measured. Exhausting the 72-node layout
-  // pool did not stop it, because a PP_NONE return is a per-call value
-  // and not a latch, so the walk kept doubling through failures that
-  // cost nothing. 20 dups is 2,097,151 visits unlatched; on an 80 MHz
-  // DM42n the reachable cases do not return at all.
+  // V66: ENTER shares its operand node, so the tree is a DAG, and the
+  // layout pass visits a shared child once per path: 2^(k+1)-1 visits
+  // for k dups, measured. Exhausting the 72-node layout pool DID not
+  // stop it: a PP_NONE return was a per-call value, not a latch, so
+  // the walk kept doubling through failures that cost nothing. 20
+  // dups is 2,097,151 visits unlatched. On an 80 MHz DM42n the
+  // reachable cases did not return at all. layoutFull is the latch.
   //
-  // The bound is asserted, not a wall-clock time: a timing pin would
-  // pass on a fast desktop for a program that hangs the calculator.
+  // The pin asserts the visit count.
   {
     calcRegister_t id = findNamedLabel("VXP", GLOBAL_LABELS);
     uint8_t root;
@@ -5490,7 +5336,7 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
     else {
       ppvTestBuildNodes((uint16_t)(id - FIRST_LABEL), PP_FONT_STANDARD,
                         PP_FONT_STANDARD, &root, &visits);
-      // it may or may not fit; what must hold is that trying was cheap
+      // the fit does not matter here. The try must be cheap.
       if(visits == 0) {
         ppTestFail("V66 the layout pass never ran");
       }
@@ -5499,12 +5345,8 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
       }
     }
   }
-  // V67: when NO surface can hold the drawing, the owner
-  // gets an error and keeps the answer. The full-screen path used to
-  // clear the screen BEFORE it knew it could draw, so a failure left a
-  // framed blank with X erased, no error and no D-number, held until
-  // EXIT. PP17 always showed something; the honest replacement for that
-  // is a decline, not a blank.
+  // V67: when no surface can hold the drawing, the owner gets an
+  // error and keeps the answer.
   {
     calcRegister_t id = findNamedLabel("VBIG", GLOBAL_LABELS);
     calcMode = CM_NORMAL;
@@ -5533,19 +5375,13 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
     screenUpdatingMode &= ~SCRUPD_MANUAL_STACK;
   }
 
-  // V70: the construct's variable name is interned past
-  // pool offset 255. A uint8_t varOff read it back from 256 bytes lower
-  // — another leaf's text, still in bounds, so the integral drew a
-  // d-variable the program never integrates over with no decline and no
-  // D-number. This was observed in the wild during another finding's
-  // verification, not constructed.
+  // V70: the construct's variable name is interned past pool offset
+  // 255. The name must still resolve to 'w'.
   ppvTestExpect("V70 variable name interned past offset 255", "VOFF",
                 "INTEG(w;w;0;2)");
-  // V71: the invented counter was checked only against
-  // ENCLOSING constructs, which is empty at top level, so a program
-  // whose loop count is a variable called 'n' drew the free 'n' in the
-  // upper-limit slot of the operator that binds 'n'. Nothing on screen
-  // told them apart.
+  // V71: the invented counter must avoid enclosing bindings, free
+  // names, and the limit subtrees. A closed sibling's counter is out
+  // of scope and its name is reusable (V77 pins that).
   {
     char want[64];
     sprintf(want, "SUM(m%sm;m;1;n)", STD_CROSS);
@@ -5553,27 +5389,28 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
                   "VCOL", want);
   }
 
-  // V72: XEQ, PGMINT and PGMDRV returned before the
-  // epilogue that clears the ENTER lift latch, so the callee's first
-  // lifting read OVERWROTE the dup instead of pushing. At top level that
-  // is a false underflow decline for a program that never underflows;
-  // inside a construct body, where the seeded frame supplies a phantom
-  // operand, it is a silent wrong drawing instead.
+  // V72: the epilogue that clears the ENTER lift latch must run
+  // before XEQ, PGMINT, and PGMDRV return, or the callee's first
+  // lifting read overwrites the dup. At top level
+  // that produces a false underflow decline for a program that never
+  // underflows. Inside a construct body, where the seeded frame
+  // supplies a phantom operand, it produces a silent wrong drawing
+  // instead.
   {
     char want[64];
     sprintf(want, "a%s(a+b)", STD_CROSS);
     ppvTestExpect("V72 the lift latch does not survive XEQ", "VXA", want);
-    // the same at the other two arms the fix touched
+    // the same at the other two arms
     ppvTestExpect("V75 nor PGMINT", "VXI", want);
     ppvTestExpect("V76 nor PGMDRV", "VXD", want);
   }
 
-  // V73: the node signature prints every PP_BIGOP as
-  // "B(...)" and drops the operator tag, so V46, V50 and V68 would all
-  // pass unchanged if an integral drew as a sum. The tag is what the
-  // paint pass picks the stroke glyph from, so it IS the operator; it
-  // lives in the box's textOff (prettyInternal.h). Assert it directly
-  // rather than reformat every signature in the file.
+  // V73: the node signature prints every PP_BIGOP as "B(...)" and
+  // drops the operator tag. V46, V50, and V68 pass unchanged even if
+  // an integral is drawn as a sum. The tag is what the paint pass
+  // picks the stroke glyph from, so it is the operator. It lives in
+  // the box's textOff (prettyInternal.h). Assert it directly rather
+  // than reformat every signature in the file.
   {
     struct { const char *label; uint16_t tag; const char *what; } tags[3] = {
       { "VDBL", ITM_INTEGRAL_YX, "V73 an integral draws the integral stroke" },
@@ -5602,9 +5439,8 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
       }
     }
   }
-  // V74: the second-order flag's NODE wiring had no pin
-  // — MUT-111 was guarded only in the text seam, so the drawn d^2/dx^2
-  // could have lost its superscripts silently.
+  // V74: the second-order flag's node wiring. The drawn d^2/dx^2 must
+  // keep its superscripts.
   {
     calcRegister_t id = findNamedLabel("VDR2", GLOBAL_LABELS);
     uint8_t root;
@@ -5618,17 +5454,9 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
     }
   }
 
-  /* V65 (recorded
-   * as delivered in three places and never written — lost when a
-   * mutation runner reverted the tree, and the loss survived because
-   * nothing but prose referred to it).
-   *
-   * The differential oracle: run the program, then evaluate the walker's
-   * OWN drawing, and require the two to agree. No expected string
-   * appears here. It is the only pin in this file that can fail because
-   * the picture MEANS the wrong thing rather than because it reads
-   * differently from what I typed — which is the entire class PP18-1
-   * belonged to, and the class R2-1 belonged to as well. */
+  /* V65: the differential oracle. Run the program, then evaluate the
+   * walker's own drawing, and require the two to agree. No expected
+   * string appears here. */
   {
     static const char *const oracle[] = { "VD1", "VD2", "VD6", "VDBL", "VS1" };
     uint8_t savedMode = calcMode;
@@ -5688,10 +5516,8 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
     calcMode = savedMode;
   }
 
-  // V77: the candidate pool was spent on CLOSED sibling
-  // scopes, so a fifth disjoint sum declined D12 with nothing to collide
-  // with. A closed sibling's counter is out of scope and its name is
-  // reusable; only free variables and ENCLOSING constructs collide.
+  // V77: a closed sibling's counter is out of scope, and its name is
+  // reusable. Only free variables and enclosing constructs collide.
   {
     char want[128];
     const char *one = "SUM(n;n;1;3)";
@@ -5699,34 +5525,28 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
     ppvTestExpect("V77 five disjoint sums may all use n", "VSIB", want);
   }
 
-  // V80: the inner sum is CLOSED when the outer picks
-  // its counter, but it is drawn inside the outer's upper limit, so the
-  // two must not share a name. R2-4 was right that a closed sibling is
-  // reusable and wrong to stop looking at constructs entirely — the
-  // distinction is not "already built" but "about to be drawn inside me".
+  // V80: the inner sum is closed when the outer picks its counter,
+  // but it is drawn inside the outer's upper limit, so the two must
+  // not share a name. The distinction is not "already built" but
+  // "about to be drawn inside me".
   ppvTestExpect("V80 a construct inside a limit is not a sibling", "VNS",
                 "SUM(m;m;1;SUM(n;n;1;3))");
 
-  // V78: an INVENTED derivative name is synthetic, and
-  // that flag is what arms the shadow guard. Passing false meant a body
-  // recalling a real 'n' was drawn as if it were the counter — the exact
-  // confusion V6 and V71 forbid for sums, reintroduced at the one caller
-  // that did not say so.
+  // V78: an invented derivative name is synthetic, and that flag is
+  // what arms the shadow guard.
   ppvTestDecline("V78 an invented derivative name cannot shadow", "VDN", 12);
-  // V79: upstream varies the FIRST declaration whether
-  // or not we can draw it. Skipping an undrawable one and picking the
-  // second stopped mirroring the walk this function exists to mirror,
-  // so the picture named a variable upstream never varies.
+  // V79: upstream varies the first declaration whether or not we can
+  // draw it.
   ppvTestDecline("V79 an undrawable first declaration declines", "VD7", 18);
 
   // V54: only a latch set during the walk counts
   ppvTestDecline("V54 derivative with no PGMDRV", "VDNL", 6);
-  // V55: PGMDRV is a slot of its OWN upstream — a derivative must not
-  // read whatever PGMINT last pointed at, or it would draw the wrong
-  // function with no sign that it had
+  // V55: PGMDRV is a slot of its own upstream. A derivative must not
+  // read whatever PGMINT last pointed at: that draws the wrong
+  // function with no sign that it did.
   ppvTestDecline("V55 PGMINT's latch does not serve f'", "VDIN", 6);
-  // V44: the emitted spelling COMPUTES, which is the whole point of
-  // resolving it through the evaluator's own table
+  // V44: the emitted spelling must compute: it resolves through the
+  // evaluator's own table
   {
     if(numberOfFormulae == 0) {
       fnEqNew(NOPARAM);
@@ -5752,32 +5572,33 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
     }
     lastErrorCode = 0;
   }
-  // V16: a lower-precedence right operand keeps its brackets, or
-  // a/(b+c) would silently become a/b+c
+  // V16: a lower-precedence right operand keeps its brackets.
+  // Without them, a/(b+c) silently becomes a/b+c.
   ppvTestExpect("V16 precedence", "VPRC", "a/(b+c)");
-  // V21/V22: and so does an EQUAL-precedence one. This is the case the
-  // left/right asymmetry exists for — the grammar is left-associative,
-  // so a-(b+c) may keep its brackets while a-b+c means something else.
+  // V21/V22: an equal-precedence operand also keeps its brackets.
+  // This is the case the left/right asymmetry exists for: the grammar
+  // is left-associative, so a-(b+c) must keep its brackets while
+  // a-b+c means something else.
   ppvTestExpect("V21 same-level right operand (additive)", "VSLA", "a-(b+c)");
   {
     char want[64];
     sprintf(want, "a/(b%sc)", STD_CROSS);
     ppvTestExpect("V22 same-level right operand (multiplicative)", "VSLM", want);
   }
-  // V23: an inner d-variable spelled like an outer one would leave the
-  // outer integral reading the inner's last node
+  // V23: an inner d-variable spelled like an outer one leaves the
+  // outer integral reading the inner's last node.
   ppvTestDecline("V23 shadowed d-variable", "VSHD", 12);
-  // V24: the four monadics that HAVE a grammar spelling. The radical
+  // V24: the four monadics that have a grammar spelling. The radical
   // brings its own parentheses, so it must not also take precedence
-  // brackets — sqrt((a)) parses, and is still wrong to emit.
+  // brackets. sqrt((a)) parses, and is still wrong to emit.
   {
     char want[80];
     sprintf(want, "-1/%s(a^2)", "\xa2\x1a");
     ppvTestExpect("V24 monadics", "VMON", want);
   }
-  // V25/V26: and a monadic DOES bracket an operand that binds no tighter
+  // V25/V26: a monadic does bracket an operand that binds no tighter
   // than it does. V26 is the one that matters: 1/a*b is not 1/(a*b),
-  // and only a SAME-level operand distinguishes the two arg levels.
+  // and only a same-level operand distinguishes the two arg levels.
   ppvTestExpect("V25 monadic brackets a sum", "VMOB", "1/(a+b)");
   {
     char want[80];
@@ -5788,9 +5609,9 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
   // without a fresh one runs the same integrand
   ppvTestExpect("V17 latch persists", "VLAT", "INTEG(t;t;0;1)+INTEG(t;t;0;1)");
 
-  /* ---- the loop closed: the text COMPUTES --------------------------- */
-  // V18: a picture that cannot be evaluated would be a transpilation
-  // that only looks right. The double integral is 4/3.
+  /* ---- the loop closed: the text computes -------------------------- */
+  // V18: a picture that cannot be evaluated is a transpilation that
+  // only looks right. The double integral is 4/3.
   {
     if(numberOfFormulae == 0) {
       fnEqNew(NOPARAM);
@@ -5798,9 +5619,10 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
     calcMode = CM_NORMAL;
     aimBuffer[0] = 0;
     nimNumberPart = NP_EMPTY;
-    // the walker's OWN output, not a string typed here: a hand-written
-    // expectation and a hand-written pin agree with each other whether
-    // or not either is right. 4/3 is a number nobody in this file chose.
+    // The walker's own output. A hand-
+    // written expectation and a hand-written pin agree with each
+    // other whether or not either is right. 4/3 is a number nobody
+    // in this file chose.
     {
       calcRegister_t id = findNamedLabel("VDBL", GLOBAL_LABELS);
       char produced[256];
@@ -5862,16 +5684,10 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
       ppTestFail("V19 a stale solver session changed the drawing");
     }
   }
-  /* V-CHROME (PP18RR6-6) — the Z/T arm declares which chrome it manages
-   * and the menu-repaint guard reads that declaration, so the declaration
-   * is a postcondition worth asserting: deleting the clear left the whole
-   * gate green. Both bits are SET first, or the assertion passes on an
-   * ambient that was already clear. The reach check is mandatory here —
-   * a probe counted SIX calls in this suite that get as far as a paint
-   * arm, and all six took the stack-window arm at its first rung. V27
-   * is one of them (an earlier note said otherwise; it read a decline
-   * belonging to another call). V-FULL was written from that count and
-   * is the seventh — it drives the full-screen arm, which had none. */
+  /* V-CHROME: the Z/T arm declares which chrome it manages, and the
+   * menu-repaint guard reads that declaration. Both bits are set
+   * first, or the assertion passes on an ambient that was already
+   * clear. V-FULL drives the full-screen arm. */
   {
     calcRegister_t id = findNamedLabel("VPRC", GLOBAL_LABELS);
     calcMode = CM_NORMAL;
@@ -5895,8 +5711,8 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
     screenUpdatingMode = SCRUPD_AUTO;
   }
 
-  // V20: a decline paints NOTHING — the whole text is composed before a
-  // pixel is touched
+  // V20: a decline paints nothing. The whole text is composed before
+  // a pixel is touched.
   {
     calcRegister_t id = findNamedLabel("VSLV", GLOBAL_LABELS);
     temporaryInformation = TI_NO_INFO;
@@ -5912,15 +5728,13 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
     lastErrorCode = 0;
   }
 
-  /* V27: WHERE the drawing goes was part of the request. The formula
-   * lands in the Z/T rows and the X line — which holds the answer the
-   * program just computed — is left exactly as it was.
+  /* V27: where the drawing goes was part of the request. The formula
+   * lands in the Z/T rows, and the X line, which holds the answer the
+   * program just computed, is left exactly as it was.
    *
-   * The reach is ASSERTED, not assumed: the call has to come back with
-   * no error and with the surface declaring its pixels, so a decline
-   * cannot satisfy the ink sums by leaving the screen alone. Measured
-   * 2026-08-30: err=0, holds=1, inT=3827912, inZ=4394459, below=0,
-   * X byte-identical. */
+   * The reach is asserted. The call has to come back
+   * with no error and with the surface declaring its pixels, so a
+   * decline cannot satisfy the ink sums by leaving the screen alone. */
   {
     calcRegister_t id = findNamedLabel("VDBL", GLOBAL_LABELS);
     calcMode = CM_NORMAL;
@@ -5933,9 +5747,8 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
     uint32_t xBefore = ppvSumRows(Y_POSITION_OF_REGISTER_X_LINE,
                                   Y_POSITION_OF_REGISTER_X_LINE + 20);
     fnPrettyVisual((uint16_t)id);
-    // BOTH halves must carry ink: a double integral is taller than one
-    // stack line, so this is what tells "drawn across the Z/T window"
-    // apart from "a one-line form that happens to sit inside it"
+    // Both halves must carry ink: a double integral is taller than
+    // one stack line.
     uint32_t inT = ppvSumRows(Y_POSITION_OF_REGISTER_T_LINE - 4,
                               Y_POSITION_OF_REGISTER_T_LINE + 31);
     uint32_t inZ = ppvSumRows(Y_POSITION_OF_REGISTER_Z_LINE - 4,
@@ -5972,17 +5785,15 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
     screenUpdatingMode &= ~SCRUPD_MANUAL_STACK;
   }
 
-  /* V-FULL: the OTHER paint arm. A drawing too tall for the Z/T window
-   * takes the whole band, frames it top and bottom, and claims all three
-   * chrome bits — the stack-window arm claims one and clears the other
-   * two, so the chrome mask is what tells the two arms apart.
+  /* V-FULL: the other paint arm. A drawing too tall for the Z/T
+   * window takes the whole band, frames it top and bottom, and claims
+   * all three chrome bits. The stack-window arm claims one and clears
+   * the other two, so the chrome mask is what tells the two arms
+   * apart.
    *
-   * The success half of ppvPaintFullScreen had no reaching input before
-   * this row: V67 pins that BOTH arms can fail, and a probe over the
-   * whole suite found every painting call taking the stack window. A
-   * quadruple integral is 98 px standard and 91 tiny against a 72-row
-   * band, so both stack rungs decline it and the full band (147 rows)
-   * takes it at the first. */
+   * V67 pins that both arms can fail. A quadruple integral is 98 px
+   * standard and 91 tiny against a 72-row band, so both stack rungs
+   * decline it and the full band (147 rows) takes it at the first. */
   {
     calcRegister_t id = findNamedLabel("VQDL", GLOBAL_LABELS);
     calcMode = CM_NORMAL;
@@ -6015,7 +5826,7 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
       if(temporaryInformation != TI_SHOWNOTHING) {
         ppTestFail("V-FULL the full-screen surface cannot be dismissed by EXIT");
       }
-      // and it is the full band, not the stack window dressed up: the
+      // and it is the full band: the
       // drawing has to reach past the Z line that bounds the other arm
       if(ppvSumRows((int16_t)(Y_POSITION_OF_REGISTER_Z_LINE + 32), 167) == 0) {
         ppTestFail("V-FULL nothing drawn below the Z/T window");
@@ -6027,8 +5838,8 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
     screenUpdatingMode = SCRUPD_AUTO;
   }
   // V28: the measurement this placement rests on. One stack line is
-  // 36 px and holds a single integral only when shrunk; the T and Z
-  // bands together are 72, which is what makes the double fit at all.
+  // 36 px and holds a single integral only when shrunk. The T and Z
+  // bands together are 72, so the double fits.
   {
     struct { const char *text; int16_t stdH; int16_t tinyH; } cases[] = {
       { "INTEG(t;t;0;1)",                            38, 31 },
@@ -6066,11 +5877,11 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
     }
   }
 
-  /* ---- a program KEYED IN, not hand-encoded ------------------------ */
+  /* ---- a program keyed in through PEM ------------------------------ */
   // V39: LBL 'VKEY' / RCL 'a' / ENTER / x / 2 / - keyed through PEM,
-  // then transpiled. Nothing here was hand-encoded, so this is the pin
-  // that would catch the walker reading a literal PEM writes differently
-  // from the ones the other fixtures spell out.
+  // then transpiled. Nothing here was hand-encoded, so this pin
+  // catches the walker reading a literal PEM writes differently from
+  // the ones the other fixtures spell out.
   {
     uint8_t savedCalcMode4 = calcMode;
     uint16_t savedProg = currentProgramNumber;
@@ -6083,7 +5894,7 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
     runFunction(ITM_MULT);
     runFunction(ITM_2);       // opens NIM
     runFunction(ITM_SUB);     // commits the literal, then its own step
-    runFunction(ITM_RTN);     // terminate it, as a user would
+    runFunction(ITM_RTN);     // terminate it, the way a user does
 
     calcMode = CM_NORMAL;
     aimBuffer[0] = 0;
@@ -6142,17 +5953,14 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
     if(savedAlpha) { setSystemFlag(FLAG_ALPHA); } else { clearSystemFlag(FLAG_ALPHA); }
     aimBuffer[0] = 0;
   }
-  // V37: a name that is not a label never reaches the walker at all —
-  // TAM refuses it, and nothing is drawn
-  /* V36b — the softkey row must survive a VISUAL. The
-   * stack-window arm sets MANUAL_STACK + TI_SHOWNOTHING in CM_NORMAL, which
-   * are exactly _refreshNormalScreen's three early-return conjuncts, and that
-   * return skips the menu and status bar too. The TAM label menu is popped
-   * after fnPrettyVisual returns, so the pop's one repaint request arrived
-   * here and was dropped: the row kept showing the popped menu. DESIGN.md
-   * and the code's own comment both claim only the stack is suspended.
-   * No prior pin called refreshScreen after the typed path, which is the
-   * one step that makes the suppression observable. */
+  // V37: a name that is not a label never reaches the walker at all.
+  // TAM refuses it, and nothing is drawn.
+  /* V36b: the softkey row must survive a VISUAL. The stack-window arm
+   * sets MANUAL_STACK + TI_SHOWNOTHING in CM_NORMAL, which are
+   * exactly _refreshNormalScreen's three early-return conjuncts, and
+   * that return skips the menu and status bar too. The TAM label menu
+   * is popped after fnPrettyVisual returns. DESIGN.md and the code's
+   * own comment both claim only the stack is suspended. */
   {
     uint8_t savedCalcMode4 = calcMode;
     bool_t  savedAlpha4 = getSystemFlag(FLAG_ALPHA);
@@ -6208,14 +6016,13 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
     aimBuffer[0] = 0;
   }
 
-  /* ---- PP18: the tree the product actually paints ------------------ */
-  // V46-V51 assert the NODE shape, not the serialized text. The text
-  // back end is a test seam; these are the product. Two of them show the
-  // node form is not merely equivalent to the text form:
-  //   V49 — a fraction bar SCOPES, so a/(b+c) draws with no parentheses
-  //         at all where the text needed them
-  //   V51 — a stacked power DOES need its base bracketed, and gets it
-  //         here rather than from the text grammar's associativity
+  /* ---- The tree the product actually paints -------------------------- */
+  // V46-V51 assert the node shape the product paints. Two cases
+  // differ from the text form:
+  //   V49: a fraction bar scopes, so a/(b+c) draws without
+  //        parentheses where the text needed them
+  //   V51: a stacked power does need its base bracketed, and the
+  //        layout back end supplies the wrap
   {
     struct { const char *what; const char *label; const char *sig; } cases[10];
     char sMul[64], sSum[64];
@@ -6238,19 +6045,19 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
 
     cases[6].what = "V56 derivative shape";
     cases[6].label = "VDRV";                    cases[6].sig = sDrv;
-    // V57: an ADDITIVE construct body keeps its brackets. The parser
+    // V57: an additive construct body keeps its brackets. The parser
     // gets this by sniffing the body's runs for a +/- joiner because a
-    // parse has no precedence to consult; the tree asks the real
+    // parse has no precedence to consult. The tree asks the real
     // question instead, and must reach the same answer.
     char sScope[160];
     sprintf(sScope, "B([P([[[x %s x] - [x %s p]] - 2]) d x]|0|8)", STD_DOT, STD_DOT);
     cases[7].what = "V57 additive construct body is scoped";
     cases[7].label = "VIG";                     cases[7].sig = sScope;
-    // V68/V69: a big operator is NOT an atom. Its body
-    // extends rightward, so anything multiplied or raised beside it
-    // binds INTO the body unless the construct is bracketed. Two
-    // programs whose answers differ by a factor of 2.6 drew the same
-    // picture: (1+2+3)^2 = 36 and 1^2+2^2+3^2 = 14.
+    // V68/V69: a big operator is not an atom. Its body extends
+    // rightward, so anything multiplied or raised beside it binds
+    // into the body unless the construct is bracketed. Two programs
+    // whose answers differ by a factor of 2.6 draw the same picture:
+    // (1+2+3)^2 = 36 and 1^2+2^2+3^2 = 14.
     char sSq[96], sPx[96];
     sprintf(sSq, "S(P(B(n|[n = 1]|3))|2)");
     cases[8].what = "V68 a construct under a power is bracketed";
@@ -6287,46 +6094,39 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
 
 
 
-/* ==== the REAL appnote-22 file (its own driver, anchored late) =========
- * Every fixture in prettyTestVisual is one I wrote and hand-encoded,
- * which makes them a statement about my own encoding as much as about
- * the walker. This loads docs/appnotes/sources/AN0022/func.p47 —
- * Jaymos's actual file, the one his forum message pointed at — through
- * the official loader and transpiles the labels he named.
+/* ==== the real appnote-22 file (its own driver, anchored late) =========
+ * Every fixture in prettyTestVisual is hand-encoded. This loads
+ * docs/appnotes/sources/AN0022/func.p47, Jaymos's actual file, the
+ * one his forum message pointed at, through the official loader, and
+ * transpiles the labels he named.
  *
- * It lives in its own driver because it CLEARS PROGRAM MEMORY. Run from
- * inside prettyTestVisual it wiped the programs a later file
- * (programs.txt) expects, and six upstream cases failed 300 lines away
- * from the cause. Clearing is unavoidable here — our own fixtures have
- * nearly filled program memory, and func.p47's labels (DBLINT, HT,
- * IT, ...) collide by design with upstream's own nested_cov programs.
+ * It lives in its own driver because it clears program memory.
+ * Clearing is unavoidable here: our own fixtures have nearly filled
+ * program memory, and func.p47's labels (DBLINT, HT, IT, ...) collide
+ * with upstream's own nested_cov programs.
  *
- * It is anchored in testSuiteList.txt BEFORE graphs_cov, not at the
- * tail: forth-core appends there and two packages appending at EOF
- * produce the same hunk and a hard conflict. So it runs after
- * programs.txt, which is what the ordering needs, but graphs_cov,
- * nested_cov, config_cov and stack_cov still run after it — none of
- * which depends on preloaded programs. Not "last".
+ * It is anchored in testSuiteList.txt before graphs_cov. forth-core
+ * appends at the tail, and two packages appending at EOF
+ * produce the same hunk and a hard conflict. It runs after
+ * programs.txt, which the ordering needs, but graphs_cov, nested_cov,
+ * config_cov, and stack_cov still run after it. None of those depend
+ * on preloaded programs.
  *
- * A missing file FAILS rather than skips: the suite runs from the repo
- * root, so absence means something a silent skip would hide. */
+ * A missing file fails the driver. */
 void prettyTestReal(uint16_t unusedButMandatoryParameter) {
   (void)unusedButMandatoryParameter;
   ppTestFailures = 0;
   /* ---- the REAL appnote-22 file ------------------------------------ */
-  /* V58: every other fixture in this driver is one I wrote and
-   * hand-encoded, which makes them a statement about my own encoding as
-   * much as about the walker. This loads docs/appnotes/sources/AN0022/
-   * func.p47 — Jaymos's actual file, the one his forum message pointed
-   * at — through the official loader, and transpiles the labels he
-   * named. It clears program memory both before and after: the fixtures
-   * above have nearly filled it, and a later driver should find a clean
-   * slate rather than somebody else's programs. It runs late in the
-   * list, not last — see the driver's own header.
+  /* V58: every other fixture in this driver is hand-encoded. This
+   * loads docs/appnotes/sources/AN0022/func.p47, Jaymos's actual
+   * file, the one his forum message pointed at, through the official
+   * loader, and transpiles the labels he named. It clears program
+   * memory both before and after: the fixtures above have nearly
+   * filled it, and a later driver needs a clean slate. It runs late
+   * in the list, before the tail. See the driver's own header.
    *
-   * A missing file FAILS rather than skips. The suite runs from the
-   * repo root (meson test -C build.sim), so absence means something is
-   * wrong that a silent skip would hide. */
+   * A missing file fails the driver. The suite runs from the repo
+   * root (meson test -C build.sim). */
   {
     extern void fnClPAll(uint16_t confirmation);
     FILE *in = fopen("docs/appnotes/sources/AN0022/func.p47", "rb");
@@ -6336,9 +6136,8 @@ void prettyTestReal(uint16_t unusedButMandatoryParameter) {
     else {
       FILE *outF = fopen("c47programTest.bin", "wb");
       if(outF == NULL) {
-        // the sibling fopen two lines up is checked; this one was not,
-        // and the suite died SIGSEGV inside this driver rather than
-        // reporting a case
+        // Both fopen calls must be checked. An unchecked NULL FILE*
+        // here crashes the whole suite.
         fclose(in);
         ppTestFail("V58 cannot write the loader's input file");
         outF = NULL;

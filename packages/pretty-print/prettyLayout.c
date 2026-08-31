@@ -4,14 +4,14 @@
 /**
  * \file prettyLayout.c
  * The pretty-print box-model engine: fixed pools, a measure pass and a
- * paint pass. Glyph rendering stays on the upstream pipeline (showString);
- * the only pixels this file paints itself are fraction bars, so the pretty
- * output inherits every font behaviour upstream has.
+ * paint pass. Glyph rendering stays on the upstream pipeline
+ * (showString). The only pixels this file paints itself are rules and
+ * strokes (bars, vinculums, big-operator signs), so the pretty output
+ * inherits every font behavior upstream has.
  *
- * All metrics are derived from the live font data at first use, not
- * hardcoded: the box ascent comes from the digit '0' glyph, and the
- * fraction bar is placed to cover the top rows of the minus sign's ink —
- * a pretty fraction bar sits exactly where a minus sign would, per font.
+ * All metrics come from the live font data at first use: the box
+ * ascent comes from the digit '0' glyph, and the fraction bar covers
+ * the top rows of the minus sign's ink, per font.
  */
 
 #include "c47.h"
@@ -171,8 +171,8 @@ int16_t ppPreferredBase(int16_t baseY) {
 
 
 /* Tight ink extents of a glyph run relative to the run font's baseline.
- * Space-class glyphs (no ink rows) contribute nothing; an unknown glyph
- * fails the run — a not-found box would have metrics we never audited. */
+ * Space-class glyphs (no ink rows) contribute nothing. An unknown glyph
+ * fails the run: its metrics were never audited. */
 static bool_t ppRunInk(const char *s, const ppMetrics_t *m, int16_t *asc, int16_t *desc) {
   int16_t pos = 0;
   *asc  = 0;
@@ -255,14 +255,15 @@ bool_t ppMeasure(uint8_t n, uint8_t depth) {
         return false;
       }
       // Short radicands use the raised font glyph, taller ones a
-      // synthesized stroke. An INDEXED root always synthesizes: the
-      // glyph's hook collides with the tucked index. Paint repeats this.
+      // synthesized stroke. An indexed root always synthesizes: the
+      // glyph's hook collides with the tucked index. The paint pass
+      // repeats this test.
       bool_t synth = (ppPool[child].ascent + ppPool[child].descent > m->radInk + 3)
                      || (index != PP_NONE);
       int16_t signW = synth ? 10 : m->radAdvance;
       int16_t idxW = 0;
       if(index != PP_NONE) {
-        // the index tucks above-left; roughly half of it overlaps the sign
+        // the index tucks above-left, and roughly half of it overlaps the sign
         idxW = ppPool[index].width - signW / 2;
         if(idxW < 0) {
           idxW = 0;
@@ -287,9 +288,8 @@ bool_t ppMeasure(uint8_t n, uint8_t depth) {
         if(idxAsc > nd->ascent) {
           nd->ascent = idxAsc;
         }
-        /* The descent dual of the line above: the index tucks above the
-         * baseline, but its ink bottom at relBase + descent can fall below
-         * the box, and every band check downstream trusts both edges. */
+        /* The index's ink bottom can fall below the box, and the band
+         * checks downstream trust both edges. */
         int16_t idxDesc = (int16_t)(ppPool[index].relBase + ppPool[index].descent);
         if(idxDesc > nd->descent) {
           nd->descent = idxDesc;
@@ -345,8 +345,9 @@ bool_t ppMeasure(uint8_t n, uint8_t depth) {
 
     case PP_BIGOP: {
       // children: body, under-limit, over-limit. The operator glyph is
-      // stroke-drawn in a box left of the body; limits stack under/over
-      // that box. Paint recomputes the same box from the same inputs.
+      // stroke-drawn in a box left of the body, and the limits stack
+      // under/over that box. Paint recomputes the same box from the
+      // same inputs.
       uint8_t body = nd->firstChild;
       if(body == PP_NONE) {
         return false;
@@ -441,7 +442,7 @@ bool_t ppMeasure(uint8_t n, uint8_t depth) {
       int16_t h = ppPool[child].ascent + ppPool[child].descent;
       ppPool[child].relBase = 0;
       if(h <= m->parInk + 2) {
-        // glyph parens cover the child; paint recomputes this same test
+        // glyph parens cover the child. Paint recomputes this same test.
         ppPool[child].relX = m->parAdvance;
         nd->width   = ppPool[child].width + 2 * m->parAdvance;
         int16_t pAsc  = m->boxAscent - m->parAbove;
@@ -493,13 +494,10 @@ bool_t ppMeasure(uint8_t n, uint8_t depth) {
 }
 
 
-/* Every rule this engine paints — fraction bars, radical vinculums, the
- * |x| strokes, tall parens, the big-operator glyphs — is an
- * lcd_fill_rect taking uint32_t coordinates. The browser's pan paints
- * from a negative origin, and a negative x cast to uint32_t is a huge
- * value, so the rectangle would land nowhere and the rule would vanish
- * while the glyphs beside it still drew. Clip once here rather than at
- * every call site; ppDrawLine screens negatives per pixel already. */
+/* All straight rules go through lcd_fill_rect, which takes uint32_t
+ * coordinates. The browser's pan paints from a negative origin, so
+ * clip here once. Diagonal strokes go through ppDrawLine, which
+ * screens negatives per pixel already. */
 static void ppFillVal(int16_t x, int16_t y, int16_t w, int16_t h, int val) {
   if(w <= 0 || h <= 0) {
     return;
@@ -528,26 +526,14 @@ static void ppFill(int16_t x, int16_t y, int16_t w, int16_t h) {    // ink
   ppFillVal(x, y, w, h, LCD_EMPTY_VALUE);
 }
 
-/* showString paints each glyph through showGlyphCode with noPreClear
- * false, and that pre-clear covers the glyph's whole FONT box — above,
- * glyph and below — not the ink this engine measured. A short-inked
- * denominator sits with its baseline pushed up so the ink still clears
- * the bar, and its font box then reaches across the bar into the
- * numerator, which is painted first and so gets erased. The same
- * overshoot lets a run at the band edge clear frame rows its measured
- * ink never touches.
- *
- * Clear the MEASURED box here and paint the glyphs with noPreClear, so
- * paint covers exactly what measure promised. The denominator's clear
- * now stops at barTopRel + barThick + fracGap + 1 — below the bar for
- * every denominator, by construction. Ordering rules and stretched
- * parens still paint after their glyph runs; that rule is unchanged.
+/* showString pre-clears each glyph's whole font box, which can be
+ * taller than the measured ink and erase neighbor rows. So: clear the
+ * measured box here, then paint the glyphs with noPreClear.
  *
  * slc/sec reproduce _doShowString for the showLeadingCols=false,
- * showEndingCols=true call this replaces, so the advance stays the one
- * stringWidth() measured. Negative x and y are upstream's own convention
- * here: showGlyphCode recovers a wrapped y, and column positions wrap
- * back into range unsigned. */
+ * showEndingCols=true call this replaces. Negative x and y are
+ * upstream's own convention: showGlyphCode wraps them back into
+ * range. */
 static void ppShowRun(const char *s, const ppMetrics_t *m, int16_t x, int16_t baseline,
                       int16_t asc, int16_t desc) {
   ppFillVal(x, (int16_t)(baseline - asc), (int16_t)stringWidth(s, m->font, false, true),
@@ -557,15 +543,15 @@ static void ppShowRun(const char *s, const ppMetrics_t *m, int16_t x, int16_t ba
   uint32_t px = (uint32_t)(int32_t)x;
   const uint32_t py = (uint32_t)(int32_t)(baseline - m->boxAscent);
 
-  bool_t slc = false;   // first glyph takes showLeadingCols; the rest take
-  while(s[ch] != 0) {   // true, and sec is showEndingCols or true — both true
+  bool_t slc = false;   // showLeadingCols: false for the first glyph only
+  while(s[ch] != 0) {
     const uint16_t code = charCodeFromString(s, &ch);
     px  = showGlyphCode(code, m->font, px, py, vmNormal, slc, true, true);
     slc = true;
   }
 }
 
-// integer Bresenham over setBlackPixel — the synthesized radical sign
+// integer Bresenham over setBlackPixel (synthesized strokes)
 static void ppDrawLine(int16_t x0, int16_t y0, int16_t x1, int16_t y1) {
   int16_t dx = (int16_t)(x1 > x0 ? x1 - x0 : x0 - x1);
   int16_t dy = (int16_t)(y1 > y0 ? y1 - y0 : y0 - y1);
@@ -574,8 +560,8 @@ static void ppDrawLine(int16_t x0, int16_t y0, int16_t x1, int16_t y1) {
   int16_t err = (int16_t)(dx - dy);
   for(;;) {
     // setBlackPixel is a thin bitblt24 wrapper with no bounds check of
-    // its own, so a panned or oversized stroke would write past the
-    // frame buffer. Screen both ends of both axes.
+    // its own, so a panned or oversized stroke writes past the frame
+    // buffer. Screen both ends of both axes.
     if(x0 >= 0 && y0 >= 0 && x0 < SCREEN_WIDTH && y0 < SCREEN_HEIGHT) {
       setBlackPixel((uint32_t)x0, (uint32_t)y0);
     }
@@ -596,8 +582,8 @@ static void ppDrawLine(int16_t x0, int16_t y0, int16_t x1, int16_t y1) {
 
 /* The big-operator glyph box: ga/gd rows above/below the baseline and
  * a width that scales with the height at the font's own Σ proportions
- * (the numeric Σ measures 14x25, w/h ≈ 0.56) — a fixed width left tall
- * operators pinched. Measure and paint call this same function. */
+ * (the numeric Σ measures 14x25, w/h ≈ 0.56). Measure and paint call
+ * this same function. */
 static void ppBigopBox(const ppNode_t *body, const ppMetrics_t *m,
                        int16_t *ga, int16_t *gd, int16_t *gw) {
   *ga = (int16_t)(body->ascent + 2);
@@ -615,8 +601,7 @@ static void ppBigopBox(const ppNode_t *body, const ppMetrics_t *m,
 
 /* The integral sign, stroke-drawn with curved hooks: a 2 px vertical
  * spine whose top bends right and bottom bends left along a quadratic
- * offset — the straight-line hooks read as a slash (found by review).
- * cx is the spine's left column; rows span [top, bot]. */
+ * offset. cx is the spine's left column. Rows span [top, bot]. */
 static void ppDrawIntegralSign(int16_t cx, int16_t top, int16_t bot) {
   int16_t h = (int16_t)(bot - top + 1);
   int16_t hh = (int16_t)(h / 4);
@@ -649,9 +634,8 @@ static void ppPaint(uint8_t n, int16_t x, int16_t baseline) {
       return;
 
     case PP_RAD: {
-      // Index, sign, radicand, then the vinculum LAST — the binding
-      // paint-order rule: glyph-box pre-clears wipe any rule painted
-      // before their glyphs.
+      // Paint order: index, sign, radicand, then the vinculum last.
+      // Glyph pre-clears wipe any rule painted before them.
       uint8_t child = nd->firstChild;
       uint8_t index = ppPool[child].nextSibling;
       bool_t synth = (ppPool[child].ascent + ppPool[child].descent > m->radInk + 3)
@@ -688,7 +672,7 @@ static void ppPaint(uint8_t n, int16_t x, int16_t baseline) {
     }
 
     case PP_BIGOP: {
-      // children first, strokes last — the binding paint-order rule
+      // paint children first, strokes last
       uint8_t body  = nd->firstChild;
       uint8_t under = ppPool[body].nextSibling;
       uint8_t over  = ppPool[under].nextSibling;
@@ -753,9 +737,9 @@ static void ppPaint(uint8_t n, int16_t x, int16_t baseline) {
       ppPaint(child, x + ppPool[child].relX, baseline + ppPool[child].relBase);
       int16_t h = ppPool[child].ascent + ppPool[child].descent;
       if(h <= m->parInk + 2) {
-        // pAsc/pDesc are measure's own glyph-paren extents (see PP_PAREN
-        // in ppMeasure); the child is already painted, so a font-box
-        // clear here would eat its ink
+        // pAsc/pDesc are measure's own glyph-paren extents (see
+        // PP_PAREN in ppMeasure). The child is already painted, so a
+        // font-box clear here eats its ink.
         const int16_t pAsc  = (int16_t)(m->boxAscent - m->parAbove);
         const int16_t pDesc = (int16_t)((m->parAbove + m->parInk) - m->boxAscent);
         ppShowRun("(", m, x, baseline, pAsc, pDesc);
@@ -783,13 +767,8 @@ static void ppPaint(uint8_t n, int16_t x, int16_t baseline) {
         ppPaint(c, x + ppPool[c].relX, baseline + ppPool[c].relBase);
       }
       if(nd->kind == PP_FRAC) {
-        // The children clear only their MEASURED boxes, which stop
-        // fracGap+1 above the bar and start fracGap+2 below it, so for a
-        // fraction the paint order is not load-bearing. It is kept
-        // because the rule still binds the one run painted with a
-        // font-box pre-clear: the radical sign glyph.
-        // Ink is LCD_EMPTY_VALUE — the same lcd_fill_rect
-        // drawSinglePixelFullWidthLine makes for its visible rules.
+        // The bar paints last. Ink is LCD_EMPTY_VALUE, the same fill
+        // drawSinglePixelFullWidthLine makes.
         ppFill((int16_t)(x), (int16_t)(baseline + m->barTopRel), (int16_t)(nd->width), (int16_t)(m->barThick));
       }
       return;
@@ -810,21 +789,10 @@ void ppSetFontDeep(uint8_t n, uint8_t fontId) {
   }
 }
 
-/* Every glyph goes through here or ppRenderRightAligned, so this is the
- * one place the bold substitution can be suppressed. showGlyphCode swaps
- * in a numericFontBold glyph whenever FLAG_BOLD is set and the font is
- * &numericFont, and advances by the BOLD glyph's rows — while the
- * metrics, stringWidth and ppRunInk all read the PLAIN table and the node
- * has already cleared the box those metrics promised. Suppressing the flag
- * for the paint keeps both on one table, so a BOLD owner still gets a
- * drawing, in the plain numeric face.
- *
- * Restored on the single exit path of each wrapper; there is no early
- * return between save and restore. It is NOT side-effect free: FLAG_BOLD
- * is in refreshStateFlags[], so each flip runs fnRefreshState and raises
- * doRefreshSoftMenu — twice per paint. Harmless today (a menu repaint
- * request the next refresh consumes) but real, and the reason to prefer
- * bold-aware metrics if this surface ever grows a cost it cannot pay. */
+/* With FLAG_BOLD set and the font &numericFont, showGlyphCode swaps in
+ * bold glyphs while the metrics read the plain table. Suppress the
+ * flag during paint so both use one table. Side effect: FLAG_BOLD is in refreshStateFlags[], so
+ * each flip runs fnRefreshState and raises doRefreshSoftMenu. */
 static bool_t ppSuppressBold(void) {
   bool_t was = getSystemFlag(FLAG_BOLD);
   if(was) {

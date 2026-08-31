@@ -3,19 +3,16 @@
 
 /**
  * \file browsers/prettyBrowser.c
- * The formula browser, copy-adapting historyBrowser.c's state machine:
- * first call flips calcMode and repaints; later calls are the refresher
- * (the refreshScreen case). Rows come from ppfBuildRow (the same
- * variable-height packing the pager proved); the selected row carries a
- * 3 px marker and pans horizontally when wider than the screen.
+ * The formula browser, copy-adapted from historyBrowser.c's state
+ * machine: the first call flips calcMode and repaints, and later calls
+ * are the refresher. Rows come from ppfBuildRow. The selected row
+ * carries a 3 px marker and pans horizontally when wider than the
+ * screen.
  *
- * ENTER stages the selected history entry's TKRES result into X — a
- * real machine mutation, so it runs saveForUndo first (UNDO works) and
- * invalidates the shadow expression stack afterwards (the recall
- * bypasses item dispatch, exactly the class of mutation the claims
- * registry says must not go unnoticed; UNKNOWN slots upgrade truthfully
- * later). The live (now) row has no stored result — its value IS X —
- * so ENTER there just leaves.
+ * ENTER stages the selected entry's stored result into X: it runs
+ * saveForUndo first and invalidates the shadow expression stack after,
+ * because the recall bypasses item dispatch. The live (top) row has no
+ * stored result: its value is X already, so ENTER there just leaves.
  */
 
 #include "c47.h"
@@ -45,16 +42,9 @@ static void pbPaint(void) {
     return;
   }
 
-  /* A row that will not build must not be `continue`d out of
-   * both passes — so it occupied no space, and if it was the SELECTED row
-   * the `selPage = page` assignment was skipped with it. selPage kept its
-   * initialiser, pass 2 painted page 0, and no selection marker appeared
-   * anywhere: pressing DOWN onto such a row looked like the browser had
-   * reset itself. A row that cannot be drawn still EXISTS, and the owner
-   * is entitled to see that it does — the same reasoning that made the
-   * empty browser say "no formulas" rather than paint a blank frame.
-   * Both passes now reserve a fixed-height placeholder for it, so every
-   * row pages, selects and marks like any other. */
+  /* A row that cannot be drawn still exists: both passes reserve a
+   * fixed-height placeholder for it, so every row pages, selects and
+   * marks like any other. */
   #define PB_UNSHOWN_H 20
 
   // pass 1: which page holds the selection (variable-height packing)
@@ -99,16 +89,11 @@ static void pbPaint(void) {
       }
       if(row == pbSelection) {
         const ppNode_t *n = ppNodeAt(root);
-        // This used to be the only place a wide row was
-        // handled, but the row builder rejected everything wider than
-        // 392 px, leaving a 4 px band in which pan could engage at all —
-        // and a 60 px step wrapped it to 0 on the next paint. Rows are
-        // now accepted at any width, so this is the real arm.
         int16_t visible = (int16_t)(SCREEN_WIDTH - 12);
         if(n->width > visible) {
           int16_t maxPan = (int16_t)(n->width - visible);
           if(pbPan > maxPan) {
-            pbPan = maxPan;   // clamp at the right edge rather than snapping back
+            pbPan = maxPan;   // clamp at the right edge
           }
           x = (int16_t)(8 - pbPan);
         }
@@ -149,7 +134,7 @@ void prettyBrowserDown(void) {
 }
 
 void prettyBrowserPan(void) {
-  pbPan = (int16_t)(pbPan + 60);   // paint wraps when past the row's width
+  pbPan = (int16_t)(pbPan + 60);   // the paint clamps this to the row's width
 }
 
 void prettyBrowserLeave(void) {
@@ -157,7 +142,7 @@ void prettyBrowserLeave(void) {
   screenUpdatingMode = SCRUPD_AUTO;
 }
 
-/* find the TKRES token of a history entry; returns NULL when absent */
+/* Find the TKRES token of a history entry. Returns NULL when absent. */
 static const uint8_t *pbFindResult(const uint8_t *entry, uint8_t *dataType, uint8_t *tag,
                                    uint16_t *allocParam, uint8_t *bytes) {
   if(entry == NULL) {
@@ -198,13 +183,8 @@ static const uint8_t *pbFindResult(const uint8_t *entry, uint8_t *dataType, uint
       case PPT_TKO2:
         off += 2;
         break;
-      // Two decoders read this one stream: ppfBuildEntry
-      // knows all eight tokens and rendered the row, while this one knew
-      // seven and bailed on the eighth — BEFORE reaching the TKRES that
-      // follows it. So every history entry containing a big operator
-      // rendered with its "= result" and then silently refused to recall
-      // it: ENTER closed the browser and put nothing in X. The two
-      // decoders must agree on the token set.
+      // this decoder must know every token ppfBuildEntry knows, or an
+      // entry renders but refuses to recall
       case PPT_TKBIG:
         off = (uint16_t)(off + 4 + 16);   // item u16, label u16, payload 16
         break;
@@ -237,15 +217,15 @@ void prettyBrowserEnter(void) {
     prettyBrowserLeave();
     return;
   }
-  liftStack();   // honours FLAG_ASLIFT exactly like a recall
+  liftStack();   // honors FLAG_ASLIFT exactly like a recall
   reallocateRegister(REGISTER_X, dataType, allocParam, amNone);
   if(lastErrorCode == ERROR_NONE) {
     xcopy(getRegisterDataPointer(REGISTER_X), payload, bytes);
     setRegisterTag(REGISTER_X, tag);
   }
   setSystemFlag(FLAG_ASLIFT);
-  // the recall bypassed item dispatch: the shadow must not pretend it
-  // followed — wipe to UNKNOWN (truthful upgrades later), keep history
+  // the recall bypassed item dispatch: wipe the shadow to UNKNOWN and
+  // keep the history
   ppcShadowInvalidate();
   prettyBrowserLeave();
 }

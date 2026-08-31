@@ -4,36 +4,34 @@
 /**
  * \file prettyPrint.h
  * Pretty-print package: natural (textbook) display of calculations.
- * Public surface only; the engine internals are in prettyInternal.h.
+ * Public surface only. The engine internals are in prettyInternal.h.
  *
- * Included from c47.h near the end of its include block, so every c47 type
- * is already visible; this header must not include c47 headers itself.
+ * c47.h includes this header near the end of its include block, so
+ * every c47 type is already visible. This header must not include c47
+ * headers itself.
  *
- * The one binding contract callers rely on: every pretty entry point is a
- * try-function. It either paints the pretty form and returns true, or
- * paints NOTHING and returns false — in which case the upstream rendering
- * runs unchanged. There is no error path, only decline.
+ * Binding contract: every pretty entry point is a try-function. It
+ * paints the pretty form and returns true, or it paints nothing and
+ * returns false. On false the upstream rendering runs unchanged.
  */
 
 #if !defined(PRETTYPRINT_H)
 #define PRETTYPRINT_H
 
-// Package toggle (ITM_PPON, item row 460). Not a system flag: two packages
-// cannot both edit the NUMBER_OF_SYSTEM_FLAGS line (see DESIGN.md §7), so
-// the toggle is package state, default ON, not persisted.
+// Natural-display master toggle (ITM_PPON, item row 460), persisted in
+// FLAG_PRETTYP, default ON.
 void   fnPrettyToggle(uint16_t unusedButMandatoryParameter);
 bool_t prettyEnabled (void);
 
-// Inline stack-line surface, hooked from _refreshRegisterLine ahead of the
-// FLAG_FRACT arm. On success *lineWidth carries the painted width (the arm
-// contract every upstream branch honours via `lineWidth = w`).
+// Inline stack-line surface, hooked from _refreshRegisterLine ahead of
+// the FLAG_FRACT arm. On success *lineWidth carries the painted width.
 bool_t prettyTryRegisterLine(calcRegister_t regist, int16_t baseY, int16_t *lineWidth);
 
 // PSHOW (ITM_PSHOW, item row 459): full-screen pretty view of X on the
-// fnPixel manual-paint protocol; falls back to fnC47Show.
+// fnPixel manual-paint protocol. Falls back to fnC47Show.
 void fnPrettyShow(uint16_t unusedButMandatoryParameter);
 
-// PHIST (ITM_PHIST, row 462): opens the formula BROWSER (calcMode 20 —
+// PHIST (ITM_PHIST, row 462): opens the formula browser (calcMode 20:
 // UP/DOWN select, .d pans a wide row, ENTER recalls the result to X,
 // EXIT leaves). PCLR (ITM_PCLR, row 461) clears the formula history.
 void fnPrettyHist     (uint16_t unusedButMandatoryParameter);
@@ -51,52 +49,41 @@ void prettyBrowserLeave(void);
 // while editing). False -> upstream's linear showString runs.
 bool_t prettyTryEquation(const char *src, int16_t xLeft);
 
-// EQSHW (ITM_EQSHW, row 216): full-screen equation view; in the
+// EQSHW (ITM_EQSHW, row 216): full-screen equation view. In the
 // interactive integrate solver the integrand is framed by a big ∫.
 void fnPrettyEqShow(uint16_t unusedButMandatoryParameter);
 
 // VISUAL (ITM_VISUAL, row 984): draws a stored RPN program as the
 // mathematics it computes, without running it. Takes a global program
-// label; transpiles the chain to equation-language text and shows it
-// through the EQSHW renderer. Declines (raises an error, paints nothing)
-// on anything a static walk cannot express.
+// label, builds the expression tree, and paints it in the Z/T window,
+// or in the full band when the drawing is too tall. Declines (raises
+// an error, paints nothing) on anything a static walk cannot express.
 void fnPrettyVisual(uint16_t label);
 
 // PTLIN (ITM_PTLIN, row 215): opt-in live formula on the T register
-// line — DEFAULT OFF; falls through to T's value when no formula fits.
+// line, default OFF. Falls through to T's value when no formula fits.
 void fnPrettyTlineToggle(uint16_t unusedButMandatoryParameter);
 
 // Capture-engine hooks (prettyCapture.c), called from small upstream
-// patches. STAGE/DONE bracket the item dispatch in reallyRunFunction;
-// the NIM trio mirrors number entry at the closeNim funnel with the
-// lift decision latched at calcModeNim; prettyReset re-arms at doFnReset.
+// patches. STAGE/DONE bracket the item dispatch in reallyRunFunction.
+// The NIM trio mirrors number entry at the closeNim funnel, with the
+// lift decision latched at calcModeNim. prettyReset re-arms at
+// doFnReset.
 void prettyNoteFunction    (int16_t func, uint16_t param);
 void prettyNoteFunctionDone(void);
-/* For upstream sites that mutate registers WITHOUT going
- * through item dispatch, so neither hook above runs: wipe the shadow to
- * UNKNOWN without touching the history ring. The three direct fnRecall
- * calls in keyboard.c (SHOW mode, and the register browser's two arms)
- * are the callers this is public for. */
+/* For upstream sites that mutate registers without item dispatch, so
+ * neither hook above runs: wipe the shadow to UNKNOWN without touching
+ * the history ring. The direct fnRecall calls in keyboard.c are the
+ * callers this is public for. */
 void ppcShadowInvalidate   (void);
 void prettyNoteNimOpen     (void);
 void prettyNoteNimText     (const char *aim);
 void prettyNoteNumberCommit(void);
 void prettyReset           (void);
 
-// Construct-name spelling, shared by the two parsers that must agree on
-// it: the renderer (ppqBigopConstruct) and the evaluator
-// (ppEqBigopIntercept). Upstream carries BOTH spellings of any name a
-// user types into an equation — functionAlias[] lists "sinh" beside
-// "SINH" and "asinh" beside "ASINH" (solver/equation.c) — because
-// CMP_NAME folds superscript, subscript and struck forms but never
-// case. So a construct answers to its all-upper and all-lower spellings
-// and to nothing else, exactly as SINH/sinh do; mixed case is upstream's
-// own no. `name` is the uppercase spelling, ASCII by construction.
-// Returns false unless the very next character is '(' , which is what
-// keeps a variable merely ENDING in a construct name from matching.
-// The function-name twin of ppEqConstructIs, and shared for the same
-// reason: the renderer's f(x) arm, the walker's emitter and the
-// evaluator must agree on what a function name IS. Defined in
+// Function-name resolution, shared by the renderer, the walker and
+// the evaluator so all three agree on what a function name is. Takes
+// a bare NUL-terminated name, no '(' check. Defined in
 // solver/equation.c beside the alias table it mirrors.
 int16_t ppEqFunctionItem(const char *name);
 
@@ -116,8 +103,8 @@ static inline bool_t ppEqConstructIs(const char *s, const char *name, uint8_t le
   return true;
 }
 
-// testSuite coverage drivers (prettyTest.c, PC_BUILD only; registered in
-// funcTestNoParam with coverageDriver = 1).
+// testSuite coverage drivers (prettyTest.c, PC_BUILD only, registered
+// in funcTestNoParam with coverageDriver = 1)
 void prettyTestMeasure (uint16_t unusedButMandatoryParameter);
 void prettyTestPixels  (uint16_t unusedButMandatoryParameter);
 void prettyTestFallback(uint16_t unusedButMandatoryParameter);

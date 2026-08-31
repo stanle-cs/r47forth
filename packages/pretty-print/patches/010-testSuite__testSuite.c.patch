@@ -1,14 +1,13 @@
 diff --git a/src/testSuite/testSuite.c b/src/testSuite/testSuite.c
-index bc8a9792a584984b3e18dee2a6626ce81a330205..0f8860de9aa99cb64fbe35bf55d7455e23388e7a 100644
+index bc8a9792a584984b3e18dee2a6626ce81a330205..2d13e4a966084e8f382940fb26fa70883c92f07d 100644
 --- a/src/testSuite/testSuite.c
 +++ b/src/testSuite/testSuite.c
-@@ -702,6 +702,18 @@ const funcTest_t funcTestNoParam[] = {
+@@ -702,6 +702,17 @@ const funcTest_t funcTestNoParam[] = {
    {"fnGetRange",             fnGetRange            },
    {"fnGetHide",              fnGetHide             },
    {"fnGetNDEC",              fnGetNDEC             },
 +  // pretty-print package: coverage drivers for tests/pretty_print.txt
-+  // (declared via c47.h -> prettyPrint.h; no indexOfItems row, hence the
-+  // coverageDriver flag)
++  // (declared via c47.h -> prettyPrint.h, no indexOfItems row)
 +  {"prettyTestMeasure",      prettyTestMeasure,   1},
 +  {"prettyTestPixels",       prettyTestPixels,    1},
 +  {"prettyTestFallback",     prettyTestFallback,  1},

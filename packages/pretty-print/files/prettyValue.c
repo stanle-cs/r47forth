@@ -6,12 +6,12 @@
  * Register value -> layout tree, the inline stack-line surface, and the
  * PSHOW full-screen surface.
  *
- * Builder-first invariant (DESIGN.md §2): the upstream display builder runs
- * first and its OUTPUT is parsed into the tree. The pretty form can never
- * disagree with what upstream would have shown, and side effects
- * (displayValueX) happen identically on both paths. Every parser declines
- * (returns false, painting nothing) on anything outside its verified
- * alphabet — upstream then renders unchanged.
+ * Builder-first invariant (DESIGN.md §2): the upstream display builder
+ * runs first and its output is parsed into the tree. The pretty form can
+ * never disagree with what upstream shows, and side effects
+ * (displayValueX) happen identically on both paths. Every parser
+ * declines (returns false, paints nothing) on anything outside its
+ * verified alphabet. Upstream then renders unchanged.
  */
 
 #include "c47.h"
@@ -21,16 +21,9 @@ static char ppScratch[200];
 static char ppSpanA[120];
 static char ppSpanB[120];
 
-// BOTH toggles are REAL system flags (PP11: FLAG_PRETTYP bit 50;
-// PP15: FLAG_PTLINE bit 51 — count reserved via the identical-edit
-// claim with undo-history), so they persist across power cycles with
-// the ordinary flag machinery and answer to SF/CF/FS? and the flag
-// browser like any other setting.
-//
-// The two defaults are reached by OPPOSITE routes, and that asymmetry
-// is deliberate: a RESET wipes every flag, which IS the T line's
-// default-OFF, so it needs no restore hook — whereas the master
-// toggle's default-ON has to be re-set by prettyReset() afterwards.
+// Both toggles are system flags (FLAG_PRETTYP bit 50, FLAG_PTLINE bit
+// 51, counts reserved by the claims registry). They persist across
+// power cycles and answer to SF/CF/FS? and the flag browser.
 
 void fnPrettyToggle(uint16_t unusedButMandatoryParameter) {
   (void)unusedButMandatoryParameter;
@@ -130,7 +123,7 @@ static bool_t ppMapDigits(const char *s, int16_t from, int16_t to, bool_t sup,
 }
 
 
-/* ==== fraction form (PP1): head + sup-num '/' sub-den =================== */
+/* ==== fraction form: head + sup-num '/' sub-den ========================= */
 
 bool_t ppParseFraction(const char *src, uint8_t ctxFont, uint8_t childFont, uint8_t *rootOut) {
   int16_t len = (int16_t)strlen(src);
@@ -224,7 +217,7 @@ bool_t ppParseFraction(const char *src, uint8_t ctxFont, uint8_t childFont, uint
 }
 
 
-/* ==== exponent form (PP2): mantissa ·₁₀ⁿ -> mantissa·10 with raised n === */
+/* ==== exponent form: mantissa ·₁₀ⁿ -> mantissa·10 with raised n ========= */
 
 bool_t ppParseExponent(const char *src, uint8_t ctxFont, uint8_t childFont, uint8_t *rootOut) {
   int16_t len = (int16_t)strlen(src);
@@ -249,7 +242,7 @@ bool_t ppParseExponent(const char *src, uint8_t ctxFont, uint8_t childFont, uint
       }
       if(PP_IS_SUP_DIGIT(code) || PP_IS_SUB_DIGIT(code) || code == PP_SUP_MINUS_CODE
           || code == PP_RAD_CODE || PP_IS_CONST_NAME(code)) {
-        return false;   // not a plain mantissa — this is some other form
+        return false;   // not a plain mantissa: some other form
       }
     }
     else {
@@ -262,14 +255,10 @@ bool_t ppParseExponent(const char *src, uint8_t ctxFont, uint8_t childFont, uint
       else if(code == PP_SUP_MINUS_CODE && !expDigitSeen) {
         // leading exponent sign, fine
       }
-      /* supNumberToDisplayString's last act is
-       * strcat(STD_SPACE_HAIR) — every exponent string the builder produces
-       * ends with one, and nothing in src/c47 ever strips it. Refusing it
-       * here declined every real with a displayed ten-exponent, so PP2's
-       * raised form had never once rendered on a register value. DESIGN.md's
-       * decline condition is "no marker", not "the marker's own terminator".
-       * Tolerate a trailing space RUN and remember where it starts, so the
-       * digit extraction below stops before it. */
+      /* Every exponent string the builder produces ends with a hair
+       * space (supNumberToDisplayString). Tolerate a trailing space run
+       * and remember where it starts: the digit extraction below stops
+       * before it. */
       else if(PP_IS_SPACE(code) && expDigitSeen) {
         if(expEnd < 0) {
           expEnd = pos;
@@ -295,8 +284,8 @@ bool_t ppParseExponent(const char *src, uint8_t ctxFont, uint8_t childFont, uint
   /* Read the exponent BEFORE writing ppSpanA: ppParseComplex passes its
    * own ppSpanA in as src, and the base rebuild below lands '1','0','\0'
    * exactly on expOff. */
-  // exponent digits, sup -> plain ('⁻' -> '-'); stops before the builder's
-  // trailing space run, which would otherwise map to ':' via ('0' + 0xa)
+  // exponent digits, sup -> plain ('⁻' -> '-'). The copy stops before
+  // the trailing space run.
   char expd[24];
   uint16_t o = 0;
   pos = expOff;
@@ -326,12 +315,12 @@ bool_t ppParseExponent(const char *src, uint8_t ctxFont, uint8_t childFont, uint
 }
 
 
-/* ==== IRFRAC symbolic form (PP2) ========================================
+/* ==== IRFRAC symbolic form ==============================================
  * Template over checkForAndChange's common output:
  *   [spaces] [sign] [multiple: digits·× | digits | sup-digits] name
  *   [/ denominator: sub-digits|digits] [spaces]
- * with name = √(sub-digits|π) or π|e|φ. Anything else — mixed-number
- * constant forms, the (π²)-family, second constants — declines to
+ * with name = √(sub-digits|π) or π|e|φ. Anything else (mixed-number
+ * constant forms, the (π²)-family, second constants) declines to
  * upstream's linear rendering. */
 
 bool_t ppParseIrfrac(const char *src, uint8_t ctxFont, uint8_t childFont, uint8_t *rootOut) {
@@ -471,8 +460,8 @@ bool_t ppParseIrfrac(const char *src, uint8_t ctxFont, uint8_t childFont, uint8_
         else {
           return false;
         }
-        // once at least one den glyph is in, further glyphs keep appending;
-        // a space or end closes the form (handled above/loop exit)
+        // once at least one den glyph is in, further glyphs keep
+        // appending. A space or the end closes the form.
         if(denStart >= 0) {
           st = S_AFTER_SLASH;
         }
@@ -490,7 +479,7 @@ bool_t ppParseIrfrac(const char *src, uint8_t ctxFont, uint8_t childFont, uint8_
   if(slashSeen && denStart < 0) {
     return false;
   }
-  // Pretty-worthiness: a bare constant name renders identically upstream.
+  // a bare constant name renders the same upstream: decline
   if(!slashSeen && nameCode != PP_RAD_CODE && !multIsSup) {
     return false;
   }
@@ -595,11 +584,11 @@ bool_t ppParseRealAny(const char *src, uint8_t ctxFont, uint8_t childFont, uint8
 }
 
 
-/* ==== complex (PP2, rectangular only) ===================================
+/* ==== complex (rectangular only) ========================================
  * Assembly (complex34ToDisplayString2): re ± [i·im | im␣␣i]. The first
- * top-level plain sign after position 0 separates the parts; polar forms
- * (∠) decline. Each part re-parses through ppParseRealAny; the whole is
- * pretty only if at least one part is. */
+ * top-level plain sign after position 0 separates the parts. Polar forms
+ * (∠) decline. Each part re-parses through ppParseRealAny, and the whole
+ * is pretty only if at least one part is. */
 
 bool_t ppParseComplex(const char *src, uint8_t ctxFont, uint8_t childFont, uint8_t *rootOut) {
   int16_t len = (int16_t)strlen(src);
@@ -736,7 +725,7 @@ bool_t ppParseComplex(const char *src, uint8_t ctxFont, uint8_t childFont, uint8
   }
 
   if(!rePretty && !imPretty) {
-    return false;   // nothing gained; upstream renders identically
+    return false;   // nothing gained: upstream renders identically
   }
   *rootOut = root;
   return true;
@@ -746,7 +735,7 @@ bool_t ppParseComplex(const char *src, uint8_t ctxFont, uint8_t childFont, uint8
 /* ==== the surfaces ====================================================== */
 
 // Builds the pretty tree for a register at one font rung. Runs the same
-// upstream builder the matching _refreshRegisterLine arm would run, with
+// upstream builder as the matching _refreshRegisterLine arm, with
 // identical arguments (builder-first invariant).
 static bool_t ppBuildRegister(calcRegister_t regist, uint8_t ctxFont, uint8_t childFont, uint8_t *rootOut) {
   uint32_t dt = getRegisterDataType(regist);
@@ -800,21 +789,21 @@ bool_t prettyTryRegisterLine(calcRegister_t regist, int16_t baseY, int16_t *line
       || calcMode != CM_NORMAL
       || temporaryInformation != TI_NO_INFO
       || lastErrorCode != 0
-      || checkHP                                      // HP layout doubles glyph rows; our metrics assume it off
+      || checkHP                                      // HP layout doubles glyph rows, and the metrics assume it off
       || getSystemFlag(FLAG_SOLVING)
       || getSystemFlag(FLAG_INTING)
       || currentInputVariable != INVALID_VARIABLE) {
     return false;
   }
 
-  // Non-X lines may not paint below baseY+31: the next line's clear band
-  // starts at its own baseY-4 = this baseY+32 and would erase the rows.
+  // Non-X lines must not paint below baseY+31: the next line's clear
+  // band starts at its own baseY-4 = this baseY+32 and erases the rows.
   int16_t bandTop    = baseY - 4;
   int16_t bandBottom = baseY + ((regist == REGISTER_X) ? 38 : 31);
 
-  // T-line live formula (PP8, opt-in): while a formula is open, the T
-  // line shows it instead of T's value; no formula or no fit falls
-  // through to the ordinary value rendering below.
+  // T-line live formula (opt-in): while a formula is open, the T line
+  // shows the formula. No formula or no fit falls through to the
+  // ordinary value rendering below.
   if(regist == REGISTER_T && getSystemFlag(FLAG_PTLINE)) {
     static const uint8_t tRungs[2][2] = {
       { PP_FONT_STANDARD, PP_FONT_STANDARD },
@@ -850,21 +839,15 @@ bool_t prettyTryRegisterLine(calcRegister_t regist, int16_t baseY, int16_t *line
   return false;
 }
 
-/* PSHOW (ITM_PSHOW, item row 459): full-screen pretty view of X using the
- * fnPixel manual-paint protocol — pixels survive refreshes, the next
- * keypress releases them. Anything the engine cannot pretty falls back to
- * the ordinary SHOW so the user always gets a result. */
+/* PSHOW (ITM_PSHOW, item row 459): full-screen pretty view of X on the
+ * fnPixel manual-paint protocol: pixels survive refreshes, and the next
+ * keypress releases them. Anything the engine cannot pretty falls back
+ * to the ordinary SHOW, so the user always gets a result. */
 void fnPrettyShow(uint16_t unusedButMandatoryParameter) {
   (void)unusedButMandatoryParameter;
-  // The inline surface declines under checkHP because HP
-  // layout DOUBLES glyph rows and our metrics assume it off; this
-  // surface used numericFont through the same engine and had no such
-  // guard. stringWidth compensates horizontally, so ppMeasure succeeded
-  // and the fnC47Show fallback never fired — the owner got a garbled
-  // screen at roughly twice the budgeted height, ink outside the band.
-  // Folding checkHP into the error guard made PSHOW run the
-  // ordinary SHOW while an error was still pending — the original guard
-  // returned silently. An error takes precedence over everything.
+  // Order matters: an error takes precedence and returns silently.
+  // Then checkHP falls back to the ordinary SHOW, because HP layout
+  // doubles glyph rows and the engine's metrics assume it off.
   if(lastErrorCode != ERROR_NONE) {
     return;
   }
@@ -897,9 +880,9 @@ void fnPrettyShow(uint16_t unusedButMandatoryParameter) {
 
     screenUpdatingMode |= SCRUPD_MANUAL_STACK | SCRUPD_MANUAL_MENU | SCRUPD_MANUAL_SHIFT_STATUS;
     screenHoldsDrawnPixels = true;
-    // A self-painted screen must declare itself one, as upstream's matrix
-    // SHOW does, or EXIT falls through to the menu arm and leaves the
-    // pixels up: its arm needs TI_SHOWNOTHING or the dismissal latch.
+    // A self-painted screen must declare itself one, as upstream's
+    // matrix SHOW does. Without TI_SHOWNOTHING, EXIT falls through to
+    // the menu arm and leaves the pixels up.
     temporaryInformation = TI_SHOWNOTHING;
     return;
   }

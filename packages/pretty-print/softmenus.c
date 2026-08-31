@@ -724,10 +724,8 @@ TO_QSPI const int16_t menu_alphaMisc[]    ={ ITM_CR,                        ITM_
 
 
 /* pretty-print package: the natural-display softmenu (claims registry
- * §7). Unshifted: the three view commands, the equation view, then the
- * two persisted toggles. VISUAL joins on the f-shifted row (slots 6-11)
- * rather than displacing an announced key; the padding keeps the array a
- * multiple of six, as every upstream menu is. */
+ * §7). VISUAL sits on the f-shifted row (slots 6-11). The padding
+ * keeps the array a multiple of six, as every upstream menu is. */
 TO_QSPI const int16_t menu_PP[]          = { ITM_PSHOW,                     ITM_PHIST,                  ITM_PCLR,                 ITM_EQSHW,             ITM_PPON,                    ITM_PTLIN,
                                              ITM_VISUAL,                    ITM_NULL,                   ITM_NULL,                 ITM_NULL,              ITM_NULL,                    ITM_NULL                      };
 
@@ -1230,7 +1228,7 @@ TO_QSPI const softmenu_t softmenu[] = {
 /* 184 */  {.menuItem = -MNU_CONV_P_LOAD,   .numItems = sizeof(menu_CONV_PLoad    )/sizeof(int16_t), .softkeyItem = menu_CONV_PLoad     },       // NOTE !! do not add menus here, add them at the end. The menu numbers are fixed for the Wiki references. 2024-02-21 jm
 /* 185 */  {.menuItem = -MNU_TAMLOCALLABEL, .numItems = sizeof(menu_TamLocalLabel )/sizeof(int16_t), .softkeyItem = menu_TamLocalLabel  },       // NOTE !! do not add menus here, add them at the end. The menu numbers are fixed for the Wiki references. 2024-02-21 jm
 
-/* 185b*/  {.menuItem = -MNU_PP,            .numItems = sizeof(menu_PP            )/sizeof(int16_t), .softkeyItem = menu_PP             },       // pretty-print package: added at the TAIL per this table's own instruction; forth-core inserts at /* 022 */, ~160 lines clear
+/* 185b*/  {.menuItem = -MNU_PP,            .numItems = sizeof(menu_PP            )/sizeof(int16_t), .softkeyItem = menu_PP             },       // pretty-print package: added at the tail per this table's own instruction (forth-core inserts near the top)
 /* 186 */  {.menuItem =  0,                 .numItems = 0,                                           .softkeyItem = NULL                }
 
 

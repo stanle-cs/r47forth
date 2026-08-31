@@ -486,7 +486,7 @@
 #define ITM_PSHOW                    459  // pretty-print package: full-screen pretty SHOW
 #define ITM_PPON                     460  // pretty-print package: natural-display toggle
 #define ITM_PCLR                     461  // pretty-print package: clear the formula history
-#define ITM_PHIST                    462  // pretty-print package: calculation-history pager
+#define ITM_PHIST                    462  // pretty-print package: calculation-history browser
 
 
 // System flags

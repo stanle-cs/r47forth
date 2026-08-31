@@ -4,9 +4,9 @@
 /**
  * \file browsers/prettyBrowser.h
  * The formula browser (CM_PRETTY_BROWSER, calcMode 20 per the claims
- * registry). Keys: UP/DOWN select, .d pans a too-wide selected row
- * (wraps), ENTER recalls the selected formula's result into X and
- * leaves, EXIT/BACKSPACE leave.
+ * registry). Keys: UP/DOWN select, .d pans a too-wide selected row,
+ * ENTER recalls the selected formula's result into X and leaves,
+ * EXIT/BACKSPACE leave.
  */
 
 #if !defined(PRETTYBROWSER_H)

@@ -1688,12 +1688,9 @@ endReturnTrue:
         }
       }
     }
-    // The browser must resolve its own keys, or a solo build falls
-    // through to the bug screen on every key inside PHIST. A separate
-    // arm rather than an edit to the condition above: forth-core
-    // rewrites that exact line, and two packages editing one line
-    // cannot compose. Unreachable in the combined build, correct in
-    // both.
+    // pretty-print package: the browser resolves its own keys. The
+    // arm is separate because forth-core rewrites the condition above,
+    // and two packages cannot edit one line.
     else if(calcMode == CM_PRETTY_BROWSER) {
       result = shiftF ? key->fShifted :
                shiftG ? key->gShifted :
@@ -2788,16 +2785,11 @@ RELEASE_END:
             }
           }
 
-          // Containment: without this, a key that is not the browser's
-          // own runs its item underneath the browser. A guard rather
-          // than a `case CM_PRETTY_BROWSER:` because undo-history adds
-          // `case 20:` to the same switch, and two packages contributing
-          // one label is a duplicate-case error in the combined build.
-          //
-          // The .d exemption is load-bearing: UP and DOWN are matched
-          // earlier in this chain, and ENTER, EXIT and BACKSPACE have
-          // their own cases above, but .d has neither — a bare guard
-          // swallows the pan key and makes prettyBrowserPan unreachable.
+          // pretty-print package: a key that is not the browser's own
+          // must not run its item underneath the browser. The arm is
+          // a guard because undo-history adds `case 20:` to the same
+          // switch. The .d exemption keeps the pan key reachable: .d
+          // has no case of its own earlier in this chain.
           else if(calcMode == CM_PRETTY_BROWSER && item != ITM_dotD) {
             keyActionProcessed = true;
           }
@@ -3003,10 +2995,8 @@ RELEASE_END:
                 else if(item == ITM_RCL) {
                   rbr1stDigit = true;
                   calcMode = previousCalcMode;
-                  /* Both arms below call fnRecall directly, so neither
-                   * capture hook runs; with FLAG_ASLIFT set fnRecall rolls
-                   * the whole register stack and the shadow would go on
-                   * describing registers that moved. */
+                  /* Both arms below call fnRecall directly, so no
+                   * capture hook runs: wipe the shadow. */
                   ppcShadowInvalidate();
                   if(rbrMode == RBR_GLOBAL || rbrMode == RBR_LOCAL) {
                     fnRecall(currentRegisterBrowserScreen);

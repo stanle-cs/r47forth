@@ -4,13 +4,10 @@
 /**
  * \file prettyEquation.c
  * EQN strip 2D rendering: a strict recursive-descent parser over
- * showEquation's DISPLAY string (superscript exponents are already
- * glyphs there) that stacks '/' terms as tiny fractions and puts
- * vinculums over √, inside the one 23 px softmenu-strip row the
- * equation owns. Anything the grammar does not fully recognize — an
- * ellipsis-truncated string, an unknown glyph, a dangling operator —
- * declines, and upstream's linear rendering runs unchanged. Never
- * active while the equation is being edited (the cursor path).
+ * showEquation's display string. It stacks '/' terms as fractions and
+ * puts vinculums over √, inside the 23 px softmenu-strip row. Anything
+ * the grammar does not fully recognize declines, and upstream's linear
+ * rendering runs unchanged. Never active while the equation is edited.
  *
  * Grammar over glyph classes:
  *   equation := expr ('=' expr)?
@@ -18,8 +15,8 @@
  *   term     := factor (('×'|'·'|'/') factor)*    '/' -> stacked FRAC
  *   factor   := primary [sup-digit run]
  *   primary  := number | name | '(' expr ')' | '√' primary
- * Parenthesized factors unwrap under a fraction bar or a vinculum —
- * the bar scopes, textbook style.
+ * Parenthesized factors unwrap under a fraction bar or a vinculum: the
+ * bar scopes, textbook style.
  */
 
 #include "c47.h"
@@ -28,13 +25,12 @@
 typedef struct {
   const char *s;
   int16_t pos, len;
-  bool_t fracSeen;   // pretty-worthiness: no FRAC/RAD -> decline
+  bool_t fracSeen;   // set when the parse gains a 2D form. No gain -> decline
   bool_t failed;
 } ppqCtx_t;
 
-/* 0xa16a is STD_SUP_PLUS, twin of the 0xa16b minus. _showExponent emits
- * both, so admitting only the minus would let one glyph decide whether
- * the whole equation keeps its 2D strip. */
+// sup digits plus STD_SUP_PLUS (0xa16a) and STD_SUP_MINUS (0xa16b),
+// which _showExponent emits
 #define PPQ_IS_SUP(code)  (((code) >= 0xa160 && (code) <= 0xa169) \
                            || (code) == 0xa16a || (code) == 0xa16b)
 #define PPQ_IS_SUB(code)  ((code) >= 0xa080 && (code) <= 0xa089)
@@ -73,23 +69,16 @@ static void ppqSkipSpace(ppqCtx_t *c) {
 
 static uint8_t ppqExpr(ppqCtx_t *c, uint8_t font, uint8_t tinyF);
 
-// number: digits/'.'/group separators, optionally ·₁₀ + sup exponent —
-// copied verbatim (the glyphs already render right in a run)
+// number: digits/'.'/group separators, optionally ·₁₀ + sup exponent,
+// copied verbatim
 static uint8_t ppqNumber(ppqCtx_t *c, uint8_t font) {
   int16_t start = c->pos, next;
   bool_t any = false;
   while(c->pos < c->len) {
     uint16_t code = ppqPeek(c, &next);
-    /* The comma is a radix mark here, not a separator:
-     * upstream's own tokenizer counts ',' toward numericCount exactly as it
-     * counts '.' and the digits (solver/equation.c), and _parseWord then
-     * rewrites every ',' in a NUMERIC token to '.' before stringToReal34 —
-     * so "1,5" IS 1.5. showEquation copies the comma through verbatim, and
-     * for a comma-radix owner the radix key emits ITM_COMMA, so refusing it
-     * here declined the 2D strip for every equation containing a decimal.
-     * There is no separator to confuse it with: this grammar's bigops use
-     * ';' and ppqFunctionCall takes exactly one argument.
-     * Class: acceptor alphabet narrower than the producer's emit-set. */
+    /* The comma is a radix mark here: upstream rewrites every ',' in
+     * a numeric token to '.' before stringToReal34. This grammar's
+     * separators are ';' and ')'. */
     if((code >= '0' && code <= '9') || code == '.' || code == ',') {
       any = true;
       c->pos = next;
@@ -119,9 +108,7 @@ static uint8_t ppqNumber(ppqCtx_t *c, uint8_t font) {
 }
 
 // name: ASCII letters plus subscript digits (X₁ etc.). The canonical
-// variable X typesets as the classic lowercase x — the closest form the
-// fonts have to the italic convention; other names keep their letters
-// and the linear/edit views keep the true text.
+// variable X typesets as lowercase x. Other names keep their letters.
 static uint8_t ppqName(ppqCtx_t *c, uint8_t font) {
   int16_t start = c->pos, next;
   bool_t any = false;
@@ -145,13 +132,9 @@ static uint8_t ppqName(ppqCtx_t *c, uint8_t font) {
   return ppNewRun(c->s + start, (uint16_t)(c->pos - start), font);
 }
 
-/* a big operator used as an OPERAND needs brackets, and
- * this parser is the THIRD producer of that shape — the walker
- * (PP18-4) and the capture engine (R2-2) were fixed and this one was
- * not, because there is no precedence value anywhere in ppqParse to
- * correct. SUM(X;X;1;3)^2 drew the picture of 14 for an equation EQCALC
- * returns 36. The body extends to the right of the stroke, so anything
- * beside it binds into the body; the node KIND is enough to know. */
+/* A big operator used as an operand needs brackets: its body extends
+ * right of the stroke, so a neighbor binds into it. This parser has no
+ * precedence values, so the node kind decides. */
 static uint8_t ppqScopeOperand(ppqCtx_t *c, uint8_t n, uint8_t font) {
   const ppNode_t *nd = ppNodeAt(n);
   if(n == PP_NONE || nd == NULL || nd->kind != PP_BIGOP) {
@@ -178,9 +161,8 @@ static uint8_t ppqRun(const char *s, uint8_t fontId) {
   return ppNewRun(s, (uint16_t)strlen(s), fontId);
 }
 
-// An additive body under a big operator misreads without parens
-// (PROD 1+x could be (PROD 1)+x): wrap when the top level carries a
-// +/- joiner. Fractions, powers and radicals scope visually already.
+// An additive body under a big operator needs parens (PROD 1+x reads
+// as (PROD 1)+x): wrap when the top level carries a +/- joiner.
 static uint8_t ppqScopeBody(ppqCtx_t *c, uint8_t body, uint8_t font) {
   const ppNode_t *b = ppNodeAt(body);
   if(b == NULL || b->kind != PP_HBOX) {
@@ -204,25 +186,17 @@ static uint8_t ppqScopeBody(ppqCtx_t *c, uint8_t body, uint8_t font) {
   return body;
 }
 
-/* PP18: the NODE ASSEMBLY half of a construct, split out of
- * ppqBigopConstruct so the program walker can build the same shapes
- * without going through the text grammar. Takes already-built children
- * and touches no parser state; the parsing stayed behind.
+/* The node-assembly half of a construct, shared with the program
+ * walker. Takes already-built children and touches no parser state.
  *
- * Every allocation is bound and checked BEFORE any append: PP_HBOX is
- * variadic, so ppMeasure cannot arity-check it and ppAppendChild
- * silently no-ops on PP_NONE — an unchecked append renders a formula
- * with an operand missing and reports success (audit R4-3). PP_BIGOP,
- * PP_FRAC and PP_SUB fail loudly; the HBOXes here do not.
+ * Test every allocation before any append: ppAppendChild silently
+ * no-ops on PP_NONE, and ppMeasure cannot arity-check the variadic
+ * PP_HBOX.
  *
- * `body` arrives ALREADY SCOPED. The parser scopes by sniffing its runs
- * for +/- (ppqScopeBody), because a parse has no precedence to consult;
- * the walker has an AST and brackets by precedence instead. Neither
- * belongs in here.
+ * `body` arrives already scoped by the caller.
  *
  * varTiny / varCtx: SUM and PROD use only the tiny run, INTEG only the
- * context-font one, DERIV both. PP_NONE for the one a kind does not use.
- */
+ * context-font one, DERIV both. Pass PP_NONE for the unused one. */
 uint8_t ppqBuildBigop(uint8_t kind, uint16_t tag, uint8_t body,
                       uint8_t varTiny, uint8_t varCtx,
                       uint8_t fromN, uint8_t toN, uint8_t stepN,
@@ -230,7 +204,7 @@ uint8_t ppqBuildBigop(uint8_t kind, uint16_t tag, uint8_t body,
   if(body == PP_NONE || fromN == PP_NONE) {
     return PP_NONE;
   }
-  // limits and scripts always typeset TINY — the big-operator convention
+  // limits and scripts always typeset tiny
   if(kind == PPQ_BIG_SUM || kind == PPQ_BIG_PROD) {
     uint8_t big   = ppNewBox(PP_BIGOP, ctxFont);
     uint8_t under = ppNewBox(PP_HBOX, PP_FONT_TINY);
@@ -280,8 +254,8 @@ uint8_t ppqBuildBigop(uint8_t kind, uint16_t tag, uint8_t body,
     ppAppendChild(big, toN);
     return big;
   }
-  // DERIV: d/dvar (body) with var=at as a subscript suffix; an order-2
-  // argument raises the superscript-2 glyphs. 0xa162 is that glyph.
+  // DERIV: d/dvar (body) with var=at as a subscript suffix. 0xa162 is
+  // the superscript-2 glyph.
   {
     uint8_t hb     = ppNewBox(PP_HBOX, ctxFont);
     uint8_t frac   = ppNewBox(PP_FRAC, ctxFont);
@@ -323,17 +297,16 @@ uint8_t ppqBuildBigop(uint8_t kind, uint16_t tag, uint8_t body,
   }
 }
 
-// PP14: the equation-language big operators render as their 2D shapes.
-// A probe that does not match consumes nothing; a matched construct that
-// is malformed fails the whole parse (strict declines).
+// The equation-language big operators render as their 2D shapes. A
+// probe that does not match consumes nothing. A matched construct that
+// is malformed fails the whole parse.
 static bool_t ppqMatchName(ppqCtx_t *c, const char *name, int16_t *after) {
   int16_t l = (int16_t)strlen(name);
   if(c->pos + l >= c->len) {
     return false;
   }
-  // both spellings, per ppEqConstructIs — the renderer has to accept
-  // exactly what the evaluator accepts or a typed equation draws and
-  // refuses to compute, or the reverse
+  // both spellings, per ppEqConstructIs: the renderer must accept
+  // exactly what the evaluator accepts
   if(!ppEqConstructIs(c->s + c->pos, name, (uint8_t)l)) {
     return false;
   }
@@ -421,8 +394,8 @@ static uint8_t ppqBigopConstruct(ppqCtx_t *c, uint8_t font, uint8_t tinyF) {
 
   c->fracSeen = true;
 
-  // DERIV's order is a PARSE question (only a literal 1 or 2 renders),
-  // resolved here so the builder takes a plain flag
+  // only a literal order of 1 or 2 renders: the builder takes a plain
+  // flag
   bool_t second = false;
   if(kind == 2 && stepN != PP_NONE) {
     const ppNode_t *sn = ppNodeAt(stepN);
@@ -432,7 +405,7 @@ static uint8_t ppqBigopConstruct(ppqCtx_t *c, uint8_t font, uint8_t tinyF) {
       c->failed = true;
       return PP_NONE;
     }
-    stepN = PP_NONE;   // consumed into `second`; never appended
+    stepN = PP_NONE;   // consumed into `second`
   }
   // the parser cannot see precedence, so it scopes by sniffing the body's
   // own runs for a +/- joiner
@@ -455,9 +428,9 @@ static uint8_t ppqBigopConstruct(ppqCtx_t *c, uint8_t font, uint8_t tinyF) {
   }
 }
 
-/* PP18: the node half of a function application, split out so the walker
- * builds the same shape without the grammar. The name is NOT re-checked
- * here — both callers gate on ppEqFunctionItem first. */
+/* The node half of a function application, shared with the walker. The
+ * name is not re-checked here: both callers gate on ppEqFunctionItem
+ * first. */
 uint8_t ppqBuildCall(const char *name, uint16_t len, uint8_t arg, uint8_t font) {
   uint8_t hb  = ppNewBox(PP_HBOX, font);
   uint8_t run = ppNewRun(name, len, font);
@@ -471,15 +444,9 @@ uint8_t ppqBuildCall(const char *name, uint16_t len, uint8_t arg, uint8_t font) 
   return hb;
 }
 
-/* PP17: a function application — sin(x), ln(x). There is no 2D gain in
- * the application ITSELF (a drawn sin(x) is the same shape as a linear
- * one), which is why this does NOT set fracSeen. The gain is that one
- * unrecognised name no longer costs the WHOLE formula its 2D form: the
- * strict parser used to fail on the trailing '(' and drop sin(x)/2 to a
- * linear line, fraction and all.
- *
- * A probe: it consumes nothing unless the name resolves through
- * ppEqFunctionItem, which is the evaluator's own resolution. */
+/* A function application: sin(x), ln(x). Does not set fracSeen: a
+ * drawn sin(x) is the same shape as a linear one. A probe: it consumes
+ * nothing unless the name resolves through ppEqFunctionItem. */
 static uint8_t ppqFunctionCall(ppqCtx_t *c, uint8_t font, uint8_t tinyF) {
   int16_t save = c->pos, start = c->pos, next;
   while(c->pos < c->len) {
@@ -523,9 +490,8 @@ static uint8_t ppqPrimary(ppqCtx_t *c, uint8_t font, uint8_t tinyF) {
   ppqSkipSpace(c);
   uint16_t code = ppqPeek(c, &next);
 
-  // either spelling reaches the probe, which consumes nothing unless it
-  // matches; gating on uppercase alone was the second half of the
-  // lowercase defect — the evaluator ran sum(...) that this declined
+  // either spelling reaches the probe, which consumes nothing unless
+  // it matches
   if((code >= 'A' && code <= 'Z') || (code >= 'a' && code <= 'z')) {
     uint8_t big = ppqBigopConstruct(c, font, tinyF);
     if(c->failed) {
@@ -593,9 +559,8 @@ static uint8_t ppqFactor(ppqCtx_t *c, uint8_t font, uint8_t tinyF) {
   if(c->failed || n == PP_NONE) {
     return PP_NONE;
   }
-  // the STORED form spells exponents with '^' (the display string
-  // converts digits to sup glyphs, but EQSHW reads the stored text so
-  // long equations never truncate): build a real 2D superscript
+  // the stored form spells exponents with '^': build a real 2D
+  // superscript
   {
     int16_t nx;
     if(ppqPeek(c, &nx) == '^') {
@@ -663,9 +628,9 @@ static uint8_t ppqTerm(ppqCtx_t *c, uint8_t font, uint8_t tinyF) {
         c->failed = true;
         return PP_NONE;
       }
-      // Children re-font to tiny so the stack fits the 23 px strip row,
-      // and parens unwrap under the bar, which scopes. Equal caller fonts
-      // (EQSHW) skip the re-font: it would only flatten tiny limits.
+      // Children re-font to tiny so the stack fits the 23 px strip
+      // row, and parens unwrap under the bar. Equal caller fonts
+      // (EQSHW) skip the re-font.
       uint8_t num = ppqUnwrapParen(n);
       uint8_t dn = ppqUnwrapParen(den);
       if(tinyF != font) {
@@ -686,8 +651,7 @@ static uint8_t ppqTerm(ppqCtx_t *c, uint8_t font, uint8_t tinyF) {
       }
       uint8_t box = ppNewBox(PP_HBOX, font);
       // multiplication typesets as the raised dot regardless of how it
-      // was typed — the x glyph reads heavy beside fractions and big
-      // operators; the linear/edit views keep the true text
+      // was typed
       uint8_t opRun = ppNewRun(STD_DOT, 2, font);
       if(box == PP_NONE || opRun == PP_NONE) {
         c->failed = true;
@@ -772,8 +736,8 @@ bool_t ppqParse(const char *src, uint8_t ctxFont, uint8_t childFont, uint8_t *ro
   c.fracSeen = false;
   c.failed = false;
 
-  // a labeled equation ("NAME:expr") starts after the ':' — the same
-  // bounded scan parseEquation itself uses
+  // a labeled equation ("NAME:expr") starts after the ':', found with
+  // the same bounded scan parseEquation uses
   {
     int16_t p = 0;
     for(int i = 0; i < 7 && p < c.len; i++) {
@@ -823,7 +787,7 @@ bool_t ppqParse(const char *src, uint8_t ctxFont, uint8_t childFont, uint8_t *ro
 }
 
 /* The hook (solver/equation.c paint site): try the 2D form in the
- * equation's own strip row; false -> upstream's showString runs. */
+ * equation's own strip row. False -> upstream's showString runs. */
 bool_t prettyTryEquation(const char *src, int16_t xLeft) {
   if(!prettyEnabled()) {
     return false;
@@ -847,21 +811,16 @@ bool_t prettyTryEquation(const char *src, int16_t xLeft) {
 }
 
 
-/* ==== EQSHW — full-screen equation view (PP7) ===========================
- * Room the 23 px strip lacks: nested fractions render at full size in
- * the 21..167 band. In the interactive integrate solver the equation is
- * the integrand, framed by a stroke-drawn big ∫ (PP_INT) — the equation
- * LANGUAGE has no Σ/∏/∫ constructs (verified against the parser's
- * function aliases), so this solver mode is the one honest input a big
- * operator has; a Σ template would be dead code and was skipped. */
+/* ==== EQSHW: full-screen equation view ==================================
+ * Nested fractions render at full size in the 21..167 band. In the
+ * interactive integrate solver the equation is the integrand, framed by
+ * a stroke-drawn big ∫ (PP_INT). */
 
-/* PP13: the interactive solver's own numbers frame the equation. The
- * integral shows its REAL limits (RESERVED_VARIABLE_ULIM/LLIM) and the
- * d-variable when the session is interactive; the derivative modes get
- * the d/dx (d²/dx²) prefix. Solve framing (f(x)=0) is SKIPPED:
- * SOLVER_STATUS_EQUATION_SOLVER is the zero value, indistinguishable
- * from no session at all — a stale INTERACTIVE bit would frame a plain
- * view with an = 0 the user never asked for. */
+/* The interactive solver's numbers frame the equation: the integral
+ * shows its real limits (RESERVED_VARIABLE_ULIM/LLIM) and the
+ * d-variable, and the derivative modes get the d/dx (d²/dx²) prefix.
+ * Solve framing (f(x)=0) is skipped: SOLVER_STATUS_EQUATION_SOLVER is
+ * the zero value, indistinguishable from no session at all. */
 
 uint8_t ppqFrameIntegral(uint8_t eq) {
   if(eq == PP_NONE) {
@@ -893,7 +852,7 @@ uint8_t ppqFrameIntegral(uint8_t eq) {
       return big;
     }
   }
-  // no live limits to show: the bare stroke ∫, as PP7 shipped it
+  // no live limits to show: the bare stroke ∫
   uint8_t bare = ppNewBox(PP_INT, PP_FONT_STANDARD);
   if(bare != PP_NONE) {
     ppAppendChild(bare, eq);
@@ -928,11 +887,8 @@ uint8_t ppqFrameDerivative(uint8_t eq, bool_t second) {
   return hb;
 }
 
-/* Pack glyph by glyph until the next would not fit, then append the
- * ellipsis — upstream's own shape for this problem (solver/equation.c packs
- * to (strWidth + glyphWidth) <= SCREEN_WIDTH - 2 - X_OFF and writes
- * STD_ELLIPSIS). Separate from the paint so the fit can be asserted
- * directly rather than inferred from pixels. */
+/* Pack glyph by glyph until the next does not fit, then append the
+ * ellipsis (upstream's own shape for this problem). */
 void ppqFitWithEllipsis(const char *src, char *out, uint16_t cap) {
   const int16_t budget = (int16_t)(SCREEN_WIDTH - 4
                                    - stringWidth(STD_ELLIPSIS, &standardFont, false, true));
@@ -992,16 +948,16 @@ bool_t ppqShowRender(const char *src) {
     }
   }
   if(!pretty) {
-    // always show SOMETHING: the linear line, centered-ish
+    // always show something: the linear line, centered when it fits
+    // and at the left edge when it does not
     int16_t w = stringWidth(src, &standardFont, false, true);
     if(w < SCREEN_WIDTH - 4) {
       showString(src, &standardFont, (int16_t)((SCREEN_WIDTH - w) / 2),
                  94 - 8, vmNormal, false, true);
     }
     else {
-      /* Painting src unclipped would drop every glyph past the edge with
-       * nothing marking the cut. Omitting the row is not an option here —
-       * this fallback exists to avoid a blank band — so mark the cut. */
+      /* An unclipped paint drops every glyph past the edge with
+       * nothing marking the cut, so mark it. */
       char cut[256];
       ppqFitWithEllipsis(src, cut, sizeof(cut));
       showString(cut, &standardFont, 2, 94 - 8, vmNormal, false, true);
@@ -1010,8 +966,7 @@ bool_t ppqShowRender(const char *src) {
 
   screenUpdatingMode |= SCRUPD_MANUAL_STACK | SCRUPD_MANUAL_MENU | SCRUPD_MANUAL_SHIFT_STATUS;
   screenHoldsDrawnPixels = true;
-  // a self-painted screen declares itself one, so EXIT can dismiss it —
-  // see the note at the same assignment in fnPrettyShow
+  // a self-painted screen declares itself one, so EXIT can dismiss it
   temporaryInformation = TI_SHOWNOTHING;
   return pretty;
 }
@@ -1024,12 +979,9 @@ void fnPrettyEqShow(uint16_t unusedButMandatoryParameter) {
   if(numberOfFormulae == 0 || currentFormula >= numberOfFormulae) {
     return;   // nothing stored to show
   }
-  // The STORED text, not showEquation's display string: the display
-  // pipeline is built for the 400 px strip and TRUNCATES long
-  // equations with an ellipsis — which the strict parser then rightly
-  // declines, capping EQSHW at strip-width formulas (found by the
-  // ultimate-nesting demo). The stored alphabet differs only in '^'
-  // (a parser arm) and the label prefix (skipped in ppqParse).
+  // EQSHW reads the stored text. The display pipeline truncates long
+  // equations with an ellipsis, and the strict parser declines that.
+  // The stored alphabet differs only in '^' and the label prefix.
   if(allFormulae[currentFormula].pointerToFormulaData == C47_NULL) {
     return;
   }

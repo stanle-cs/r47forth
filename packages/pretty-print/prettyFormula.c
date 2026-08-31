@@ -7,14 +7,11 @@
  * infix layouts (DIV becomes a stacked fraction, powers raise, roots get
  * vinculums, precedence inserts parens), and the PHIST pager surface.
  *
- * PHIST deliberately reuses the PSHOW manual-paint protocol instead of a
- * browser calcMode: repeated PHIST presses page through the history, any
- * other key releases the screen. Zero keyboard.c/defines.h churn;
- * calcMode 20 stays reserved (DESIGN.md §7) for a full browser upgrade.
+ * PHIST opens the formula browser (calcMode 20). The manual-paint pager
+ * in this file stays as the non-browser fallback surface.
  *
- * Value leaves format ONLY here, in display context: staged into
- * TEMP_REGISTER_1 by the undo-history recipe and run through the
- * standard display builders.
+ * Value leaves format only here, in display context: staged into
+ * TEMP_REGISTER_1 and run through the standard display builders.
  */
 
 #include "c47.h"
@@ -53,13 +50,11 @@ static bool_t ppfFormatStaged(char *dest, size_t destSize) {
                                (uint16_t)getRegisterTag(TEMP_REGISTER_1), false);
       break;
     case dtShortInteger:
-      /* This builder does NOT write from the front: it lays digits out
-       * from displayString[ERROR_MESSAGE_LENGTH / 2] upward as scratch and
-       * only then compacts them, so its buffer must be at least
-       * ERROR_MESSAGE_LENGTH bytes. buf is 200, and the first write would
-       * land 56 bytes past its end. tmpString is what every upstream
-       * caller passes; nothing runs between the call and the copy below,
-       * so holding it across these two lines is safe. */
+      /* This builder does not write from the front: it lays digits out
+       * from displayString[ERROR_MESSAGE_LENGTH / 2] upward as scratch,
+       * so its buffer must be at least ERROR_MESSAGE_LENGTH bytes (buf
+       * is too small). tmpString is what every upstream caller passes,
+       * and nothing runs between the call and the copy below. */
       _Static_assert(TMP_STR_LENGTH >= ERROR_MESSAGE_LENGTH,
                      "shortIntegerToDisplayString writes from "
                      "ERROR_MESSAGE_LENGTH/2 upward, so its buffer must be "
@@ -82,10 +77,10 @@ static bool_t ppfFormatStaged(char *dest, size_t destSize) {
 
 
 /* ==== infix construction ================================================
- * Precedence: ADD/SUB 1, MULT 2; FRAC/SUP/RAD/atoms 3 (visually scoped).
- * ppfBuildOp* build the layout for one operator from already-built child
- * layouts + their precedences — shared by the tree walker and the token
- * decoder so both paths typeset identically. */
+ * Precedence: ADD/SUB 1, MULT 2, FRAC/SUP/RAD/atoms 3 (visually
+ * scoped). ppfBuildOp* build the layout for one operator from
+ * already-built child layouts and their precedences, shared by the tree
+ * walker and the token decoder so both paths typeset identically. */
 
 static uint8_t ppfParen(uint8_t inner, uint8_t fontId) {
   uint8_t p = ppNewBox(PP_PAREN, fontId);
@@ -107,14 +102,11 @@ uint8_t ppfRun(const char *s, uint8_t fontId) {
   return ppNewRun(s, (uint16_t)strlen(s), fontId);
 }
 
-/* Is this run text a VISUAL ATOM — something a raised exponent or a
- * neighbouring operator can sit against without brackets? Only digits,
- * the radix mark and the digit-group spaces are. Anything else — a
- * leading minus, the multiplication sign and subscript 10 of a value in
- * scientific form, an angular-unit suffix, a complex joiner, a typed
- * ASCII exponent — reads as a term, so the leaf reports PPF_PREC_ADD and
- * every existing bracket rule handles it. Naming the class this way is
- * what stops the rule chasing one alphabet at a time. */
+/* Is this run text a visual atom: something a raised exponent or a
+ * neighboring operator can sit against without brackets? Only digits,
+ * the radix mark and the digit-group spaces are. Anything else reads
+ * as a term, so the leaf reports PPF_PREC_ADD and the bracket rules
+ * handle it. */
 bool_t ppfTextIsAtom(const char *s, uint16_t len) {
   if(s == NULL) {
     return true;
@@ -142,9 +134,8 @@ bool_t ppfTextIsAtom(const char *s, uint16_t len) {
 }
 
 /* The precedence of a built run, for producers that do not know what
- * they formatted. Only a run that SPELLS A NUMBER is judged: a name is an
- * atom whatever its glyphs, and it is a name unless it opens with a digit,
- * a radix mark or a sign. */
+ * they formatted. Only a run that spells a number is judged: a name is
+ * an atom whatever its glyphs. */
 int ppfRunPrec(uint8_t n) {
   const ppNode_t *nd = (n != PP_NONE) ? ppNodeAt(n) : NULL;
   if(nd == NULL || nd->kind != PP_RUN) {
@@ -158,12 +149,9 @@ int ppfRunPrec(uint8_t n) {
   return ppfTextIsAtom(t, (uint16_t)strlen(t)) ? PPF_PREC_ATOM : PPF_PREC_ADD;
 }
 
-/* A power's base needs brackets when the base is itself a PP_SUP: that is
- * structural, and ppfWrapIf cannot see it because every builder reports
- * ATOM and ATOM < ATOM is false. The TEXTUAL half of the class — a base
- * whose glyphs already read as a term — is not decided here; the leaf
- * that formatted the text reports PPF_PREC_ADD and ppfWrapIf brackets it.
- * Every producer of a PP_SUP calls this. */
+/* Brackets a power's base. A base that is itself a PP_SUP needs parens,
+ * and ppfWrapIf cannot see that (both report ATOM). Every producer of
+ * a PP_SUP must call this. */
 uint8_t ppfPowBase(uint8_t a, int aPrec, uint8_t fontId) {
   const ppNode_t *nd = (a != PP_NONE) ? ppNodeAt(a) : NULL;
   return (nd != NULL && nd->kind == PP_SUP)
@@ -214,9 +202,8 @@ uint8_t ppfBuildOp2(uint16_t item, uint8_t a, int aPrec, uint8_t b, int bPrec,
           || a == PP_NONE || b == PP_NONE) {
         return PP_NONE;
       }
-      // ppfParen allocates and can fail, and PP_HBOX is variadic, so
-      // ppMeasure has no arity check to catch a missing child: unchecked,
-      // this renders "log2" with its argument absent and reports success.
+      // ppfParen can fail, and ppMeasure has no arity check for the
+      // variadic PP_HBOX, so test it here.
       uint8_t par = ppfParen(a, ctxFont);
       if(par == PP_NONE) {
         return PP_NONE;
@@ -254,8 +241,7 @@ uint8_t ppfBuildOp2(uint16_t item, uint8_t a, int aPrec, uint8_t b, int bPrec,
           || a == PP_NONE || b == PP_NONE) {
         return PP_NONE;
       }
-      // Same shape: unchecked, this renders the function NAME alone with
-      // "(a, b)" absent, and reports success.
+      // same shape: ppfParen can fail, so test it here
       uint8_t par = ppfParen(inner, ctxFont);
       if(par == PP_NONE) {
         return PP_NONE;
@@ -349,10 +335,10 @@ uint8_t ppfBuildOp1(uint16_t item, uint8_t a, int aPrec,
 }
 
 
-/* ==== big operators (PP12) ==============================================
+/* ==== big operators =====================================================
  * A captured Sigma_n/Pi_n/integral-YX dispatch. The label param decodes
- * through labelList (findNamedLabel returns index + FIRST_LABEL); the
- * lookup is display-time best-effort — a program edit between capture
+ * through labelList (findNamedLabel returns index + FIRST_LABEL). The
+ * lookup is display-time best-effort: a program edit between capture
  * and display falls back to the numeric form. */
 
 void ppfVariableName(uint16_t varId, char *out) {
@@ -364,8 +350,8 @@ void ppfVariableName(uint16_t varId, char *out) {
       xcopy(out, vn + 1, vn[0]);
       out[vn[0]] = 0;
       // the canonical variable X typesets as the classic lowercase x
-      // (the closest form the fonts have to the italic convention);
-      // every other name keeps its own letters
+      // (the closest form the fonts have to the italic convention).
+      // Every other name keeps its own letters.
       if(out[0] == 'X' && out[1] == 0) {
         out[0] = 'x';
       }
@@ -391,9 +377,9 @@ static void ppfLabelName(uint16_t param, char *out) {
 static uint8_t ppfBigop(uint16_t item, uint16_t label, const uint8_t *stepBytes,
                         uint8_t fromN, uint8_t toN,
                         uint8_t ctxFont, uint8_t childFont, int *outPrec) {
-  /* A big operator is not an atom: its body extends right of the stroke,
-   * so a neighbour binds into it. ADD brackets it under x, / and ^, and
-   * leaves it bare left of a +, where convention already scopes it. */
+  /* A big operator is not an atom: its body extends right of the
+   * stroke. ADD brackets it under x, / and ^, and leaves it bare
+   * beside a +. */
   *outPrec = PPF_PREC_ADD;
   bool_t isInt = (item == ITM_INTEGRAL_YX);
   uint8_t big = ppNewBox(PP_BIGOP, ctxFont);
@@ -404,13 +390,12 @@ static uint8_t ppfBigop(uint16_t item, uint16_t label, const uint8_t *stepBytes,
   ppSetFontDeep(fromN, childFont);
   ppSetFontDeep(toN, childFont);
 
-  // sized so neither overflow NOR truncation is possible: lbl 23 +
-  // '(' + dv 19 + ')d' + dv 19 + NUL = 66 worst case
+  // worst case 66 bytes: lbl 23 + '(' + dv 19 + ')d' + dv 19 + NUL
   char lbl[24], text[96];
   ppfLabelName(label, lbl);
   if(isInt) {
-    // the d-variable rides in the step payload; decode its name,
-    // display-time best-effort like the label
+    // the d-variable rides in the step payload. Its name decodes
+    // display-time best-effort, like the label.
     char dv[20];
     ppfVariableName((uint16_t)(stepBytes[0] | ((uint16_t)stepBytes[1] << 8)), dv);
     snprintf(text, sizeof(text), "%s(%s)d%s", lbl, dv, dv);
@@ -484,9 +469,8 @@ static uint8_t ppfFromCaptureNode(uint8_t cap, uint8_t ctxFont, uint8_t childFon
     }
     case PPN_VAL: {
       /* A payload wider than one node continues into a PPN_VAL2 on
-       * child[0], the same shape PPN_LIT uses above. Passing nd->payload
-       * straight through with pad[1] = 32 would read 16 bytes past the
-       * array — the next arena node's header. */
+       * child[0], the same shape PPN_LIT uses above. The two parts must
+       * be joined here: nd->payload alone is 16 bytes. */
       const uint8_t head  = (uint8_t)sizeof(nd->payload);
       const uint8_t bytes = nd->pad[1];
       const uint8_t *src  = nd->payload;
@@ -718,7 +702,7 @@ bool_t ppfBuildEntry(const uint8_t *entry, uint8_t ctxFont, uint8_t childFont,
 }
 
 
-/* ==== PHIST — the history pager ========================================= */
+/* ==== PHIST: the history pager ========================================== */
 
 // Inset 4 px from the frame lines at 20/168: plain clearance between a
 // row's ink and the frame. The rows are laid out against it.
@@ -733,10 +717,10 @@ void fnPrettyHistClear(uint16_t unusedButMandatoryParameter) {
   ppcHistoryClear();
 }
 
-// Build + measure one pager row (row 0 = the current formula when open).
-// Standard rung first, then the whole tree re-fonted tiny — fraction
-// children are built in the context font, so childFont alone cannot
-// shrink a nested stack (found by the continued-fraction stress test).
+// Build + measure one pager row (row 0 = the current formula when
+// open). Standard rung first, then the whole tree re-fonted tiny:
+// fraction children are built in the context font, so childFont alone
+// cannot shrink a nested stack.
 bool_t ppfBuildRow(uint8_t row, uint8_t haveCurrent, bool_t canPan, uint8_t *rootOut, int16_t *ascOut, int16_t *hOut) {
   for(int rung = 0; rung < 2; rung++) {
     uint8_t cf = (rung == 0) ? PP_FONT_STANDARD : PP_FONT_TINY;
@@ -761,18 +745,14 @@ bool_t ppfBuildRow(uint8_t row, uint8_t haveCurrent, bool_t canPan, uint8_t *roo
     }
     const ppNode_t *n = ppNodeAt(root);
     int16_t h = (int16_t)(n->ascent + n->descent);
-    // HEIGHT is a hard limit: a row taller than the band cannot be shown
-    // at all. WIDTH is not, because the browser pans sideways. So width
-    // only sends us down a rung; at the last rung the row is accepted
-    // however wide it is, and panning carries it.
+    // Height is a hard limit: a row taller than the band cannot be
+    // shown at all.
     if(h > PPF_BAND_BOTTOM - PPF_BAND_TOP + 1) {
       continue;   // too tall even here: try tiny, then give up
     }
-    // At the LAST rung, width depends on the caller. The browser pans
-    // sideways, so it takes the row however wide. The full-screen pager
-    // cannot pan, and an over-wide row there would paint CLIPPED —
-    // showing `12345678 + 98` for `12345678 + 98765432`, a lie by
-    // truncation. It omits the row instead.
+    // At the last rung, width depends on the caller. The browser pans
+    // sideways, so it takes the row at any width. The pager cannot
+    // pan, so it omits an over-wide row.
     if(n->width > SCREEN_WIDTH - 8 && (rung == 0 || !canPan)) {
       continue;
     }
@@ -790,16 +770,15 @@ void fnPrettyHist(uint16_t unusedButMandatoryParameter) {
     return;
   }
 
-  // PP10: PHIST opens the formula BROWSER (calcMode 20) — selection,
-  // panning, recall-to-X. The manual-paint pager below is retained as
-  // the non-browser fallback surface and for the packing reference.
+  // PHIST opens the formula browser (calcMode 20). The manual-paint
+  // pager below stays as the non-browser fallback surface.
   if(calcMode != CM_PRETTY_BROWSER) {
     prettyBrowser(NOPARAM);
     return;
   }
 
-  // repeated PHIST presses (screen still held) page forward; anything
-  // else released the screen, so a fresh press starts at page 0
+  // repeated PHIST presses (screen still held) page forward. Any other
+  // key released the screen, so a fresh press starts at page 0.
   if(screenHoldsDrawnPixels) {
     ppfPage++;
   }
@@ -813,8 +792,8 @@ void fnPrettyHist(uint16_t unusedButMandatoryParameter) {
   uint8_t root;
   int16_t asc, h;
 
-  // Pass 1 — variable-height packing to count pages (rows pack until the
-  // band fills; heights vary from one text line to a nested stack)
+  // Pass 1: variable-height packing to count pages. Rows pack until
+  // the band fills.
   uint8_t pages = 1;
   {
     uint8_t page = 0;
@@ -837,7 +816,7 @@ void fnPrettyHist(uint16_t unusedButMandatoryParameter) {
   drawSinglePixelFullWidthLine(20);
   drawSinglePixelFullWidthLine(168);
 
-  // Pass 2 — paint the selected page with the same packing walk
+  // Pass 2: paint the selected page with the same packing walk
   {
     uint8_t page = 0;
     int16_t y = PPF_BAND_TOP;

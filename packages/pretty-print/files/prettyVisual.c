@@ -4,40 +4,22 @@
 /**
  * \file prettyVisual.c
  * VISUAL (ITM_VISUAL, item row 984): shows a stored RPN program as the
- * mathematics it computes, WITHOUT running it. `XEQ 'DBLINT'` returns
- * 4/3; `VISUAL 'DBLINT'` draws the nested integrals it got that from.
+ * mathematics it computes, without running it.
  *
- * The package already had two front-ends to one renderer — the capture
- * engine (live dispatches) and the equation parser (EQN text). This is
- * the third: a symbolic RPN interpreter over stored program steps that
- * builds a small expression tree, which is then laid out through the
- * SAME node builders the capture engine uses (ppfBuildOp1/ppfBuildOp2)
- * and the same construct assembly the equation parser uses
- * (ppqBuildBigop). Nothing here decides where a bracket goes.
+ * A symbolic RPN interpreter over stored program steps builds a small
+ * expression tree. The tree is laid out through the same node builders
+ * the capture engine uses (ppfBuildOp1/ppfBuildOp2) and the same
+ * construct assembly the equation parser uses (ppqBuildBigop).
  *
- * PP17 shipped this as a transpiler to equation-language TEXT which was
- * then re-parsed. That worked, but it settled precedence twice — once
- * inserting brackets into a string, once reading them back out — and it
- * made the text grammar a dependency of drawing. PP18 removed the round
- * trip. The text form survives as a test back end, where it serializes
- * the same tree so the pins can assert something readable.
+ * A construct body walks with the symbolic stack seeded to the
+ * variable name on every level. This reproduces both channels upstream
+ * uses to feed a body program: the named variable and the filled
+ * stack.
  *
- * Faithfulness rests on one fact about how the engines feed a body
- * program. Upstream writes each integration node into BOTH the named
- * d-variable AND every stack level (integrate.c, DEI_xeq_user +
- * fnFillStack); a programmed sum delivers its counter through the
- * filled stack ALONE (sumprod.c). An equation body, by contrast, reads
- * its variable by NAME (solver/equation.c, the XEQ-mode RCL arm). So
- * recursing into a body with the symbolic stack seeded to the variable
- * NAME on every level reproduces both channels at once, and the
- * transpiled text computes what the RPN computed.
- *
- * Everything else is decline-biased, in the package's house style: an
- * opcode this file does not name, an indirect parameter, a local label,
- * flow control, a numbered-register read — none of them are guessed at.
- * The walk fails, an error is raised, and NOTHING is painted. The
- * decline catalog is D1..D18 (ppvDecline callers); DESIGN.md PP17
- * carries the reasoning for each.
+ * Everything else declines: an opcode this file does not name, an
+ * indirect parameter, a local label, flow control, a numbered-register
+ * read. The walk fails, an error is raised, and nothing is painted.
+ * DESIGN.md carries the reasoning for each decline code.
  */
 
 #include "c47.h"
@@ -53,14 +35,14 @@
 #define PPV_NAME_MAX       16   ///< == the evaluator's varName[16]
 #define PPV_NIL          0xFF
 
-// AST kinds. The walk produces one of these trees; the back ends consume it.
+// AST kinds. The walk builds the tree, and the back ends consume it.
 enum { PPA_FREE = 0, PPA_LIT, PPA_VAR, PPA_OP1, PPA_OP2, PPA_CONSTRUCT };
 
 #define PPV_F_OPAQUE 0x01   ///< a string literal: carryable, never printable
 #define PPV_F_SECOND 0x02   ///< CONSTRUCT: a second-order derivative
 #define PPV_F_BOUND  0x04   ///< VAR: a seeded construct variable, not a free one
 
-// decline reasons; the number reaches the user through moreInfoOnError
+// decline reasons. The number reaches the user through moreInfoOnError.
 enum { PPV_D_OPCODE = 1, PPV_D_INDIRECT, PPV_D_LOCALLABEL, PPV_D_UNRESOLVED,
        PPV_D_DIRTY, PPV_D_NOLATCH, PPV_D_REGISTER, PPV_D_DEPTH, PPV_D_BUDGET,
        PPV_D_UNDERFLOW, PPV_D_OPAQUE, PPV_D_COLLISION, PPV_D_MEMORY,
@@ -74,10 +56,8 @@ typedef struct {
   uint16_t textOff;     ///< LIT/VAR: into ctx->pool
   uint8_t  textLen;
   uint8_t  flags;       ///< PPV_F_*
-  uint16_t varOff;      ///< CONSTRUCT: the variable name, also in ctx->pool.
-                        ///< uint16_t, not uint8_t: the pool is 512 bytes,
-                        ///< so an offset past 255 would wrap into another
-                        ///< leaf's text and silently draw the wrong name
+  uint16_t varOff;      ///< CONSTRUCT: the variable name, also in
+                        ///< ctx->pool. uint16_t: the pool is 512 bytes.
   uint8_t  varLen;
 } ppvAst_t;
 
@@ -94,9 +74,8 @@ typedef struct {
   uint16_t poolUsed;
   uint8_t  astUsed;
   uint16_t latchedInt;                  ///< PGMINT target, labelList index; 0xFFFF = none
-  uint16_t latchedDrv;                  ///< PGMDRV target; a SEPARATE slot upstream,
-                                        ///< so that taking a derivative does not
-                                        ///< repoint what INT will run next
+  uint16_t latchedDrv;                  ///< PGMDRV target, a separate slot
+                                        ///< upstream
   uint16_t stepsWalked;
   uint16_t declineStep;
   uint8_t  callDepth;
@@ -107,9 +86,8 @@ typedef struct {
   char     binding[PPV_MAX_DEPTH][PPV_NAME_MAX];    ///< construct variables in scope
   bool_t   bindingSynth[PPV_MAX_DEPTH];             ///< true = an invented sum counter
   uint8_t  bindingCount;
-  /* ENTER shares a node, so the tree is a DAG and a naive layout visits
-   * a shared child 2^k times. ppNewBox returns PP_NONE per call without
-   * latching, so layoutFull is the latch; layoutVisits pins the bound. */
+  /* ENTER shares a node, so the tree is a DAG. layoutFull latches the
+   * first PP_NONE, and layoutVisits counts the layout recursion. */
   bool_t   layoutFull;
   uint32_t layoutVisits;
 } ppvCtx_t;
@@ -124,15 +102,9 @@ static void ppvDecline(ppvCtx_t *ctx, uint8_t reason) {
 
 
 /* ==== the AST =========================================================
- * The walk builds a small expression tree; ctx->pool holds only LEAF text
- * (a literal as the program spells it, a variable's name). Structure is
- * nodes, not brackets in a string — which is the point of PP18: whether
- * something needs parentheses is decided ONCE, by ppfBuildOp1/ppfBuildOp2
- * when the tree is turned into layout, and not a second time by a parser
- * reading brackets back out of text.
- *
- * Bump-allocated and thrown away per walk, like the layout pool; the
- * capture engine's free list would be machinery for nothing here. */
+ * The walk builds a small expression tree. ctx->pool holds only leaf
+ * text (a literal as the program spells it, a variable's name).
+ * Bump-allocated and thrown away per walk. */
 
 static uint8_t ppvAlloc(ppvCtx_t *ctx, uint8_t kind) {
   if(ctx->astUsed >= PPV_AST_NODES) {
@@ -154,7 +126,7 @@ static uint8_t ppvAlloc(ppvCtx_t *ctx, uint8_t kind) {
   return n;
 }
 
-// leaf text goes in the pool; the node keeps an offset and a length
+// leaf text goes in the pool. The node keeps an offset and a length.
 static bool_t ppvIntern(ppvCtx_t *ctx, const char *bytes, uint16_t len,
                         uint16_t *offOut) {
   if((uint32_t)ctx->poolUsed + len > PPV_POOL_BYTES) {
@@ -183,9 +155,7 @@ static uint8_t ppvLeaf(ppvCtx_t *ctx, uint8_t kind, const char *text, uint16_t l
 }
 
 /* How many stack levels the machine currently has: four under SSIZE4,
- * eight otherwise. The array is always eight wide; only the effective
- * depth follows the flag, so the mirror drops its bottom entry where the
- * hardware does. */
+ * eight otherwise. */
 static uint8_t ppvLiveStackSlots(void) {
   int16_t n = (int16_t)(getStackTop() - REGISTER_X + 1);
   if(n < 1) {
@@ -214,9 +184,8 @@ static bool_t ppvPush(ppvCtx_t *ctx, ppvStack_t *stk, uint8_t node) {
   return true;
 }
 
-// A lifting read (literal or recall) after ENTER overwrites X instead of
-// pushing — fnRecall consults FLAG_ASLIFT for exactly this, and ENTER
-// clears it (recall.c). The latch is one-shot.
+// A lifting read (literal or recall) after ENTER overwrites X instead
+// of pushing, as FLAG_ASLIFT does upstream. The latch is one-shot.
 static bool_t ppvPushLifting(ppvCtx_t *ctx, ppvStack_t *stk, uint8_t node) {
   if(node == PPV_NIL) {
     ppvDecline(ctx, PPV_D_ARENA);
@@ -233,9 +202,7 @@ static bool_t ppvPushLifting(ppvCtx_t *ctx, ppvStack_t *stk, uint8_t node) {
 
 static bool_t ppvPop(ppvCtx_t *ctx, ppvStack_t *stk, uint8_t *out) {
   if(stk->depth == 0) {
-    // the program reads state its caller never provided; a seeded body
-    // frame provides exactly the construct variable, so this is the
-    // honest boundary of what a static walk can claim
+    // the program reads state its caller never provided: decline
     ppvDecline(ctx, PPV_D_UNDERFLOW);
     return false;
   }
@@ -286,8 +253,8 @@ static bool_t ppvOp1(ppvCtx_t *ctx, ppvStack_t *stk, uint16_t item) {
 
 
 /* ==== step and parameter decoding ======================================
- * Mirrors decodeOp's own parameter grammar (programming/decode.c); the
- * step ADVANCE is upstream's findNextStep, never re-derived here. */
+ * Mirrors decodeOp's parameter grammar (programming/decode.c). The
+ * step advance is upstream's findNextStep. */
 
 static uint16_t ppvOpAt(const uint8_t *step, const uint8_t **paramOut) {
   uint16_t op = *step++;
@@ -298,9 +265,8 @@ static uint16_t ppvOpAt(const uint8_t *step, const uint8_t **paramOut) {
   return op;
 }
 
-// A name has to survive the renderer's ppqName, which takes ASCII letters
-// (and subscript digits after the first). A variable spelled any other
-// way would build text that silently declines to draw.
+// A name must survive the renderer's ppqName (letters, and subscript
+// digits after the first). This check is stricter: ASCII letters only.
 static bool_t ppvNameIsDrawable(const char *s) {
   if(s[0] == 0) {
     return false;
@@ -316,9 +282,8 @@ static bool_t ppvNameIsDrawable(const char *s) {
   return true;
 }
 
-// PARAM_LABEL byte -> labelList index. Global names only: a local label
-// number means nothing without a running program's context, which is the
-// one thing a static walk does not have.
+// PARAM_LABEL byte -> labelList index. Global names only: a local
+// label number means nothing without a running program's context.
 static bool_t ppvLabelIndex(ppvCtx_t *ctx, const uint8_t *pa, uint16_t *idxOut) {
   uint8_t p = pa[0];
   if(p == STRING_LABEL_VARIABLE) {
@@ -336,9 +301,9 @@ static bool_t ppvLabelIndex(ppvCtx_t *ctx, const uint8_t *pa, uint16_t *idxOut) 
   return false;
 }
 
-// PARAM_REGISTER byte -> a named variable's name. Numbered, lettered and
-// local registers decline: the equation language reads variables by name
-// and has no spelling for them at all.
+// PARAM_REGISTER byte -> a named variable's name. Numbered, lettered
+// and local registers decline: the equation language has no spelling
+// for them.
 static bool_t ppvVarName(ppvCtx_t *ctx, const uint8_t *pa, char *out) {
   uint8_t p = pa[0];
   if(p == INDIRECT_REGISTER || p == INDIRECT_VARIABLE) {
@@ -369,12 +334,10 @@ static bool_t ppvNameInList(const char list[][PPV_NAME_MAX], uint8_t n, const ch
 
 
 /* ==== literals =========================================================
- * The two plain-numeral forms carry their ASCII exactly as typed, which
- * is what an equation string wants. Every other literal — a string, an
- * exponent numeral, a binary payload — becomes an OPAQUE placeholder
- * rather than a decline: the appnote programs push such values only to
- * store or drop them (a plot title, an ACC setting), and the taint rule
- * below guarantees one can never reach the printed mathematics. */
+ * The two plain-numeral forms carry their ASCII as typed. Every other
+ * literal becomes an OPAQUE placeholder: the program can carry, store
+ * or drop it. An OPAQUE value can never reach the printed
+ * mathematics. */
 
 static bool_t ppvLiteral(ppvCtx_t *ctx, ppvStack_t *stk, const uint8_t *pa) {
   uint8_t type = pa[0];
@@ -390,8 +353,8 @@ static bool_t ppvLiteral(ppvCtx_t *ctx, ppvStack_t *stk, const uint8_t *pa) {
   bool_t exponent = false;
   for(uint16_t i = (t[0] == '-') ? 1 : 0; t[i] != 0; i++) {
     if(t[i] == 'e' || t[i] == 'E') {
-      exponent = true;   // legitimate, just not spellable: the numeral
-      break;             // grammar has no exponent arm, so it goes opaque
+      exponent = true;   // the numeral grammar has no exponent arm:
+      break;             // this literal goes opaque
     }
     if(!((t[i] >= '0' && t[i] <= '9') || t[i] == '.')) {
       ppvDecline(ctx, PPV_D_NUMERAL);
@@ -410,13 +373,10 @@ static bool_t ppvLiteral(ppvCtx_t *ctx, ppvStack_t *stk, const uint8_t *pa) {
 
 static void ppvWalk(ppvCtx_t *ctx, uint16_t labelIdx, ppvStack_t *stk);
 
-/* Seed a fresh frame with the construct's variable on EVERY level and
- * walk the body. That single seeding covers both channels upstream uses:
- * the integrator writes each node into the named variable AND fills the
- * stack with it, a programmed sum delivers its counter through the
- * filled stack alone. The body's one result is handed back as an AST
- * index; the scratch buffer and the construct-boundary pool rollback
- * this comment used to describe went with the text back end. */
+/* Seed a fresh frame with the construct's variable on every level and
+ * walk the body. This covers both channels upstream uses: the named
+ * variable and the filled stack. Returns the body's one result as an
+ * AST index. */
 static bool_t ppvBody(ppvCtx_t *ctx, uint16_t bodyIdx, const char *var,
                       bool_t synthetic, uint8_t *out) {
   if(ctx->bindingCount >= PPV_MAX_DEPTH) {
@@ -431,8 +391,7 @@ static bool_t ppvBody(ppvCtx_t *ctx, uint16_t bodyIdx, const char *var,
   sub.depth        = 0;
   sub.liftDisabled = false;
   sub.saturated    = false;
-  /* One shared VAR node on every level: the body reads the same variable
-   * from every level, so sharing is the accurate model, not a saving. */
+  // one shared VAR node on every level
   uint8_t seed = ppvLeaf(ctx, PPA_VAR, var, (uint16_t)strlen(var), PPV_F_BOUND);
   for(uint8_t i = 0; i < PPV_STACK_SLOTS; i++) {
     if(!ppvPush(ctx, &sub, seed)) {
@@ -454,9 +413,7 @@ static bool_t ppvBody(ppvCtx_t *ctx, uint16_t bodyIdx, const char *var,
   return true;
 }
 
-// Build the construct node once its parts are known. The variable name
-// is interned alongside the leaves; the layout back end turns it into
-// the runs each shape needs.
+// Build the construct node once its parts are known.
 static bool_t ppvConstruct(ppvCtx_t *ctx, ppvStack_t *stk, uint16_t item,
                            const char *var, uint8_t body, uint8_t from,
                            uint8_t to, uint8_t step, bool_t second) {
@@ -480,10 +437,9 @@ static bool_t ppvConstruct(ppvCtx_t *ctx, ppvStack_t *stk, uint16_t item,
   return ppvPush(ctx, stk, n);
 }
 
-// INTEG: X = upper limit, Y = lower (fnIntegrateYX); the integrand is
-// whatever the last PGMINT named. Only a latch set DURING this walk
-// counts — the runtime global's leftover value is not something a
-// drawing may quietly assume.
+// INTEG: X = upper limit, Y = lower (fnIntegrateYX). The integrand is
+// what the last PGMINT named. Only a latch set during this walk
+// counts.
 static bool_t ppvIntegral(ppvCtx_t *ctx, ppvStack_t *stk, const uint8_t *pa) {
   char v[PPV_NAME_MAX];
   if(!ppvVarName(ctx, pa, v)) {
@@ -514,19 +470,14 @@ static bool_t ppvIntegral(ppvCtx_t *ctx, ppvStack_t *stk, const uint8_t *pa) {
                       PPV_NIL, false);
 }
 
-/* Is this name already a free variable somewhere in the tree built so far?
- *
- * An invented counter must not collide with a name the program itself
- * uses, or the drawing shows the same letter for two different things
- * with nothing to tell them apart. Enclosing constructs are checked
- * separately, through ctx->binding. */
+/* Is this name already a free variable in the tree built so far? An
+ * invented counter must not collide with a name the program uses.
+ * Enclosing constructs are checked separately, through ctx->binding. */
 static bool_t ppvNameUsedInAst(const ppvCtx_t *ctx, const char *name) {
   uint16_t len = (uint16_t)strlen(name);
   for(uint8_t i = 0; i < ctx->astUsed; i++) {
     const ppvAst_t *a = &ctx->ast[i];
-    /* Only FREE variables collide. A seeded read carries PPV_F_BOUND, and
-     * a closed sibling's counter is out of scope by now; counting either
-     * would spend the four-name pool on scopes nobody can confuse. */
+    // only free variables collide: a seeded read carries PPV_F_BOUND
     if(a->kind == PPA_VAR && (a->flags & PPV_F_BOUND) == 0
         && a->textLen == len
         && memcmp(ctx->pool + a->textOff, name, len) == 0) {
@@ -536,14 +487,9 @@ static bool_t ppvNameUsedInAst(const ppvCtx_t *ctx, const char *name) {
   return false;
 }
 
-/* Does this name occur inside ONE subtree — free, or as another
- * construct's bound variable?
- *
- * A closed sibling's counter is reusable, but a construct that ends up
- * inside the next operator's LIMITS is not closed in any sense that
- * matters: it will be drawn within that operator's visual scope. The test
- * is "about to be drawn inside me", not "already built", and the limit
- * operands are exactly the subtrees that will be. */
+/* Does this name occur inside one subtree, free or as another
+ * construct's bound variable? The limit operands are drawn inside the
+ * new operator's visual scope, so they are tested too. */
 static bool_t ppvNameInSubtree(const ppvCtx_t *ctx, uint8_t n, const char *name) {
   if(n == PPV_NIL || n >= PPV_AST_NODES) {
     return false;
@@ -566,10 +512,8 @@ static bool_t ppvNameInSubtree(const ppvCtx_t *ctx, uint8_t n, const char *name)
   return false;
 }
 
-/* A construct whose variable has no name in the program needs one
- * invented. Used by SUM/PROD, whose counter arrives in a filled stack,
- * and by a derivative over a body that declares no MVAR — the same
- * situation. NULL if all four candidates are genuinely taken. */
+/* Invent a counter name for a construct whose variable has no name in
+ * the program. NULL if all four candidates are taken. */
 static const char *ppvInventName(const ppvCtx_t *ctx,
                                  uint8_t r1, uint8_t r2, uint8_t r3) {
   static const char *const cands[] = { "n", "m", "k", "j" };
@@ -586,23 +530,12 @@ static const char *ppvInventName(const ppvCtx_t *ctx,
   return NULL;
 }
 
-/* Which variable does the derivative actually vary?
- *
- * NOT the f' parameter. calcDeriv asks deriv_pgm_variable(label), which
- * walks the BODY program's own leading MVAR declarations and returns the
- * one matching the f' parameter, else the first declared, else
- * INVALID_VARIABLE. This mirrors that walk, including REM transparency.
- *
- * With no MVAR declared it returns "none" rather than an error, and the
- * caller invents a name. Declining instead would be wrong: fnFillStack
- * is unconditional in _differentiatorIteration and only the STO into the
- * named variable is guarded, so a body that takes its argument off the
- * stack differentiates correctly. Such a body is in the same position as
- * a SUM body — no name in the program — so the picture invents one.
- *
- * The REM arm is not covered by a test: a REM step's tail is sized
- * through literalTailBytes, which a hand-built fixture cannot reach
- * without reproducing that encoding. */
+/* Which variable does the derivative vary? Not the f' parameter:
+ * upstream's deriv_pgm_variable walks the body's leading MVAR
+ * declarations and returns the one matching the parameter, else the
+ * first declared, else none. This mirrors that walk, with REM
+ * transparency. With no MVAR declared it returns "" and the caller
+ * invents a name. */
 static bool_t ppvDerivVariable(ppvCtx_t *ctx, uint16_t bodyIdx,
                                const char *param, char *out) {
   if(bodyIdx >= numberOfLabels) {
@@ -627,9 +560,7 @@ static bool_t ppvDerivVariable(ppvCtx_t *ctx, uint16_t bodyIdx,
     char nm[PPV_NAME_MAX];
     xcopy(nm, step + 4, len);
     nm[len] = 0;
-    /* Drawability is a property of the name we END UP with, not of every
-     * declaration walked past — upstream's walk has no such notion and
-     * does not stop. It is judged once, below. */
+    // drawability is judged once, on the name we end up with
     if(strcmp(nm, param) == 0) {
       if(!ppvNameIsDrawable(nm)) {
         ppvDecline(ctx, PPV_D_NAME);
@@ -638,43 +569,26 @@ static bool_t ppvDerivVariable(ppvCtx_t *ctx, uint16_t bodyIdx,
       strcpy(out, nm);      // the match wins over the first, as upstream
       return true;
     }
-    /* Record the first declaration whatever it looks like. Skipping an
-     * undrawable one here would pick the second, while upstream still
-     * differentiates the first — the mirror would stop mirroring. */
+    // record the first declaration whatever it looks like, as upstream
+    // does
     if(first[0] == 0) {
       strcpy(first, nm);
     }
     step = findNextStep(step);
   }
   if(first[0] != 0 && !ppvNameIsDrawable(first)) {
-    ppvDecline(ctx, PPV_D_NAME);   // upstream will vary THIS one; we cannot draw it
+    ppvDecline(ctx, PPV_D_NAME);   // upstream varies this one, and we cannot draw it
     return false;
   }
   strcpy(out, first);   // "" when the body declares nothing: not an error
   return true;
 }
 
-/* DERIV: the point comes off the stack, the program from PGMDRV.
- *
- * _differentiatorIteration fills every stack level with the sample point
- * AND stores it into `variable` — but `variable` is NOT the f'
- * parameter. It comes from deriv_pgm_variable(label), which reads the
- * BODY's own MVAR declarations. That is where PP18 first got this wrong:
- * the claim was checked at _differentiatorIteration and assumed at its
- * caller, so the drawn subscript named the parameter while upstream
- * varied something else, and the picture meant a different number from
- * the one XEQ returns. ppvDerivVariable now answers the question
- * upstream answers, and the body is seeded with THAT name.
- *
- * The integral is genuinely different and genuinely simpler:
- * DEI_xeq_user writes into `regist`, and _fnIntegrate sets
- * regist = labelOrVariable — the integral's own parameter. So INTEG's
- * seeding by parameter name is exact, and DERIV's cannot be.
- *
- * PGMDRV is a slot of its own upstream, so a derivative does not
- * repoint what INT would run; the walker keeps the two latches apart
- * for the same reason.
- */
+/* DERIV: the point comes off the stack, the program from PGMDRV. The
+ * seeded name comes from ppvDerivVariable, the variable upstream
+ * varies. The f' parameter can name a different one. PGMDRV is a slot
+ * of its own upstream, so a derivative does not repoint what INT runs
+ * next. */
 static bool_t ppvDerivative(ppvCtx_t *ctx, ppvStack_t *stk, const uint8_t *pa,
                             bool_t second) {
   char v[PPV_NAME_MAX];
@@ -686,9 +600,8 @@ static bool_t ppvDerivative(ppvCtx_t *ctx, ppvStack_t *stk, const uint8_t *pa,
     return false;
   }
   uint16_t bodyIdx = ctx->latchedDrv;
-  // the point comes off the stack first: an invented name must not
-  // collide with anything drawn inside this operator, and the point is
-  // drawn inside it
+  // the point pops first: an invented name must not collide with
+  // anything drawn inside this operator, and the point is drawn inside
   uint8_t at;
   if(!ppvPop(ctx, stk, &at)) {
     return false;
@@ -703,8 +616,8 @@ static bool_t ppvDerivative(ppvCtx_t *ctx, ppvStack_t *stk, const uint8_t *pa,
   }
   bool_t invented = false;
   if(sampled[0] == 0) {
-    // no MVAR: the body reads its argument off the filled stack, as a
-    // sum body does, so the picture invents a name rather than refuse
+    // no MVAR: the body reads its argument off the filled stack, so
+    // invent a name
     const char *inv = ppvInventName(ctx, at, PPV_NIL, PPV_NIL);
     if(inv == NULL) {
       ppvDecline(ctx, PPV_D_COLLISION);
@@ -718,10 +631,8 @@ static bool_t ppvDerivative(ppvCtx_t *ctx, ppvStack_t *stk, const uint8_t *pa,
     return false;
   }
   uint8_t body;
-  /* `synthetic` arms the shadow guard in the RCL arm, and an INVENTED
-   * name is exactly what it exists for: without it, a body recalling a
-   * real variable spelled like the counter draws as the counter. A name
-   * that came from the body's own MVAR is real and must not arm it. */
+  /* `synthetic` arms the shadow guard in the RCL arm. A name from the
+   * body's own MVAR is real. It must not arm the guard. */
   if(!ppvBody(ctx, bodyIdx, sampled, invented, &body)) {
     return false;
   }
@@ -729,9 +640,7 @@ static bool_t ppvDerivative(ppvCtx_t *ctx, ppvStack_t *stk, const uint8_t *pa,
 }
 
 // SUM/PROD: X = step, Y = to, Z = from (_programmableSumProd). The
-// counter has no name in RPN — it arrives in a filled stack — so the
-// tree has to invent one, and any body that recalls a variable spelled
-// the same way declines rather than let the invented name shadow it.
+// counter has no name in RPN, so the tree invents one.
 static bool_t ppvSumProd(ppvCtx_t *ctx, ppvStack_t *stk, const uint8_t *pa, bool_t isSum) {
   uint16_t bodyIdx;
   if(!ppvLabelIndex(ctx, pa, &bodyIdx)) {
@@ -750,8 +659,7 @@ static bool_t ppvSumProd(ppvCtx_t *ctx, ppvStack_t *stk, const uint8_t *pa, bool
     ppvDecline(ctx, PPV_D_COLLISION);
     return false;
   }
-  // a unit step is the evaluator's default and draws without the ,delta
-  // tail: dropping it gives the cleaner picture and identical arithmetic
+  // a unit step is the evaluator's default: drop the ,delta tail
   const ppvAst_t *st = &ctx->ast[stepN];
   bool_t unitStep = (st->kind == PPA_LIT && st->textLen == 1
                      && ctx->pool[st->textOff] == '1');
@@ -764,15 +672,9 @@ static bool_t ppvSumProd(ppvCtx_t *ctx, ppvStack_t *stk, const uint8_t *pa, bool
 }
 
 
-/* A monadic with no 2D spelling but a name the evaluator resolves.
- *
- * Arity comes from the capture engine's own PPC_MO set, because upstream
- * has none to offer — EIM_DY shares its bit with RESULT_IN_X and is
- * vestigial. The NAME is then required to round-trip: the item's catalog
- * spelling has to resolve back through ppEqFunctionItem to this same
- * item. That check is what makes the emitter safe without a hand table
- * to drift — a name the evaluator would not parse back is never emitted,
- * so text that draws but will not compute cannot be produced here. */
+/* A monadic with no 2D spelling but a name the evaluator resolves. The
+ * catalog name must resolve back through ppEqFunctionItem to this same
+ * item, so a name the evaluator cannot parse is never emitted. */
 static bool_t ppvMonadicName(uint16_t op, char *out) {
   switch(op) {
     case ITM_LN:     case ITM_LOG10:  case ITM_EXP:    case ITM_10x:
@@ -793,41 +695,20 @@ static bool_t ppvMonadicName(uint16_t op, char *out) {
 
 
 /* ==== step dispatch =====================================================
- * Fail-closed: an opcode not named here declines. There is no inferred
- * "harmless" rule, because the item table carries no stack-effect
- * metadata to infer from — TICKS is the counterexample that would break
- * one, looking inert and pushing a value nobody can predict. */
+ * Fail-closed: an opcode not named here declines. */
 
-/* The declaration and display items: no stack, no picture, and no effect
- * on a pending lift. One list, used by the dispatch arm and by the
- * exception test below, because keeping two in sync by hand is how the
- * exception test gets half-updated. */
+/* The declaration and display items: no stack, no picture, and no
+ * effect on a pending lift. One list, used by the dispatch arm and by
+ * the exception test below. */
 #define PPV_DECLARATION_ITEMS \
   case ITM_NULL: case ITM_LBL: case ITM_MVAR: case ITM_REM: \
   case ITM_PAUSE: case ITM_SNAP
 
-/* Items the epilogue's lift clear must NOT run after.
- *
- * Upstream clears stack lift in a dispatch epilogue no item can skip, and
- * this mirrors that: the arms live in ppvStepArm and may return freely,
- * ppvStep applies the epilogue afterwards. A new arm gets the clear
- * whether it breaks or returns, and the exceptions are this list rather
- * than a property of control flow.
- *
- * Membership is "clearing here would DESTROY what the step left", not
- * upstream's SLS_UNCHANGED (XEQ is SLS_ENABLED and is here anyway) and
- * not "the arm touches the latch" — LITERAL, RCL, PGMINT and PGMDRV all
- * decide the latch and are absent, because each leaves it exactly as the
- * epilogue would set it, so the clear is a no-op for them. Three reasons,
- * one per group:
- *   - the declaration items change no stack and must leave a pending
- *     lift alone;
- *   - ENTER is the item that ARMS the latch;
- *   - XEQ does not execute a step, it walks the whole callee on the
- *     shared stack. Its arm clears the latch BEFORE that walk so the
- *     callee cannot inherit one, and whatever the callee leaves is the
- *     caller's to see: a subroutine ending in ENTER arms the caller's
- *     next read. An epilogue firing after the walk would erase that. */
+/* Items the epilogue's lift clear must not run after: the declaration
+ * items change no stack, ENTER arms the latch, and XEQ starts its
+ * callee clean (its arm clears the latch before the nested walk).
+ * XEQ is lift-neutral so the latch the callee leaves survives for the
+ * caller. */
 static bool_t ppvLiftNeutral(uint16_t op) {
   switch(op) {
     PPV_DECLARATION_ITEMS:
@@ -841,17 +722,10 @@ static bool_t ppvLiftNeutral(uint16_t op) {
 
 static void ppvStepArm(ppvCtx_t *ctx, ppvStack_t *stk, uint16_t op, const uint8_t *pa);
 
-/* T replication. The hardware stack is always exactly its configured
- * depth: an operation that consumes operands pulls the rest down and T
- * duplicates itself into the vacated slot, so a long chain keeps
- * computing with copies of T rather than running out of operands.
- *
- * This only applies once the model has actually held a full stack. Before
- * that the deeper registers hold whatever preceded the program, which a
- * static walk cannot know, so the underflow decline is the honest answer.
- *
- * It lives in the epilogue for the same reason the lift clear does: the
- * arms that drop are many and the rule is one. */
+/* T replication: when an operation consumes operands, T duplicates
+ * itself into the vacated slot. Applies only after the model has held
+ * a full stack. Before that, the deeper registers hold state a static
+ * walk cannot know, and the underflow decline answers. */
 static void ppvRefillFromT(ppvStack_t *stk) {
   if(!stk->saturated) {
     return;
@@ -885,12 +759,10 @@ static void ppvStepArm(ppvCtx_t *ctx, ppvStack_t *stk, uint16_t op, const uint8_
         ppvDecline(ctx, PPV_D_UNDERFLOW);
         return;
       }
-      // the dup shares the operand node; the tree is a DAG here and
-      // both back ends only ever read it
+      // the dup shares the operand node (the tree is a read-only DAG)
       if(ppvPush(ctx, stk, stk->ast[stk->depth - 1])) {
         /* Classic ENTER clears FLAG_ASLIFT, so the next lifting read
-         * OVERWRITES X. Under eRPN a running program's ENTER dups AND
-         * re-sets the latch, so the next read LIFTS instead. */
+         * overwrites X. Under eRPN the next read lifts instead. */
         stk->liftDisabled = !getSystemFlag(FLAG_ERPN);
       }
       return;
@@ -928,11 +800,8 @@ static void ppvStepArm(ppvCtx_t *ctx, ppvStack_t *stk, uint16_t op, const uint8_
         ppvDecline(ctx, PPV_D_UNDERFLOW);
         return;
       }
-      /* FILL is the one arm that fills the stack without ppvPush, so it
-       * has to arm the saturation latch itself or T never replicates and
-       * a long chain declines a program the machine runs. It fills the
-       * LIVE slots: writing all eight under SSIZE4 leaves depth past the
-       * configured depth. */
+      /* FILL fills the stack without ppvPush, so it must arm the
+       * saturation latch itself. It fills the live slots only. */
       uint8_t t = stk->ast[stk->depth - 1];
       uint8_t slots = ppvLiveStackSlots();
       for(uint8_t i = 0; i < slots; i++) {
@@ -962,8 +831,8 @@ static void ppvStepArm(ppvCtx_t *ctx, ppvStack_t *stk, uint16_t op, const uint8_
         return;
       }
       if(ppvNameInList(ctx->dirty, ctx->dirtyCount, nm)) {
-        // the emitted text would read the variable's ORIGINAL meaning and
-        // silently ignore the store that changed it
+        // the emitted text cannot show the store that changed this
+        // variable
         ppvDecline(ctx, PPV_D_DIRTY);
         return;
       }
@@ -980,9 +849,8 @@ static void ppvStepArm(ppvCtx_t *ctx, ppvStack_t *stk, uint16_t op, const uint8_
     }
 
     case ITM_STO: {
-      // STO copies X: the stack picture is unchanged. The NAME, though,
-      // now means something the emitted text cannot express, so later
-      // reads of it decline.
+      // STO copies X: the stack picture is unchanged. Later reads of
+      // the name decline (see the RCL arm).
       uint8_t p = pa[0];
       if(p == INDIRECT_REGISTER || p == INDIRECT_VARIABLE) {
         ppvDecline(ctx, PPV_D_INDIRECT);
@@ -1006,9 +874,8 @@ static void ppvStepArm(ppvCtx_t *ctx, ppvStack_t *stk, uint16_t op, const uint8_
       uint16_t idx;
       stk->liftDisabled = false;   // clear BEFORE the nested walk, see ITM_XEQ
       if(ppvLabelIndex(ctx, pa, &idx)) {
-        // NOT restored when a construct returns: currentSolverProgram is
-        // a persistent global upstream, so a callee's relatch is exactly
-        // what a second integral would run
+        // not restored when a construct returns: the latch is a
+        // persistent global upstream too
         ctx->latchedInt = idx;
       }
       return;
@@ -1016,9 +883,8 @@ static void ppvStepArm(ppvCtx_t *ctx, ppvStack_t *stk, uint16_t op, const uint8_
 
     case ITM_XEQ: {
       uint16_t idx;
-      /* Order, not reach: this runs BEFORE the nested walk so a callee
-       * never inherits an ENTER latch armed in its caller. The epilogue
-       * runs after the arm returns and so cannot do it. */
+      // clear before the nested walk: a callee must not inherit an
+      // ENTER latch armed in its caller
       stk->liftDisabled = false;
       if(ppvLabelIndex(ctx, pa, &idx)) {
         ppvWalk(ctx, idx, stk);   // a subroutine shares its caller's stack
@@ -1093,13 +959,8 @@ static void ppvWalk(ppvCtx_t *ctx, uint16_t labelIdx, ppvStack_t *stk) {
 }
 
 /* ==== the layout back end ==============================================
- * AST -> 2D nodes, and the reason PP18 exists. Bracketing is decided
- * here ONCE, by the same ppfBuildOp1/ppfBuildOp2 the capture engine has
- * always used; the walker no longer has an opinion about parentheses.
- *
- * Shaped after ppfFromCaptureNode: default the out-precedence to ATOM,
- * validate, switch on kind, leaves return runs, operator arms recurse
- * into locals and then delegate. */
+ * AST -> 2D nodes. Bracketing is decided here once, by the same
+ * ppfBuildOp1/ppfBuildOp2 the capture engine uses. */
 
 static uint8_t ppvAstToNodes(ppvCtx_t *ctx, uint8_t n,
                              uint8_t ctxFont, uint8_t childFont, int *outPrec) {
@@ -1117,8 +978,7 @@ static uint8_t ppvAstToNodes(ppvCtx_t *ctx, uint8_t n,
       if((a->flags & PPV_F_OPAQUE) != 0) {
         return PP_NONE;   // never reaches here: the walk refuses it first
       }
-      // one predicate with the capture leaves, or the two producers drift
-      // on the same numeral and only one of them brackets it
+      // the same atom predicate the capture leaves use
       if(!ppfTextIsAtom(ctx->pool + a->textOff, a->textLen)) {
         *outPrec = PPF_PREC_ADD;
       }
@@ -1131,11 +991,8 @@ static uint8_t ppvAstToNodes(ppvCtx_t *ctx, uint8_t n,
         ctx->layoutFull = true;
         return PP_NONE;
       }
-      // ppfBuildOp has no POW level — a PP_SUP scopes itself, so it
-      // reports ATOM and a stacked power would come out unbracketed and
-      // read as a^(b^c). Bracket the base ourselves; the alternative,
-      // adding a level, would change ppfBuildOp's contract under the
-      // capture engine.
+      // a stacked power (x²)³ needs its base bracketed: ppfBuildOp has
+      // no POW level, so force the wrap here
       if((a->item == ITM_SQUARE || a->item == ITM_CUBE)
           && ctx->ast[a->child[0]].kind == PPA_OP1
           && (ctx->ast[a->child[0]].item == ITM_SQUARE
@@ -1149,8 +1006,8 @@ static uint8_t ppvAstToNodes(ppvCtx_t *ctx, uint8_t n,
       int pa, pb;
       uint8_t x = ppvAstToNodes(ctx, a->child[0], ctxFont, childFont, &pa);
       if(x == PP_NONE) {
-        ctx->layoutFull = true;   // check BEFORE the second recursion, or
-        return PP_NONE;           // the doubling survives the latch
+        ctx->layoutFull = true;   // check before the second recursion
+        return PP_NONE;
       }
       uint8_t y = ppvAstToNodes(ctx, a->child[1], ctxFont, childFont, &pb);
       if(y == PP_NONE) {
@@ -1174,9 +1031,8 @@ static uint8_t ppvAstToNodes(ppvCtx_t *ctx, uint8_t n,
         ctx->layoutFull = true;   // every operand is checked, `step` included
         return PP_NONE;
       }
-      // A nested construct body needs no bracket: the inner integral is
-      // terminated by the outer's own " d<var>". What needs one is a
-      // construct with an operator beside it, where nothing terminates it.
+      // a nested construct body needs no bracket: the outer " d<var>"
+      // terminates it
       body = ppfWrapIf(body,
                        (ctx->ast[a->child[0]].kind == PPA_CONSTRUCT)
                          ? PPF_PREC_ATOM : pBody,
@@ -1196,9 +1052,8 @@ static uint8_t ppvAstToNodes(ppvCtx_t *ctx, uint8_t n,
       uint8_t kind = isInt ? PPQ_BIG_INTEG
                    : isDrv ? PPQ_BIG_DERIV
                    : ((a->item == ITM_SIGMAn) ? PPQ_BIG_SUM : PPQ_BIG_PROD);
-      /* A big operator is not an atom: its body extends right of the
-       * stroke, so a neighbour would bind into it. ADD brackets it under
-       * x, / and ^, and leaves it bare left of a +. */
+      // a big operator is not an atom: ADD brackets it under x, / and
+      // ^, and leaves it bare beside a +
       *outPrec = PPF_PREC_ADD;
       return ppqBuildBigop(kind, a->item, body, varTiny, varCtx,
                            from, to, step,
@@ -1251,19 +1106,9 @@ static uint8_t ppvRun(ppvCtx_t *ctx, uint16_t labelIdx) {
 }
 
 /* ==== the text back end (PC_BUILD only) ================================
- * Serializes the same tree to equation-language text. Nothing in the
- * product reads it: XEQ computes a program, VISUAL draws it, and the
- * drawing is built from nodes. It exists so the pins can assert
- * something a person can read, and so one pin can hand the walker's own
- * output to fnEqCalc and check the mathematics against a number nobody
- * chose — which no comparison against my own expected string can do.
- *
- * Compiled out of the device build entirely, which is what removes the
- * text grammar from VISUAL's dependencies.
- *
- * Precedence appears here, and ONLY here, because text has to carry it
- * in brackets. The drawing path does not consult it.
- */
+ * Serializes the same tree to equation-language text, for tests only.
+ * Not in the device build. Precedence appears here because text must
+ * carry it in brackets. */
 #if defined(PC_BUILD) || defined(TESTSUITE_BUILD)
 
 enum { PPV_PREC_ADD = 0, PPV_PREC_MUL = 1, PPV_PREC_POW = 2, PPV_PREC_ATOM = 3 };
@@ -1341,8 +1186,8 @@ static void ppvSerialize(const ppvCtx_t *ctx, uint8_t n, ppvOut_t *o) {
     case PPA_OP2: {
       uint8_t level = (a->item == ITM_MULT || a->item == ITM_DIV)
                         ? PPV_PREC_MUL : PPV_PREC_ADD;
-      // multiplication is the cross the evaluator and the renderer BOTH
-      // accept; '*' is accepted by neither
+      // the cross is the multiplication sign both the evaluator and
+      // the renderer accept
       const char *sym = (a->item == ITM_ADD)  ? "+"
                       : (a->item == ITM_SUB)  ? "-"
                       : (a->item == ITM_MULT) ? STD_CROSS : "/";
@@ -1363,8 +1208,7 @@ static void ppvSerialize(const ppvCtx_t *ctx, uint8_t n, ppvOut_t *o) {
           ppvOutStr(o, "^3");
           return;
         case ITM_SQUAREROOTX:
-          // the radical brings its own parentheses: asking for
-          // precedence brackets on top would give sqrt((x))
+          // the radical brings its own parentheses
           ppvOutStr(o, "\xa2\x1a" "(");
           ppvSerialize(ctx, a->child[0], o);
           ppvOutStr(o, ")");
@@ -1374,9 +1218,8 @@ static void ppvSerialize(const ppvCtx_t *ctx, uint8_t n, ppvOut_t *o) {
           ppvOperand(ctx, a->child[0], o, PPV_PREC_MUL, true);
           return;
         case ITM_CHS:
-          // negation binds looser than x and /, tighter than + and -:
-          // the grammar's leading sign takes a whole TERM, so -a/b needs
-          // no brackets while -(a+b) does
+          // the grammar's leading sign takes a whole term: -a/b needs
+          // no brackets, -(a+b) does
           ppvOutStr(o, "-");
           ppvOperand(ctx, a->child[0], o, PPV_PREC_ADD, true);
           return;
@@ -1404,8 +1247,8 @@ static void ppvSerialize(const ppvCtx_t *ctx, uint8_t n, ppvOut_t *o) {
       ppvOutStr(o, ";");
       ppvSerialize(ctx, a->child[1], o);
       if(a->item == ITM_F1DRV) {
-        // DERIV(body;var;at[;order]) — no upper limit, and the order is
-        // a literal the renderer accepts only as 1 or 2
+        // DERIV(body;var;at[;order]): no upper limit, and the order is
+        // a literal 1 or 2
         if((a->flags & PPV_F_SECOND) != 0) {
           ppvOutStr(o, ";2");
         }
@@ -1427,9 +1270,8 @@ static void ppvSerialize(const ppvCtx_t *ctx, uint8_t n, ppvOut_t *o) {
   }
 }
 
-/* Walk a program and lay it out, so a pin can assert the NODE TREE the
- * product actually paints rather than an intermediate. Resets the layout
- * pool itself, as every builder's caller must. */
+/* Walk a program and lay it out, so a test can read the node tree the
+ * product paints. Resets the layout pool itself. */
 bool_t ppvTestBuildNodes(uint16_t labelIdx, uint8_t ctxFont, uint8_t childFont,
                          uint8_t *rootOut, uint32_t *visitsOut) {
   ppvCtx_t ctx;
@@ -1444,7 +1286,7 @@ bool_t ppvTestBuildNodes(uint16_t labelIdx, uint8_t ctxFont, uint8_t childFont,
   ppReset();
   uint8_t node = ppvAstToNodes(&ctx, root, ctxFont, childFont, &prec);
   if(visitsOut != NULL) {
-    *visitsOut = ctx.layoutVisits;   // so a pin can assert the BOUND
+    *visitsOut = ctx.layoutVisits;   // the layout visit count, for tests
   }
   if(node == PP_NONE) {
     return false;
@@ -1482,24 +1324,9 @@ bool_t ppvTranspile(uint16_t labelIdx, char *out, uint16_t cap,
 
 
 /* ==== the Z/T window ====================================================
- * Where the drawing goes was part of the request, not a detail: the
- * formula belongs in the two upper stack rows so the ANSWER stays
- * visible in X underneath — XEQ 'DBLINT' gives 4/3, VISUAL 'DBLINT'
- * draws the integrals above it.
- *
- * Measured 2026-08-28 (heights of the transpiled text through
- * ppMeasure): ONE stack line is 36 px and holds only a single integral,
- * and then only at the tiny rung (38 standard, 31 tiny). The T and Z
- * bands TOGETHER are rows 20..91 — 72 px — which holds every chain in
- * appnote 22: a single integral at 38, the double at 58, the coupled
- * triple at 71 once shrunk. That is why this paints across the pair
- * rather than into one line.
- *
- * Anything taller falls through to the full-screen view, which has 147.
- * A formula the 2D grammar declines (plain arithmetic gains nothing from
- * stacking) still shows here, linear, on the Z line — dropping to a
- * full screen for `x·x-x·p-2` would be a worse answer than the one the
- * stack rows already give. */
+ * The formula paints across the T and Z rows (rows 20..91, DESIGN.md
+ * §6 VISUAL), so the answer stays visible in X underneath. Anything
+ * taller falls through to the full-screen view. */
 
 #define PPV_BAND_TOP    (Y_POSITION_OF_REGISTER_T_LINE - 4)
 #define PPV_BAND_BOTTOM (Y_POSITION_OF_REGISTER_Z_LINE + 31)
@@ -1514,11 +1341,11 @@ static bool_t ppvPaintStackWindow(ppvCtx_t *ctx, uint8_t root) {
   for(int rung = 0; rung < 2; rung++) {
     int prec;
     ppReset();
-    ctx->layoutFull = false;   // a fresh pool deserves a fresh verdict
+    ctx->layoutFull = false;   // fresh pool, fresh latch
     uint8_t node = ppvAstToNodes(ctx, root, PP_FONT_STANDARD,
                                  (rung == 0) ? PP_FONT_STANDARD : PP_FONT_TINY, &prec);
     if(node == PP_NONE) {
-      return false;   // the layout pool ran out; the tree itself is sound
+      return false;   // the layout pool ran out, the tree itself is sound
     }
     if(rung == 1) {
       ppSetFontDeep(node, PP_FONT_TINY);
@@ -1541,10 +1368,8 @@ static bool_t ppvPaintStackWindow(ppvCtx_t *ctx, uint8_t root) {
 }
 
 
-/* Taller than the two stack rows: the full band, 21..167. Same shape as
- * the stack window, only a bigger box and a centred x — and no linear
- * fallback beneath it, because a tree that failed to lay out here failed
- * on SIZE, and there is nothing smaller left to try. */
+/* Taller than the two stack rows: the full band, 21..167. No fallback
+ * beneath this: a tree that fails here failed on size. */
 static bool_t ppvPaintFullScreen(ppvCtx_t *ctx, uint8_t root) {
   for(int rung = 0; rung < 2; rung++) {
     int prec;
@@ -1565,8 +1390,7 @@ static bool_t ppvPaintFullScreen(ppvCtx_t *ctx, uint8_t root) {
     if(m->width > SCREEN_WIDTH - 4 || m->ascent + m->descent > 167 - 21 + 1) {
       continue;
     }
-    // The clear happens HERE, once the fit is known: nothing is erased
-    // until there is something to put in its place.
+    // clear only once the fit is known
     lcd_fill_rect(0, 16, SCREEN_WIDTH, SCREEN_HEIGHT - 16, LCD_SET_VALUE);
     drawSinglePixelFullWidthLine(20);
     drawSinglePixelFullWidthLine(168);
@@ -1588,9 +1412,8 @@ void fnPrettyVisual(uint16_t label) {
   if(lastErrorCode != ERROR_NONE) {
     return;
   }
-  // label resolution follows fnPgmInt's own ladder (solver/integrate.c),
-  // minus its latch: VISUAL names a program to READ, and must not
-  // repoint what INT would run next
+  // label resolution follows fnPgmInt's ladder (solver/integrate.c),
+  // minus its latch: VISUAL must not repoint what INT runs next
   uint16_t idx;
   if(FIRST_LABEL <= label && label <= LAST_LABEL) {
     idx = (uint16_t)(label - FIRST_LABEL);
@@ -1626,8 +1449,8 @@ void fnPrettyVisual(uint16_t label) {
   ppvCtx_t ctx;
   uint8_t root = ppvRun(&ctx, idx);
   if(root == PPV_NIL) {
-    // nothing has been painted: the tree is built entire before any
-    // pixel is touched, so a decline leaves the screen alone
+    // a decline leaves the screen alone: the tree is built before any
+    // pixel is touched
     displayCalcErrorMessage(ERROR_INVALID_DATA_TYPE_FOR_OP, ERR_REGISTER_LINE, REGISTER_X);
     #if (EXTRA_INFO_ON_CALC_ERROR == 1)
       sprintf(errorMessage, "step %u: cannot be drawn (D%u)",
@@ -1637,27 +1460,22 @@ void fnPrettyVisual(uint16_t label) {
     return;
   }
 
-  // A surface leaves session state as it found it, whether or not
-  // anything downstream currently reads it. V19 pins this.
+  // leave session state as found
   uint16_t saved = currentSolverStatus;
   currentSolverStatus &= (uint16_t)~(SOLVER_STATUS_EQUATION_MODE | SOLVER_STATUS_INTERACTIVE);
   if(ppvPaintStackWindow(&ctx, root)) {
     /* Only the stack refresh is suspended: the menu and the status bar
-     * keep working, and X keeps whatever the program left there. The
-     * chrome bits are CLEARED rather than left alone, because the guard
-     * that decides the menu repaint reads them: ORing would let a bit an
-     * earlier full-screen surface set decide this surface's chrome. */
+     * keep working. The chrome bits are cleared: a bit an earlier
+     * full-screen surface set must not decide this surface's chrome. */
     screenUpdatingMode |= SCRUPD_MANUAL_STACK;
     screenUpdatingMode &= (uint8_t)~(SCRUPD_MANUAL_MENU | SCRUPD_MANUAL_SHIFT_STATUS);
     screenHoldsDrawnPixels = true;
-    // a self-painted screen declares itself one, or EXIT cannot dismiss
-    // it (DESIGN.md §6, the binding rule)
+    // a self-painted screen declares itself one, or EXIT cannot
+    // dismiss it (DESIGN.md §6)
     temporaryInformation = TI_SHOWNOTHING;
   }
   else if(!ppvPaintFullScreen(&ctx, root)) {
-    // Neither surface can hold it. An error is the honest answer, not a
-    // blank held screen: nothing has been painted, so X still shows what
-    // the program returned.
+    // neither surface can hold it: raise an error, nothing was painted
     displayCalcErrorMessage(ERROR_INVALID_DATA_TYPE_FOR_OP, ERR_REGISTER_LINE, REGISTER_X);
     #if (EXTRA_INFO_ON_CALC_ERROR == 1)
       sprintf(errorMessage, "too large to draw (D%u)", (unsigned)PPV_D_TOOBIG);

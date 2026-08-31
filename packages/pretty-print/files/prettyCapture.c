@@ -3,29 +3,21 @@
 
 /**
  * \file prettyCapture.c
- * The shadow expression stack: turns chained interactive RPN operations
- * into expression trees, decides where a formula ends (DESIGN.md §4:
- * liveness + new-root supersession), and keeps a bounded ring of finished
- * formulas as postfix token streams.
+ * The shadow expression stack. It turns chained RPN operations into
+ * expression trees, decides where a formula ends, and keeps a bounded
+ * ring of finished formulas as postfix token streams. The rules are in
+ * DESIGN.md §3-§5.
  *
- * THE INVARIANT (binding, DESIGN.md §3): shadow slot k always holds an
- * expression whose value equals register REGISTER_X + k at quiescence.
- * When a transform cannot maintain that, the slot degrades to a value
- * leaf snapshotted from its register — truthful by construction — or the
- * whole shadow invalidates. The display never lies; over-invalidation
- * costs only history granularity.
+ * At quiescence, slot k always holds an expression whose value equals
+ * register REGISTER_X + k. When a transform cannot keep this true, the
+ * slot degrades to a plain value, or the whole shadow invalidates.
  *
- * Two-phase mirroring: STAGE (prettyNoteFunction) runs before the item
- * dispatch and reads only pre-op registers; DONE (prettyNoteFunctionDone)
- * applies the staged transform only when the dispatch left no error.
- * Number entry commits at the closeNim funnel; the lift decision latched
- * at NIM open is applied there, so an aborted NIM (upstream undo())
- * needs no shadow rollback — nothing was applied.
+ * STAGE (prettyNoteFunction) runs before the item dispatch and reads
+ * only pre-op registers. DONE (prettyNoteFunctionDone) applies the
+ * staged transform only when the dispatch left no error.
  *
- * No display formatter ever runs here (the binding lazy rule): value
- * leaves store raw register payloads (undo-history's proven
- * dataType/tag/allocParam/payload recipe) and are formatted only at
- * display time by the viewer.
+ * No display formatter runs here. Value leaves store raw register
+ * payloads. The viewer formats them at display time.
  */
 
 #include "c47.h"
@@ -45,9 +37,8 @@ static char     ppcNimText[32];
 static bool_t   ppcNimTextValid;
 static bool_t   ppcInited = false;
 
-/* Pairs each DONE with its own STAGE. The hooks nest — a dispatch can run
- * a program whose steps come back through them — so DONE must consume the
- * stage on its own dispatch, not the first nested one. */
+/* The hooks nest: a dispatch can run a program whose steps come back
+ * through them. DONE must consume only the stage of its own dispatch. */
 static uint16_t ppcDispatchDepth = 0;
 
 static struct {
@@ -81,27 +72,16 @@ static uint8_t ppcTopSlot(void) {
   return (uint8_t)(getStackTop() - REGISTER_X);
 }
 
-/* ppcTopSlot is the LIVE stack height and is the right
- * bound for iterating the stack (lifts, drops, wipes). It is the wrong bound
- * for asking "is this register one of my slots?": ppcSlot is indexed by
- * ABSOLUTE offset — slot k mirrors REGISTER_X + k in both stack sizes, and
- * ppcInvalidate already loops over all eight — while upstream keeps A..D
- * writable under SSIZE4 (isRegInRange has no stack-size term). Guarding with
- * the live top meant a STO to A under SSIZE4 was ignored, slot 4 kept the
- * old tree, and switching back to SSIZE8 brought the lie into view: the
- * screen showed 1x2 beside a result of 18. The invariant is stated over k
- * without reference to stack size; these guards now are too. */
+/* ppcTopSlot bounds stack iteration (lifts, drops, wipes). Do not use
+ * it to test slot membership: upstream keeps A..D writable under
+ * SSIZE4, so ppcIsSlotRegister must cover all eight slots. */
 static bool_t ppcIsSlotRegister(uint16_t r) {
   return r >= (uint16_t)REGISTER_X
       && r < (uint16_t)REGISTER_X + (uint16_t)(sizeof(ppcSlot) / sizeof(ppcSlot[0]));
 }
 
-/* Initialising our own data and restoring the user's factory defaults
- * are DIFFERENT operations, and conflating them was a persistence bug
- * (found by PP15's FV14 while adding the second flag): ppcInit runs
- * lazily on the first dispatch after a cold start, and if it also set
- * the flags it would silently overwrite a preference the user had
- * saved. Only doFnReset restores defaults. */
+/* Initializes package data only. It must not set the system flags:
+ * only prettyReset restores the factory defaults. */
 static void ppcInit(void) {
   for(uint8_t i = 0; i < PPC_NODES; i++) {
     ppcArena[i].kind = PPN_FREE;
@@ -129,10 +109,7 @@ void ppcTestDeinit(void) {
 void prettyReset(void) {
   ppcInit();
   // Factory defaults. A RESET wipes the system flags before this hook
-  // runs (the config.c call sits after Sett(_Reset)), so the T line's
-  // default-OFF is already in place and is cleared here only so that
-  // prettyReset means the same thing wherever it is called from; the
-  // natural-display default-ON has to be re-established.
+  // runs, so the default-ON flag must be set again here.
   setSystemFlag(FLAG_PRETTYP);
   clearSystemFlag(FLAG_PTLINE);
 }
@@ -187,8 +164,8 @@ static uint8_t ppcDeepCopy(uint8_t n) {
     return PPC_NIL;
   }
   uint8_t saved0 = k0, saved1 = k1;
-  // PPA_EMITTED lives in aux for OP nodes only — for LIT/VAL nodes aux is
-  // a LENGTH and masking it would truncate the payload (caught by T4)
+  // PPA_EMITTED lives in aux for OP nodes only. For LIT/VAL nodes aux
+  // is a length, and masking it truncates the payload.
   ppcArena[c].aux = ppcArena[n].aux;
   if(ppcArena[n].kind == PPN_OP1 || ppcArena[n].kind == PPN_OP2 || ppcArena[n].kind == PPN_BIGOP) {
     ppcArena[c].aux &= (uint8_t)~PPA_EMITTED;
@@ -202,11 +179,10 @@ static uint8_t ppcDeepCopy(uint8_t n) {
   return c;
 }
 
-/* Value leaf from a live register — undo-history's generic capture recipe
- * (dataType / tag / allocParam / payload), viewer restores via
- * reallocateRegister + copy + setRegisterTag. Payloads over 16 bytes (or
- * matrix/complex-matrix types) become PPN_OPAQUE, which poisons any tree
- * that contains them into never-being-shown. */
+/* Value leaf from a live register (dataType / tag / allocParam /
+ * payload). The viewer restores via reallocateRegister + copy +
+ * setRegisterTag. Oversized payloads and matrix types become PPN_OPAQUE,
+ * and a tree that contains an OPAQUE node is never shown. */
 static uint16_t ppcAllocParamOf(calcRegister_t regist) {
   switch(getRegisterDataType(regist)) {
     case dtLongInteger: return REGISTER_LONG_INTEGER_HEADER(regist)->dataMaxLengthInBlocks;
@@ -221,9 +197,8 @@ static uint8_t ppcValLeafFromRegister(calcRegister_t regist) {
     return ppcAlloc(PPN_OPAQUE);
   }
   uint32_t bytes = TO_BYTES((uint32_t)getRegisterFullSizeInBlocks(regist));
-  /* The continuation is offered to complex only, per DESIGN.md 3, which
-   * scopes OPAQUE to matrices, strings and oversized payloads: an
-   * oversized long integer stays opaque, as T26 pins. */
+  /* Only complex34 gets the two-node continuation (DESIGN.md §3): an
+   * oversized long integer stays opaque. */
   const uint32_t cap = (dt == dtComplex34) ? (uint32_t)PPC_VAL_CAPACITY
                                            : (uint32_t)sizeof(((ppcNode_t *)0)->payload);
   if(bytes > cap) {
@@ -240,13 +215,9 @@ static uint8_t ppcValLeafFromRegister(calcRegister_t regist) {
   ppcArena[n].item = ppcAllocParamOf(regist);
   xcopy(ppcArena[n].payload, getRegisterDataPointer(regist),
         (bytes > head) ? head : bytes);
-  /* A payload wider than one node continues into a
-   * PPN_VAL2 on child[0] — the PPN_LIT/PPN_LIT2 shape. A complex34 is 32
-   * bytes against a 16-byte node, so before this every complex operand
-   * became OPAQUE and silently withheld the whole formula. Costs two of the
-   * 24 arena nodes; if the second cannot be had, the leaf degrades to
-   * OPAQUE rather than storing a truncated value, because a half-copied
-   * payload would be a WRONG number rather than an absent one. */
+  /* A payload wider than one node continues into a PPN_VAL2 on
+   * child[0]. If the second node cannot be had, the leaf degrades to
+   * OPAQUE: a truncated payload is a wrong number. */
   if(bytes > head) {
     uint8_t cont = ppcAlloc(PPN_VAL2);
     if(cont == PPC_NIL) {
@@ -261,10 +232,10 @@ static uint8_t ppcValLeafFromRegister(calcRegister_t regist) {
   return n;
 }
 
-// RCL operand leaf: numbered registers keep their NAME (R05 stays R05
-// even if the register is later overwritten — names are truthful);
-// lettered/named registers become value leaves (their display names are
-// not item ids); stack registers are handled by the caller via deepCopy.
+// RCL operand leaf. Numbered registers keep their name: R05 stays R05
+// even if the register is later overwritten. Lettered and named
+// registers become value leaves. The caller handles stack registers
+// with a deep copy of the slot tree.
 static uint8_t ppcRclLeaf(uint16_t param) {
   if(param <= 99) {
     uint8_t n = ppcAlloc(PPN_RCL);
@@ -324,7 +295,6 @@ static uint16_t ppcSerializeNode(uint8_t n, uint8_t *out, uint16_t off, uint16_t
       (*nTokens)++;
       return off;
     case PPN_LIT: {
-      // gather continuation text
       char text[32];
       uint8_t len = nd->aux;
       if(len > 15) {
@@ -354,9 +324,8 @@ static uint16_t ppcSerializeNode(uint8_t n, uint8_t *out, uint16_t off, uint16_t
     case PPN_VAL: {
       uint8_t bytes = nd->pad[1];
       const uint8_t head = (uint8_t)sizeof(nd->payload);
-      /* the write below is kind + dataType + tag +
-       * allocParam(2) + len = SIX bytes plus the payload; the guard used to
-       * reserve seven, so a token landing exactly on the cap was refused. */
+      /* the header below is six bytes: kind, dataType, tag,
+       * allocParam(2), len */
       if(off + 6 + bytes > cap) {
         return 0xffff;
       }
@@ -366,9 +335,8 @@ static uint16_t ppcSerializeNode(uint8_t n, uint8_t *out, uint16_t off, uint16_t
       out[off++] = (uint8_t)(nd->item & 0xff);    // allocParam
       out[off++] = (uint8_t)(nd->item >> 8);
       out[off++] = bytes;
-      /* A payload wider than one node continues into the PPN_VAL2 on
-       * child[0]; copying `bytes` straight out would read past the array.
-       * The stream stays one flat TKV, so the reader is unchanged. */
+      /* A split payload continues in the PPN_VAL2 on child[0]. The
+       * stream stays one flat TKV, so the reader is unchanged. */
       uint8_t first = (bytes > head) ? head : bytes;
       xcopy(out + off, nd->payload, first);
       off = (uint16_t)(off + first);
@@ -440,9 +408,9 @@ static void ppcHistEvictOldest(void) {
 }
 
 /* Emit a finished formula. resultReg >= 0 supplies the "= result"
- * snapshot (the register still holding the value — the invariant is the
- * proof); pass -1 when the value has already left the stack (a tree
- * pushed off the top), which stores the formula without a result. */
+ * snapshot and must still hold the formula's value. Pass -1 when the
+ * value already left the stack: the formula is stored without a
+ * result. */
 static void ppcEmit(uint8_t root, calcRegister_t resultReg) {
   if(root == PPC_NIL || root == PPC_UNKNOWN) {
     return;
@@ -468,7 +436,6 @@ static void ppcEmit(uint8_t root, calcRegister_t resultReg) {
   if(resultReg >= 0) {
     uint32_t dt = getRegisterDataType(resultReg);
     uint32_t bytes = TO_BYTES((uint32_t)getRegisterFullSizeInBlocks(resultReg));
-    /* Six-byte header, not seven; a split payload writes flat. */
     if(dt != dtReal34Matrix && dt != dtComplex34Matrix
         && bytes <= PPC_VAL_CAPACITY && off + 6 + bytes <= sizeof(buf)) {
       buf[off++] = PPT_TKRES;
@@ -500,9 +467,8 @@ static void ppcEmit(uint8_t root, calcRegister_t resultReg) {
   nd->aux |= PPA_EMITTED;
 }
 
-/* Displacement (§4 rule 1): the tree in `slot` is about to leave the
- * shadow stack unconsumed. Emit if it is an unemitted op root; the
- * register that still holds its value supplies the result. */
+/* The tree in `slot` is about to leave the shadow stack unconsumed
+ * (DESIGN.md §4 rule 1). Emit it if it is an unemitted op root. */
 static void ppcDisplaced(uint8_t slot, bool_t registerStillLive) {
   uint8_t n = ppcSlot[slot];
   if(n == PPC_NIL || n == PPC_UNKNOWN) {
@@ -513,13 +479,9 @@ static void ppcDisplaced(uint8_t slot, bool_t registerStillLive) {
 
 static void ppcInvalidate(bool_t emitCurrent) {
   if(emitCurrent && ppcCurrent != PPC_NIL) {
-    // -1 means "no result snapshot". This runs at DONE, where the
-    // register already holds the NEW item's output, so reading it would
-    // file a wrong result permanently. The classifier's INVALIDATE arm
-    // emits at STAGE instead, where the register still holds this
-    // formula's value; by the time we get here the node is normally
-    // already EMITTED and ppcEmit refuses it. -1 is the truthful last
-    // resort for a caller that reaches invalidation without staging.
+    // No result snapshot: at DONE the register already holds the new
+    // item's output. Callers that can emit do it at STAGE, and ppcEmit
+    // then refuses the already-emitted node here.
     ppcEmit(ppcCurrent, (calcRegister_t)-1);
   }
   for(int i = 0; i < 8; i++) {
@@ -569,34 +531,33 @@ static uint8_t ppcClassify(int16_t func) {
     case ITM_Xex:   return PPC_XSWAPREG;
     case ITM_DROPY: return PPC_DROPY;
 
-    // PP12: the big-operator family — Σₙ/∏ₙ (and the integer variants)
-    // consume Z=from, Y=to, X=step and leave the result in X; ∫YX
-    // consumes Y=lower, X=upper over a label program.
+    // Big-operator family: Σₙ/∏ₙ and the integer variants consume
+    // Z=from, Y=to, X=step and leave the result in X. ∫YX consumes
+    // Y=lower, X=upper over a label program.
     case ITM_SIGMAn: case ITM_PIn: case ITM_iSIGMAn: case ITM_iPIn:
       return PPC_BIGOPSUM;
     #if defined(OPTION_INFSUMS)
-    // Captures identically to a plain sum: same three stack levels, and
-    // the limits are the ones the user supplied. Guarded because without
-    // the option the item is a stub that moves no stack.
+    // Captures the same as a plain sum. Guarded: without the option the
+    // item is a stub that moves no stack.
     case ITM_SIGMAnINF:
       return PPC_BIGOPSUM;
     #endif // OPTION_INFSUMS
     case ITM_INTEGRAL_YX:
       return PPC_BIGOPINT;
 
-    // stack mutators that are US_UNCHANGED and would otherwise be ignored
+    // US_UNCHANGED stack mutators the default rule alone ignores
     case ITM_UNDO:
       return PPC_DISCARD;   // the user revoked the current formula
 
-    // Both run program steps whose stack motion happens out of scope, so
-    // nothing tells the shadow. Both are US_UNCHANGED, so the default
-    // rule does not cover them the way it covers XEQ.
+    // Both run program steps whose stack motion happens out of scope,
+    // so nothing tells the shadow. Both are US_UNCHANGED, so the
+    // default rule alone ignores them.
     case ITM_RS: case ITM_SST:
       return PPC_INVALIDATE;
     case 427: case 428:
-      // undo-history package composition claims (DESIGN.md §7): U.HIST
-      // opens a browser whose restore bypasses item dispatch; REDO
-      // rewrites the stack. Both invalidate.
+      // undo-history composition (DESIGN.md §7): the U.HIST restore
+      // bypasses item dispatch, and REDO rewrites the stack. Both
+      // invalidate.
       return PPC_INVALIDATE;
 
     default:
@@ -605,16 +566,12 @@ static uint8_t ppcClassify(int16_t func) {
   if(indexOfItems[func].func == fnConstant) {
     return PPC_CONSTCLS;
   }
-  // The default rule, binding: an unknown undo-enabled item moved the
-  // stack in a way we did not model, so invalidate; an unknown non-undo
+  // Default rule: an unknown undo-enabled item moved the stack in a
+  // way the shadow does not model, so invalidate. An unknown non-undo
   // item is display or mode chatter, so ignore.
   uint32_t us = indexOfItems[func].status & US_STATUS;
-  // US_CANCEL belongs on the invalidate side, not the ignore
-  // side: upstream's own header defines it as "the command cancels the
-  // last UNDO data" — the machine moved beyond what undo can describe —
-  // against US_UNCHANGED, "leaves the existing UNDO data as is". LOAD
-  // and LOADST replace the whole register file under that status, and
-  // the shadow went on describing the registers they overwrote.
+  // US_CANCEL also invalidates: LOAD and LOADST replace the whole
+  // register file under that status.
   if(us == US_ENABLED || us == US_ENABL_XEQ || us == US_CANCEL) {
     return PPC_INVALIDATE;
   }
@@ -626,8 +583,8 @@ static uint8_t ppcClassify(int16_t func) {
 
 static void ppcShiftUpForLift(void) {
   uint8_t top = ppcTopSlot();
-  // the top slot's tree is pushed off the stack; its value is gone from
-  // the registers by the time we apply, so it emits without a result
+  // the top slot's tree is pushed off the stack, and its value is gone
+  // from the registers, so it emits without a result
   ppcDisplaced(top, false);
   ppcFreeTree(ppcSlot[top] == PPC_UNKNOWN ? PPC_NIL : ppcSlot[top]);
   for(uint8_t k = top; k > 0; k--) {
@@ -670,8 +627,8 @@ static bool_t ppcScopeOk(void) {
       && (calcMode == CM_NORMAL || calcMode == CM_NIM);
 }
 
-// STAGE supersession helper: emit the current formula from the slot
-// register still holding it, then close it
+// Emit the current formula from the slot register that still holds it,
+// then close it.
 static void ppcSupersedeCurrent(void) {
   for(uint8_t k = 0; k <= ppcTopSlot(); k++) {
     if(ppcSlot[k] == ppcCurrent) {
@@ -683,13 +640,7 @@ static void ppcSupersedeCurrent(void) {
 }
 
 void prettyNoteFunction(int16_t func, uint16_t param) {
-  // The counter used to saturate at 255 on the way up while
-  // decrementing unconditionally on the way down, so a 256-deep nesting
-  // would desynchronise it PERMANENTLY and every later DONE would pair
-  // with the wrong STAGE. 256 levels of program-within-program is not
-  // reachable on this machine, but the asymmetry is free to remove: a
-  // wider counter, and a depth we cannot represent invalidates rather
-  // than guesses.
+  // A depth the counter cannot represent invalidates the shadow.
   if(ppcDispatchDepth < 0xFFFF) {
     ppcDispatchDepth++;
   }
@@ -703,7 +654,7 @@ void prettyNoteFunction(int16_t func, uint16_t param) {
   }
   if(!ppcScopeOk()) {
     // A nested dispatch must not clobber the outer stage. valid is only
-    // ever true strictly inside a dispatch, so a top-level STAGE out of
+    // true strictly inside a dispatch, so a top-level STAGE out of
     // scope has nothing to clear.
     return;
   }
@@ -725,9 +676,8 @@ void prettyNoteFunction(int16_t func, uint16_t param) {
     case PPC_DY:
       ppcEnsureKnown(0);
       ppcEnsureKnown(1);
-      // supersession (§4 rule 2): a new root whose operands do not
-      // include the current formula finishes it now, result from the
-      // register still holding it
+      // a new root whose operands do not include the current formula
+      // finishes it now (DESIGN.md §4 rule 2)
       if(ppcCurrent != PPC_NIL && ppcSlot[0] != ppcCurrent && ppcSlot[1] != ppcCurrent) {
         ppcSupersedeCurrent();
       }
@@ -758,9 +708,8 @@ void prettyNoteFunction(int16_t func, uint16_t param) {
         ppcDisplaced(k, true);
       }
       break;
-    /* Must run at STAGE: ppcEmit's contract is that resultReg still holds
-     * the formula's value, and by DONE fnStore has overwritten it. Every
-     * other emit-with-register site in this file runs here too. */
+    /* Must run at STAGE: ppcEmit requires that resultReg still holds
+     * the formula's value, and by DONE fnStore has overwritten it. */
     case PPC_STO_NOP: {
       uint16_t t = param;
       if(t > (uint16_t)REGISTER_X && ppcIsSlotRegister(t)) {
@@ -791,9 +740,8 @@ void prettyNoteFunction(int16_t func, uint16_t param) {
     case PPC_XSWAPREG:
       // the tree's value still sits in register X at STAGE
       ppcDisplaced(0, true);
-      // x<> to a STACK register swaps X with that slot's
-      // register, so the PARTNER slot's tree stops describing it — the
-      // same hole R1-8 closed for STO, at the hand exception next door.
+      // x<> to a stack register swaps X with that slot's register, so
+      // the partner slot's tree stops describing it.
       {
         uint16_t xt = param;
         if(xt > (uint16_t)REGISTER_X && ppcIsSlotRegister(xt)) {
@@ -809,12 +757,10 @@ void prettyNoteFunction(int16_t func, uint16_t param) {
       }
       break;
     case PPC_BIGOPSUM: {
-      // Z=from, Y=to, X=step consumed by VALUE (fnToReal + copy), never
-      // by structure: an op tree in a consumed slot is displaced (§4
-      // rule 1), and the current root is superseded regardless of where
-      // it sits — the new BIGOP root never contains it.
+      // Z=from, Y=to, X=step are consumed by value. Consumed slots and
+      // the current root are emitted here (DESIGN.md §4).
       if(!(ppcStage.param >= FIRST_LABEL && ppcStage.param <= LAST_LABEL)) {
-        // the register-letter form resolves a label indirectly — un-modeled
+        // the register-letter form resolves a label indirectly: not modeled
         ppcStage.cls = PPC_INVALIDATE;
         break;
       }
@@ -842,19 +788,18 @@ void prettyNoteFunction(int16_t func, uint16_t param) {
       break;
     }
     case PPC_BIGOPINT: {
-      // The integration only RUNS for a named-variable param over a
-      // preselected label program (_fnIntegrate); a label/register param
-      // is the interactive SETUP form — it still harvests X,Y into
-      // ULIM/LLIM and drops them, but leaves no result to vouch for.
-      // Formula targets belong to the EQN surface (PP13), not capture.
+      // The integration runs only for a named-variable param over a
+      // preselected label program. A label/register param is the
+      // interactive setup form: it harvests X,Y into ULIM/LLIM and
+      // leaves no result. Formula targets belong to the EQN surface.
       if(!(ppcStage.param >= FIRST_NAMED_VARIABLE && ppcStage.param <= LAST_NAMED_VARIABLE)
           || (currentSolverStatus & SOLVER_STATUS_USES_FORMULA)
           || currentSolverProgram >= numberOfLabels) {
         ppcStage.cls = PPC_INVALIDATE;
         break;
       }
-      // Y=lower, X=upper; payload[0..1] = the integration variable (for
-      // the d<var> body text), the label comes from the solver target
+      // Y=lower, X=upper. payload[0..1] = the integration variable (for
+      // the d<var> body text). The label comes from the solver target.
       memset(ppcStage.stepBytes, 0, 16);
       ppcStage.stepBytes[0] = (uint8_t)(ppcStage.param & 0xff);
       ppcStage.stepBytes[1] = (uint8_t)(ppcStage.param >> 8);
@@ -872,19 +817,11 @@ void prettyNoteFunction(int16_t func, uint16_t param) {
       ppcDisplaced(1, true);
       break;
     case PPC_DISCARD:
-      // applied at DONE (the dispatch may still error out)
+      // applied at DONE (the dispatch can still fail)
       break;
     case PPC_INVALIDATE:
-      // R1-5 stopped this from reading a POST-dispatch
-      // register as the formula's result — correct, but emitting with
-      // -1 records no result at all, and the browser's ENTER can then
-      // never recall the entry: truthful and useless. The register is
-      // still truthful HERE, before the dispatch, which is where every
-      // other emit-with-register in this file already happens. Emit
-      // now; DONE then tears the shadow down without emitting again
-      // (ppcEmit refuses an already-EMITTED node, so a dispatch that
-      // errors costs at most one early filing of a formula that was
-      // true when it was filed).
+      // Emit now, while the register still holds this formula's value.
+      // At DONE the shadow tears down without a second emit.
       if(ppcCurrent != PPC_NIL) {
         ppcSupersedeCurrent();
       }
@@ -925,7 +862,7 @@ void prettyNoteFunctionDone(void) {
       ppcArena[n].child[0] = ppcSlot[1];   // left = Y
       ppcArena[n].child[1] = ppcSlot[0];   // right = X
       ppcFreeTree(ppcSlotL == PPC_UNKNOWN ? PPC_NIL : ppcSlotL);
-      ppcSlotL = PPC_UNKNOWN;              // L holds old X; upgrade lazily
+      ppcSlotL = PPC_UNKNOWN;              // L holds old X and upgrades lazily
       ppcSlot[1] = n;                      // temporary: n sits where Y was
       ppcSlot[0] = PPC_UNKNOWN;
       ppcShiftDownAfterConsume();          // moves n into slot 0
@@ -947,8 +884,8 @@ void prettyNoteFunctionDone(void) {
       break;
     }
     case PPC_ENTER: {
-      // mirror fnKeyEnter: the CM_NIM branch always dups after commit;
-      // the CM_NORMAL branch dups per the eRPN condition
+      // mirror fnKeyEnter: the CM_NIM branch always dups after commit,
+      // and the CM_NORMAL branch dups per the eRPN condition
       bool_t dup;
       if(ppcStage.stagedMode == CM_NIM) {
         dup = (calcMode != CM_NIM);   // only if closeNim committed
@@ -991,7 +928,7 @@ void prettyNoteFunctionDone(void) {
     }
     case PPC_CLX:
       ppcFreeTree(ppcSlot[0] == PPC_UNKNOWN ? PPC_NIL : ppcSlot[0]);
-      ppcSlot[0] = PPC_UNKNOWN;   // X now holds 0; upgrades truthfully on consume
+      ppcSlot[0] = PPC_UNKNOWN;   // X now holds 0 and upgrades truthfully on consume
       break;
     case PPC_DROP:
       ppcFreeTree(ppcSlot[0] == PPC_UNKNOWN ? PPC_NIL : ppcSlot[0]);
@@ -1039,8 +976,8 @@ void prettyNoteFunctionDone(void) {
       break;
     }
     case PPC_STO_NOP: {
-      // Handled entirely at STAGE, where the target register still holds
-      // the formula's value. An errored dispatch costs only granularity.
+      // Handled entirely at STAGE, where the target register still
+      // holds the formula's value.
       break;
     }
     case PPC_RCLCLS: {
@@ -1093,9 +1030,8 @@ void prettyNoteFunctionDone(void) {
       break;
     }
     case PPC_XSWAPREG:
-      // X now holds the register's OLD value — a fresh value leaf is the
-      // only truthful description (naming the register would lie: it
-      // holds the swapped-in tree value now)
+      // X now holds the register's old value: describe it with a fresh
+      // value leaf.
       ppcFreeTree(ppcSlot[0] == PPC_UNKNOWN ? PPC_NIL : ppcSlot[0]);
       {
         uint8_t v = ppcValLeafFromRegister(REGISTER_X);
@@ -1132,11 +1068,9 @@ void prettyNoteFunctionDone(void) {
       xcopy(ppcArena[n].payload, ppcStage.stepBytes, 16);
       ppcArena[n].child[0] = ppcStage.stagedFrom;
       ppcArena[n].child[1] = ppcStage.stagedTo;
-      // The dispatch ran the label program between STAGE and DONE, and a
-      // program can touch anything: X holds the result (the BIGOP's
-      // value), every other register is somebody else's writing now.
-      // Consumed formula slots were displaced at STAGE. UNKNOWN slots
-      // re-materialize lazily as truthful VAL leaves.
+      // The label program ran between STAGE and DONE and can touch
+      // anything, so all slots reset to UNKNOWN. X gets the new BIGOP
+      // tree.
       for(int i = 0; i < 8; i++) {
         ppcFreeTree(ppcSlot[i] == PPC_UNKNOWN ? PPC_NIL : ppcSlot[i]);
         ppcSlot[i] = PPC_UNKNOWN;
@@ -1167,9 +1101,9 @@ void prettyNoteNimOpen(void) {
     ppcNimTextValid = false;
     return;
   }
-  // latched BEFORE liftStack runs (hook placement in calcModeNim); the
-  // shadow lift is deferred to the commit hook, so an aborted NIM
-  // (upstream undo()) needs no shadow rollback
+  // Latched before liftStack runs (hook placement in calcModeNim). The
+  // shadow lift waits for the commit hook, so an aborted NIM needs no
+  // rollback.
   ppcPendingLift = getSystemFlag(FLAG_ASLIFT);
   ppcNimTextValid = false;
 }
@@ -1183,12 +1117,7 @@ void prettyNoteNimText(const char *aim) {
     s++;
   }
   size_t n = strlen(s);
-  // The gate was sizeof(ppcNimText) = 32, but the LEAF that
-  // ultimately stores this text holds two 15-byte payloads = 30. Length
-  // 31 was therefore the one value admitted and then silently truncated
-  // — `aux` recorded 15, so nothing downstream could tell, and the
-  // history copy was wrong too. Gate on what the leaf can hold, not on
-  // the size of the staging buffer.
+  // Gate on what the leaf can hold: two 15-byte payloads.
   if(n > PPC_LIT_CAPACITY) {
     ppcNimTextValid = false;   // too long: the leaf will fall back to a value
     ppcNimText[0] = 0;
@@ -1213,10 +1142,8 @@ void prettyNoteNumberCommit(void) {
     ppcShiftUpForLift();
   }
   else {
-    // overwrite: a bare copy (post-ENTER) or an UNKNOWN (post-CLX) —
-    // ops set ASLIFT, so an op tree is essentially never overwritten;
-    // ppcDisplaced covers the residual case truthfully via no-emit
-    // (register X already holds the new number at this point)
+    // Overwrite: register X already holds the new number, so a
+    // displaced op tree is stored without a result.
     ppcDisplaced(0, false);
     ppcFreeTree(ppcSlot[0] == PPC_UNKNOWN ? PPC_NIL : ppcSlot[0]);
     ppcSlot[0] = PPC_UNKNOWN;
@@ -1260,13 +1187,8 @@ const ppcNode_t *ppcNodeAt(uint8_t n) {
   return (n < PPC_NODES) ? &ppcArena[n] : NULL;
 }
 
-/* The raw current root, BEFORE the opaque screen below withholds it.
- * Tests only, and it earns its place: every public path into the shadow
- * goes through that screen, so a pin written against them cannot tell a
- * truthful degradation (tree built, one operand PPC_UNKNOWN, withheld
- * from display) from a total invalidation or from the operation never
- * having been classified at all. T21 asserted the second of those for
- * three rounds while believing it asserted the first. */
+/* Raw shadow state, before the OPAQUE filter below withholds it.
+ * Tests only. */
 uint8_t ppcTestSlotRaw(uint8_t k) {
   return (k < sizeof(ppcSlot) / sizeof(ppcSlot[0])) ? ppcSlot[k] : PPC_NIL;
 }

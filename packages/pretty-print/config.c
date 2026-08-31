@@ -1729,9 +1729,9 @@ void doFnReset(uint16_t confirmation, bool_t autoSav) {
     Sett(_Reset);
     //Statusbar default setup   DATE noTIME noCR noANGLE [ADM] FRAC INT MATX TVM CARRY noSS WATCH SERIAL PRN BATVOLT noSHIFTR
 
-    prettyReset();   // pretty-print package: re-arm the shadow stack and
-                     // restore the natural-display default-ON — must run
-                     // AFTER the systemFlags wipe above (PP11)
+    prettyReset();   // pretty-print package: re-arm the shadow stack
+                     // and restore the defaults. Must run after the
+                     // systemFlags wipe above.
 
     configCommon(CFG_DFLT);
 

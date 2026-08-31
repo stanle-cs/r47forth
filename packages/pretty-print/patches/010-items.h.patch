@@ -1,5 +1,5 @@
 diff --git a/src/c47/items.h b/src/c47/items.h
-index 98924313217f3b57f1b663367c8e45c0dc0f1010..c5ba0ad7d93da1cd49b1cd0687c4d39e2de162d2 100644
+index 98924313217f3b57f1b663367c8e45c0dc0f1010..9e06f46ca5e88d0056e7b83620f39bbba934671b 100644
 --- a/src/c47/items.h
 +++ b/src/c47/items.h
 @@ -228,8 +228,10 @@
@@ -26,7 +26,7 @@ index 98924313217f3b57f1b663367c8e45c0dc0f1010..c5ba0ad7d93da1cd49b1cd0687c4d39e
 +#define ITM_PSHOW                    459  // pretty-print package: full-screen pretty SHOW
 +#define ITM_PPON                     460  // pretty-print package: natural-display toggle
 +#define ITM_PCLR                     461  // pretty-print package: clear the formula history
-+#define ITM_PHIST                    462  // pretty-print package: calculation-history pager
++#define ITM_PHIST                    462  // pretty-print package: calculation-history browser
  
  
  // System flags

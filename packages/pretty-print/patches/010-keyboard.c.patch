@@ -1,5 +1,5 @@
 diff --git a/src/c47/keyboard.c b/src/c47/keyboard.c
-index bc44026016e94a8865b8acc886386341596641c6..d1f1c17c8e5e4d36507728f8d0f0444ed7a2d541 100644
+index bc44026016e94a8865b8acc886386341596641c6..7b549cbb4bb0572313438ef76972ddba09538f6f 100644
 --- a/src/c47/keyboard.c
 +++ b/src/c47/keyboard.c
 @@ -687,7 +687,7 @@ static void executeFunction(const char *data, int16_t item_);
@@ -29,16 +29,13 @@ index bc44026016e94a8865b8acc886386341596641c6..d1f1c17c8e5e4d36507728f8d0f0444e
  
        if(data[0] == 0) {
          item = item_;
-@@ -1688,6 +1688,17 @@ endReturnTrue:
+@@ -1688,6 +1688,14 @@ endReturnTrue:
          }
        }
      }
-+    // The browser must resolve its own keys, or a solo build falls
-+    // through to the bug screen on every key inside PHIST. A separate
-+    // arm rather than an edit to the condition above: forth-core
-+    // rewrites that exact line, and two packages editing one line
-+    // cannot compose. Unreachable in the combined build, correct in
-+    // both.
++    // pretty-print package: the browser resolves its own keys. The
++    // arm is separate because forth-core rewrites the condition above,
++    // and two packages cannot edit one line.
 +    else if(calcMode == CM_PRETTY_BROWSER) {
 +      result = shiftF ? key->fShifted :
 +               shiftG ? key->gShifted :
@@ -47,20 +44,15 @@ index bc44026016e94a8865b8acc886386341596641c6..d1f1c17c8e5e4d36507728f8d0f0444e
      else {
        displayBugScreen(bugScreenItemNotDetermined);
        result = 0;
-@@ -2777,6 +2788,20 @@ RELEASE_END:
+@@ -2777,6 +2785,15 @@ RELEASE_END:
              }
            }
  
-+          // Containment: without this, a key that is not the browser's
-+          // own runs its item underneath the browser. A guard rather
-+          // than a `case CM_PRETTY_BROWSER:` because undo-history adds
-+          // `case 20:` to the same switch, and two packages contributing
-+          // one label is a duplicate-case error in the combined build.
-+          //
-+          // The .d exemption is load-bearing: UP and DOWN are matched
-+          // earlier in this chain, and ENTER, EXIT and BACKSPACE have
-+          // their own cases above, but .d has neither — a bare guard
-+          // swallows the pan key and makes prettyBrowserPan unreachable.
++          // pretty-print package: a key that is not the browser's own
++          // must not run its item underneath the browser. The arm is
++          // a guard because undo-history adds `case 20:` to the same
++          // switch. The .d exemption keeps the pan key reachable: .d
++          // has no case of its own earlier in this chain.
 +          else if(calcMode == CM_PRETTY_BROWSER && item != ITM_dotD) {
 +            keyActionProcessed = true;
 +          }
@@ -68,7 +60,7 @@ index bc44026016e94a8865b8acc886386341596641c6..d1f1c17c8e5e4d36507728f8d0f0444e
            else {
              switch(calcMode) {
                case CM_NORMAL: {
-@@ -2789,6 +2814,7 @@ RELEASE_END:
+@@ -2789,6 +2806,7 @@ RELEASE_END:
                    //printf("XXXXXXXX @@@@@@ temporaryInformation=%u calcmode=%u showRegis=%u\n", temporaryInformation, calcMode, showRegis);
                    if(item == ITM_RCL) {
                      keyActionProcessed = true;
@@ -76,19 +68,17 @@ index bc44026016e94a8865b8acc886386341596641c6..d1f1c17c8e5e4d36507728f8d0f0444e
                      fnRecall(showRegis);
                      setSystemFlag(FLAG_ASLIFT);
                      temporaryInformation = TI_COPY_FROM_SHOW;
-@@ -2977,6 +3003,11 @@ RELEASE_END:
+@@ -2977,6 +2995,9 @@ RELEASE_END:
                  else if(item == ITM_RCL) {
                    rbr1stDigit = true;
                    calcMode = previousCalcMode;
-+                  /* Both arms below call fnRecall directly, so neither
-+                   * capture hook runs; with FLAG_ASLIFT set fnRecall rolls
-+                   * the whole register stack and the shadow would go on
-+                   * describing registers that moved. */
++                  /* Both arms below call fnRecall directly, so no
++                   * capture hook runs: wipe the shadow. */
 +                  ppcShadowInvalidate();
                    if(rbrMode == RBR_GLOBAL || rbrMode == RBR_LOCAL) {
                      fnRecall(currentRegisterBrowserScreen);
                      screenUpdatingMode = SCRUPD_AUTO;
-@@ -3577,6 +3608,11 @@ void fnKeyEnter(uint16_t unusedButMandatoryParameter) {
+@@ -3577,6 +3598,11 @@ void fnKeyEnter(uint16_t unusedButMandatoryParameter) {
          break;
        }
  
@@ -100,7 +90,7 @@ index bc44026016e94a8865b8acc886386341596641c6..d1f1c17c8e5e4d36507728f8d0f0444e
        case CM_TIMER: {
          fnRegAddTimerApp(NOPARAM);     //ENTER
          break;
-@@ -3938,6 +3974,11 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
+@@ -3938,6 +3964,11 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
          break;
        }
  
@@ -112,7 +102,7 @@ index bc44026016e94a8865b8acc886386341596641c6..d1f1c17c8e5e4d36507728f8d0f0444e
        case CM_ASN_BROWSER: {
          if(previousCalcMode == CM_AIM || tam.alpha) {
            if(currentMenu() == -MNU_AIMCATALOG) {
-@@ -4348,6 +4389,11 @@ void fnKeyBackspace(uint16_t unusedButMandatoryParameter) {
+@@ -4348,6 +4379,11 @@ void fnKeyBackspace(uint16_t unusedButMandatoryParameter) {
          break;
        }
  
@@ -124,7 +114,7 @@ index bc44026016e94a8865b8acc886386341596641c6..d1f1c17c8e5e4d36507728f8d0f0444e
        case CM_BUG_ON_SCREEN:
        case CM_LISTXY:
        case CM_GRAPH:
-@@ -4612,6 +4658,11 @@ void fnKeyUp(uint16_t unusedButMandatoryParameter) {
+@@ -4612,6 +4648,11 @@ void fnKeyUp(uint16_t unusedButMandatoryParameter) {
          break;
        }
  
@@ -136,7 +126,7 @@ index bc44026016e94a8865b8acc886386341596641c6..d1f1c17c8e5e4d36507728f8d0f0444e
        case CM_PEM: {
          resetAlphaSelectionBuffer();
          if(getSystemFlag(FLAG_ALPHA) && alphaCase == AC_LOWER) {
-@@ -4830,6 +4881,11 @@ void fnKeyDown(uint16_t unusedButMandatoryParameter) {
+@@ -4830,6 +4871,11 @@ void fnKeyDown(uint16_t unusedButMandatoryParameter) {
          break;
        }
  
@@ -148,7 +138,7 @@ index bc44026016e94a8865b8acc886386341596641c6..d1f1c17c8e5e4d36507728f8d0f0444e
        case CM_PEM: {
          resetAlphaSelectionBuffer();
          if(getSystemFlag(FLAG_ALPHA) && alphaCase == AC_UPPER) {
-@@ -4931,6 +4987,11 @@ void fnKeyDotD(uint16_t unusedButMandatoryParameter) {
+@@ -4931,6 +4977,11 @@ void fnKeyDotD(uint16_t unusedButMandatoryParameter) {
          break;
        }
  
