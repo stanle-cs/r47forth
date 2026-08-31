@@ -1602,3 +1602,19 @@ RAM +104 bytes of BSS (make dmcp5r47 at 4361b80e9 against f4421da32).
 Packet lesson encoded (template class 9): an excluded body must be
 inert for the question asked — ppfBigop's restyle killed Sol's top
 finding, and only the packet was at fault.
+
+## 2026-08-31 — the round-8 fix wave (81b9969a0)
+
+Five repairs, red-first: three pins red before (T29 glyph-alias, T30
+result-tail degrade, T31 polar-redrawn), zero after. EQ36 was hardened
+to derive its fixture from PP_TEXT_BYTES with a fit-exactly control,
+per PP18RR8-8's one-byte-margin mutation. The flag browser gained a
+one-hunk override that bounds the SYSFL walk by the catalog's own row
+count — correct in every package combination — and A8's arithmetic in
+DESIGN.md §7 is corrected (solo 115/114, combined 115/115). The A8
+class test could not be a count-equality pin: the count covers RESERVED
+ids by design, so equality is false in every solo build; the bound
+itself moved to the generated array instead. PP18RR8-6 (the base
+subscript outside ppfTextIsAtom's window) awaits the owner's ruling;
+-7, -9, -10, OOF-2 and OOF-1's general half stay open by the round-8
+verdict's own leave-alone list.
