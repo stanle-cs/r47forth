@@ -584,7 +584,11 @@ whose TEXT is not a visual atom — a signed numeral, a value in scientific
 form, a tagged angle, a complex — reports `PPF_PREC_ADD` rather than
 `ATOM`, so the ordinary bracket rules scope it; both leaf builders ask the
 same `ppfTextIsAtom`, because when only the walker had that rule the two
-surfaces drew the same numeral differently (PP18RR6-2, r6).
+surfaces drew the same numeral differently (PP18RR6-2, r6). **A based
+integer IS a visual atom (ruled, PP18RR8-6, option A): the base subscript
+is part of the numeral's spelling, like its digit-group spaces, so
+`10₁₆ · 2` draws bare.** The predicate's accepted two-byte window is the
+digit-group spaces plus the fifteen base subscripts.
 
 **Why a symbolic stack seeded with the variable NAME is faithful.**
 Upstream feeds a body program through two channels: the integrator writes

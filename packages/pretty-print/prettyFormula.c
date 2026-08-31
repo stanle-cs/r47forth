@@ -109,9 +109,10 @@ uint8_t ppfRun(const char *s, uint8_t fontId) {
 
 /* Is this run text a visual atom: something a raised exponent or a
  * neighboring operator can sit against without brackets? Only digits,
- * the radix mark and the digit-group spaces are. Anything else reads
- * as a term, so the leaf reports PPF_PREC_ADD and the bracket rules
- * handle it. */
+ * the radix mark, the digit-group spaces and a base subscript are —
+ * a based integer is one numeral (ruled, PP18RR8-6). Anything else
+ * reads as a term, so the leaf reports PPF_PREC_ADD and the bracket
+ * rules handle it. */
 bool_t ppfTextIsAtom(const char *s, uint16_t len) {
   if(s == NULL) {
     return true;
@@ -129,7 +130,8 @@ bool_t ppfTextIsAtom(const char *s, uint16_t len) {
         return false;   // a truncated glyph is not an atom
       }
       uint16_t code = (uint16_t)(((uint16_t)c << 8) | (uint8_t)s[i + 1]);
-      if(!(code >= 0xa000 && code <= 0xa00f)) {   // digit-group spaces
+      if(!((code >= 0xa000 && code <= 0xa00f)          // digit-group spaces
+           || (code >= 0xa461 && code <= 0xa46f))) {   // base subscripts, bases 2..16
         return false;
       }
       i = (uint16_t)(i + 2);

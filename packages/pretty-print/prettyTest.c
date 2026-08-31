@@ -1665,6 +1665,44 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
     ppcTestReset();
   }
 
+  /* T32 (PP18RR8-6, ruled option A): a based integer is one numeral —
+   * the base subscript is part of its spelling, like the group spaces —
+   * so an integer value leaf draws without brackets, on both surfaces.
+   * 0xa469 is the base-10 subscript (0xa461 + base - 2). */
+  {
+    ppcTestReset();
+    ppcTestType("10");
+    ppcTestOpParam(ITM_toINT, 10);
+    if(getRegisterDataType(REGISTER_X) != dtShortInteger) {
+      ppTestFail("T32 the value is not a short integer, so the row tests nothing");
+    }
+    else {
+      ppcTestOp(ITM_ENTER);
+      ppcTestType("2");
+      ppcTestOp(ITM_MULT);
+      uint8_t live = PP_NONE;
+      ppReset();
+      if(!ppfBuildCurrent(PP_FONT_STANDARD, PP_FONT_STANDARD, &live)) {
+        ppTestFail("T32 the based product does not build, so the row tests nothing");
+      }
+      else {
+        char sig[192];
+        sig[0] = 0;
+        ppfTestSigNode(live, sig, sizeof(sig));
+        if(strstr(sig, "\xa4\x69") == NULL) {
+          ppTestFail("T32 the leaf lost its base subscript, so the row tests nothing");
+        }
+        else if(strstr(sig, "P(") != NULL) {
+          ppTestFail("T32 a based numeral drew bracketed");
+        }
+        else {
+          ppfTestFiledMatchesLive("T32 filed based numeral");
+        }
+      }
+    }
+    ppcTestReset();
+  }
+
   /* T29 (PP18RR8-1): an unknown glyph fails the run in EVERY font.
    * findGlyph's id-based fallback reports a tinyFont miss as glyph 0,
    * so the eˣ catalog name (0xa147 0x82e3) measured and painted as
