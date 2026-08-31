@@ -104,7 +104,13 @@ static uint8_t ppqNumber(ppqCtx_t *c, uint8_t font) {
   if(!any) {
     return PP_NONE;
   }
-  return ppNewRun(c->s + start, (uint16_t)(c->pos - start), font);
+  {
+    uint8_t n = ppNewRun(c->s + start, (uint16_t)(c->pos - start), font);
+    if(n == PP_NONE) {
+      c->failed = true;   // digits were consumed, so a failed run must fail the parse
+    }
+    return n;
+  }
 }
 
 // name: ASCII letters plus subscript digits (X₁ etc.). The canonical

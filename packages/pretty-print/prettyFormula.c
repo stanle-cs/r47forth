@@ -17,7 +17,9 @@
 #include "c47.h"
 #include "prettyInternal.h"
 
-static char ppfValBuf[96];
+// Sized to ppfFormatStaged's own budget. The widest reachable spelling
+// is 160 bytes: base 2 at WSIZE 64 with digit grouping on.
+static char ppfValBuf[200];
 
 /* ==== value-leaf formatting (display context only) ====================== */
 
@@ -575,7 +577,8 @@ bool_t ppfBuildEntry(const uint8_t *entry, uint8_t ctxFont, uint8_t childFont,
         text[len] = 0;
         off = (uint16_t)(off + len);
         stackNode[sp] = ppfRun(text, ctxFont);
-        stackPrec[sp++] = PPF_PREC_ATOM;
+        stackPrec[sp++] = ppfTextIsAtom(text, (uint16_t)strlen(text))
+                            ? PPF_PREC_ATOM : PPF_PREC_ADD;
         break;
       }
       case PPT_TKV:
@@ -599,7 +602,8 @@ bool_t ppfBuildEntry(const uint8_t *entry, uint8_t ctxFont, uint8_t childFont,
             return false;
           }
           stackNode[sp] = ppfRun(ppfValBuf, ctxFont);
-          stackPrec[sp++] = PPF_PREC_ATOM;
+          stackPrec[sp++] = ppfTextIsAtom(ppfValBuf, (uint16_t)strlen(ppfValBuf))
+                              ? PPF_PREC_ATOM : PPF_PREC_ADD;
         }
         break;
       }

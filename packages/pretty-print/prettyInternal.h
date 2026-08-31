@@ -125,7 +125,7 @@ uint8_t ppqFrameDerivative(uint8_t eq, bool_t second);   ///< d/dx (d²/dx²) fr
 uint8_t ppfRun    (const char *s, uint8_t fontId);
 uint8_t ppfWrapIf (uint8_t node, int prec, int minPrec, uint8_t fontId);   ///< parens iff prec < minPrec
 uint8_t ppfPowBase(uint8_t a, int aPrec, uint8_t fontId);   ///< a power's base: parens iff the base node is itself a PP_SUP
-bool_t  ppfTextIsAtom(const char *s, uint16_t len);   ///< digits, radix and digit-group spaces only; anything else reads as a term
+bool_t  ppfTextIsAtom(const char *s, uint16_t len);   ///< for NUMERIC leaf text only. A name is always an atom: judge a run that can hold one with ppfRunPrec
 int     ppfRunPrec(uint8_t n);                        ///< PPF_PREC_ATOM or _ADD for a built PP_RUN, from its text
 uint8_t ppfBuildOp1(uint16_t item, uint8_t a, int aPrec,
                     uint8_t ctxFont, uint8_t childFont, int *outPrec);

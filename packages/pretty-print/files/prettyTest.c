@@ -779,6 +779,7 @@ void prettyTestFallback(uint16_t unusedButMandatoryParameter) {
 // traces decode history entries through them.
 static void ppfTestSigNode(uint8_t n, char *out, size_t cap);
 static void ppfTestExpect(const char *what, uint8_t root, const char *expected);
+static void ppfTestFiledMatchesLive(const char *what);
 static bool_t ppfTestPowersScoped(uint8_t n);
 static const char *ppfTestFirstRunText(uint8_t n);
 
@@ -868,6 +869,8 @@ static void ppcTestReset(void) {
   setSystemFlag(FLAG_ASLIFT);
   aimBuffer[0] = 0;      // NIM typing residue must not leak into later
   nimNumberPart = NP_EMPTY;   // suite blocks (fn42Alpha asserts an empty buffer)
+  lastIntegerBase = 0;   // an entry MODE is residue too: a leaked base
+                         // makes later typed integers short integers
   prettyReset();
 }
 
@@ -1484,6 +1487,8 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
         if(!ppfTestPowersScoped(pw)) {
           ppTestFail("T25 a power's base is itself a power, unbracketed");
         }
+        // the same picture must survive filing (PP18RR7-1's class)
+        ppfTestFiledMatchesLive(powRows[r].what);
       }
     }
 
@@ -1547,6 +1552,7 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
       }
       else {
         ppfTestExpect("T25 a signed numeral brackets as a term", neg, "S(P(-5)|2)");
+        ppfTestFiledMatchesLive("T25 filed signed numeral");
       }
     }
 
@@ -1576,6 +1582,7 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
       else if(tbase == NULL || tbase->kind != PP_PAREN) {
         ppTestFail("T25 a squared typed scientific value draws its exponent against the owner's");
       }
+      ppfTestFiledMatchesLive("T25 filed typed scientific power");
     }
 
     ppcTestReset();
@@ -1604,7 +1611,58 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
         // a structural check
         ppTestFail("T25 a squared scientific value draws its two exponents as one");
       }
+      ppfTestFiledMatchesLive("T25 filed scientific power");
     }
+  }
+
+  /* T27 (PP18RR7-1): the filed picture equals the live one for the
+   * bracket-bearing operand shapes under MULT and SUB. */
+  {
+    ppcTestReset();
+    ppcTestType("3");
+    ppcTestOp(ITM_ENTER);
+    ppcTestType("5");
+    addItemToNimBuffer(ITM_CHS);
+    ppcTestOp(ITM_MULT);
+    ppfTestFiledMatchesLive("T27 filed MULT keeps the signed bracket");
+
+    ppcTestReset();
+    ppcTestType("7");
+    ppcTestOp(ITM_ENTER);
+    ppcTestType("5");
+    addItemToNimBuffer(ITM_CHS);
+    ppcTestOp(ITM_SUB);
+    ppfTestFiledMatchesLive("T27 filed SUB keeps the signed bracket");
+    ppcTestReset();
+  }
+
+  /* T28 (PP18RR7-2): for every base, the widest word must decode on
+   * the filed surface. Upstream draws each of these on one line. */
+  {
+    static const uint16_t bases[] = { 2, 4, 8, 10, 16 };
+    for(size_t b = 0; b < sizeof(bases) / sizeof(bases[0]); b++) {
+      ppcTestReset();
+      ppcTestType("0");
+      ppcTestOpParam(ITM_toINT, bases[b]);
+      ppcTestOp(ITM_ENTER);
+      ppcTestType("1");
+      ppcTestOpParam(ITM_toINT, bases[b]);
+      ppcTestOp(ITM_SUB);
+      if(getRegisterDataType(REGISTER_X) != dtShortInteger) {
+        ppTestFailInt("T28 the value is not a short integer, so the row tests nothing",
+                      (int)bases[b], (int)getRegisterDataType(REGISTER_X));
+        continue;
+      }
+      ppcTestOp(ITM_CLSTK);
+      uint8_t filed = PP_NONE;
+      ppReset();
+      if(!ppfBuildEntry(ppcHistoryEntry(0, NULL, NULL), PP_FONT_STANDARD,
+                        PP_FONT_STANDARD, true, &filed)) {
+        ppTestFailInt("T28 the widest word does not decode in this base",
+                      (int)bases[b], 0);
+      }
+    }
+    ppcTestReset();
   }
 
   /* T23c: a slot must be maintained wherever its register is
@@ -2503,6 +2561,36 @@ static void ppfTestExpect(const char *what, uint8_t root, const char *expected) 
   }
 }
 
+/* File the live formula with CLSTK, decode the filed entry, and
+ * require the same layout signature on both surfaces. Call with the
+ * formula still current, before any reset. */
+static void ppfTestFiledMatchesLive(const char *what) {
+  uint8_t live = PP_NONE, filed = PP_NONE;
+  char liveSig[192], filedSig[192], msg[256];
+  ppReset();
+  if(!ppfBuildCurrent(PP_FONT_STANDARD, PP_FONT_STANDARD, &live)) {
+    snprintf(msg, sizeof(msg), "%s: the live formula does not build, so the row tests nothing", what);
+    ppTestFail(msg);
+    return;
+  }
+  liveSig[0] = 0;
+  ppfTestSigNode(live, liveSig, sizeof(liveSig));
+  ppcTestOp(ITM_CLSTK);
+  ppReset();
+  if(!ppfBuildEntry(ppcHistoryEntry(0, NULL, NULL), PP_FONT_STANDARD,
+                    PP_FONT_STANDARD, false, &filed)) {
+    snprintf(msg, sizeof(msg), "%s: the filed entry does not decode", what);
+    ppTestFail(msg);
+    return;
+  }
+  filedSig[0] = 0;
+  ppfTestSigNode(filed, filedSig, sizeof(filedSig));
+  if(strcmp(liveSig, filedSig) != 0) {
+    ppTestFailures++;
+    printf("prettyPrint test FAIL: %s (live '%s', filed '%s')\n", what, liveSig, filedSig);
+  }
+}
+
 void prettyTestFormula(uint16_t unusedButMandatoryParameter) {
   (void)unusedButMandatoryParameter;
   ppTestFailures = 0;
@@ -3163,6 +3251,24 @@ void prettyTestEquation(uint16_t unusedButMandatoryParameter) {
   if(ppqParse("1/X" "\xa0\x1b", PP_FONT_STANDARD, PP_FONT_TINY, &root)) ppTestFail("EQ4 ellipsis accepted");
   ppReset();
   if(ppqParse("\x83\xc0" "/2", PP_FONT_STANDARD, PP_FONT_TINY, &root))  ppTestFail("EQ4 unknown glyph accepted");
+
+  /* EQ36 (PP18RR7-3): a numeral whose run does not fit the text pool
+   * must fail the parse, not vanish from the drawing. The leading
+   * terms lift ppTextLen so the legal-length numeral overflows while
+   * the short name after it still fits. */
+  {
+    static char big[520];
+    int p = 0;
+    for(int i = 0; i < 5; i++) { big[p++] = '1'; big[p++] = '+'; }
+    for(int i = 0; i < 492; i++) { big[p++] = '7'; }
+    big[p++] = 'a'; big[p++] = 'b'; big[p++] = 'c';
+    big[p++] = '/'; big[p++] = '2';
+    big[p] = 0;
+    ppReset();
+    if(ppqParse(big, PP_FONT_STANDARD, PP_FONT_TINY, &root)) {
+      ppTestFail("EQ36 a numeral vanished into the text pool and the parse still succeeded");
+    }
+  }
 
   /* EQ4b: radix parity. The evaluator treats ',' and '.' as the same
    * radix mark, so an acceptor whose verdict changes between the two
