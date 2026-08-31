@@ -108,11 +108,15 @@ uint8_t ppfRun(const char *s, uint8_t fontId) {
 }
 
 /* Is this run text a visual atom: something a raised exponent or a
- * neighboring operator can sit against without brackets? Only digits,
- * the radix mark, the digit-group spaces and a base subscript are —
- * a based integer is one numeral (ruled, PP18RR8-6). Anything else
- * reads as a term, so the leaf reports PPF_PREC_ADD and the bracket
- * rules handle it. */
+ * neighboring operator can sit against without brackets? Only digits —
+ * including the uppercase hex digits A..F and the wide-spelling binary
+ * glyphs — the radix mark, the digit-group spaces and a base subscript
+ * are. A based integer is one numeral in every base and every spelling
+ * (ruled, PP18RR8-6; domain completed, PP18RR9-2). Anything else reads
+ * as a term, so the leaf reports PPF_PREC_ADD and the bracket rules
+ * handle it. Lowercase letters stay rejected: the integer builder
+ * emits uppercase only, and a typed exponent's 'e' must read as a
+ * term. */
 bool_t ppfTextIsAtom(const char *s, uint16_t len) {
   if(s == NULL) {
     return true;
@@ -120,7 +124,8 @@ bool_t ppfTextIsAtom(const char *s, uint16_t len) {
   for(uint16_t i = 0; i < len && s[i] != 0; ) {
     uint8_t c = (uint8_t)s[i];
     if(c < 0x80) {
-      if(!((c >= '0' && c <= '9') || c == '.' || c == ',' || c == ' ')) {
+      if(!((c >= '0' && c <= '9') || (c >= 'A' && c <= 'F')
+           || c == '.' || c == ',' || c == ' ')) {
         return false;
       }
       i++;
@@ -131,7 +136,8 @@ bool_t ppfTextIsAtom(const char *s, uint16_t len) {
       }
       uint16_t code = (uint16_t)(((uint16_t)c << 8) | (uint8_t)s[i + 1]);
       if(!((code >= 0xa000 && code <= 0xa00f)          // digit-group spaces
-           || (code >= 0xa461 && code <= 0xa46f))) {   // base subscripts, bases 2..16
+           || (code >= 0xa461 && code <= 0xa46f)       // base subscripts, bases 2..16
+           || code == 0xa20e || code == 0xa027)) {     // wide base-2 digit glyphs
         return false;
       }
       i = (uint16_t)(i + 2);
@@ -715,6 +721,41 @@ bool_t ppfBuildEntry(const uint8_t *entry, uint8_t ctxFont, uint8_t childFont,
 }
 
 
+#if defined(PC_BUILD)
+/* Test seam: stage a raw register payload and return its display
+ * spelling. The alphabet pin (T33) enumerates spellings against the
+ * fonts without a keypad fixture. */
+bool_t ppfTestStagedSpelling(uint8_t dataType, uint8_t tag, const uint8_t *payload,
+                             uint8_t bytes, char *out, size_t cap) {
+  if(!ppfStageValFields(dataType, tag, 0, bytes, payload)) {
+    return false;
+  }
+  char buf[200];
+  if(!ppfFormatStaged(buf, sizeof(buf))) {
+    return false;
+  }
+  if(strlen(buf) >= cap) {
+    return false;
+  }
+  strcpy(out, buf);
+  return true;
+}
+#endif // PC_BUILD
+
+
+/* The system-flags catalog's generated row count, from the softmenu
+ * table. The flag browser bounds its walk with this, and FB1 asserts
+ * the same derivation, so the two cannot drift (PP18RR9-4). */
+int16_t prettySysflRows(void) {
+  for(uint16_t m = 0; softmenu[m].menuItem != 0; m++) {
+    if(softmenu[m].menuItem == -MNU_SYSFL) {
+      return softmenu[m].numItems;
+    }
+  }
+  return NUMBER_OF_SYSTEM_FLAGS;
+}
+
+
 /* ==== PHIST: the history pager ========================================== */
 
 // Inset 4 px from the frame lines at 20/168: plain clearance between a
@@ -806,14 +847,16 @@ void fnPrettyHist(uint16_t unusedButMandatoryParameter) {
   int16_t asc, h;
 
   // Pass 1: variable-height packing to count pages. Rows pack until
-  // the band fills.
+  // the band fills. A row that cannot build keeps its place as a
+  // fixed-height placeholder line: a filed entry must not vanish from
+  // the page (PP18RR9-1).
   uint8_t pages = 1;
   {
     uint8_t page = 0;
     int16_t y = PPF_BAND_TOP;
     for(uint8_t row = 0; row < totalRows; row++) {
       if(!ppfBuildRow(row, haveCurrent, false, &root, &asc, &h)) {
-        continue;
+        h = 20;
       }
       if(y + h - 1 > PPF_BAND_BOTTOM) {
         page++;
@@ -829,20 +872,28 @@ void fnPrettyHist(uint16_t unusedButMandatoryParameter) {
   drawSinglePixelFullWidthLine(20);
   drawSinglePixelFullWidthLine(168);
 
-  // Pass 2: paint the selected page with the same packing walk
+  // Pass 2: paint the selected page with the same packing walk. The
+  // placeholder height must match pass 1 or the pages drift.
   {
     uint8_t page = 0;
     int16_t y = PPF_BAND_TOP;
     for(uint8_t row = 0; row < totalRows && page <= ppfPage; row++) {
-      if(!ppfBuildRow(row, haveCurrent, false, &root, &asc, &h)) {
-        continue;
+      bool_t built = ppfBuildRow(row, haveCurrent, false, &root, &asc, &h);
+      if(!built) {
+        h = 20;
       }
       if(y + h - 1 > PPF_BAND_BOTTOM) {
         page++;
         y = PPF_BAND_TOP;
       }
       if(page == ppfPage) {
-        ppPaintAt(root, 4, (int16_t)(y + asc));
+        if(built) {
+          ppPaintAt(root, 4, (int16_t)(y + asc));
+        }
+        else {
+          showString("(cannot draw)", &standardFont, 4, (uint32_t)y,
+                     vmNormal, false, true);
+        }
       }
       y = (int16_t)(y + h + PPF_ROW_GAP);
     }

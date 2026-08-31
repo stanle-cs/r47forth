@@ -780,6 +780,7 @@ void prettyTestFallback(uint16_t unusedButMandatoryParameter) {
 static void ppfTestSigNode(uint8_t n, char *out, size_t cap);
 static void ppfTestExpect(const char *what, uint8_t root, const char *expected);
 static void ppfTestFiledMatchesLive(const char *what);
+static uint32_t ppvSumRows(int16_t top, int16_t bottom);
 static bool_t ppfTestPowersScoped(uint8_t n);
 static const char *ppfTestFirstRunText(uint8_t n);
 
@@ -1703,6 +1704,198 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
     ppcTestReset();
   }
 
+  /* T32b (PP18RR9-2, -7): the ruling covers every base and every digit.
+   * One row per base 2..16 with the value 2*base-1, whose spelling is
+   * '1' plus the base's highest digit plus the base subscript — so the
+   * loop drives both window edges (0xa461, 0xa46f) and the hex letters
+   * A..F. No row brackets. */
+  {
+    for(uint16_t b = 2; b <= 16; b++) {
+      ppcTestReset();
+      // the multiplier types FIRST: after →INT the entry mode is base
+      // b, and '2' is not a digit there for b == 2
+      ppcTestType("2");
+      ppcTestOp(ITM_ENTER);
+      char dec[4];
+      snprintf(dec, sizeof(dec), "%u", (unsigned)(2 * b - 1));
+      ppcTestType(dec);
+      ppcTestOpParam(ITM_toINT, b);
+      if(getRegisterDataType(REGISTER_X) != dtShortInteger) {
+        ppTestFailInt("T32b the value is not a short integer, so the row tests nothing",
+                      (int)b, (int)getRegisterDataType(REGISTER_X));
+        continue;
+      }
+      ppcTestOp(ITM_MULT);
+      uint8_t live = PP_NONE;
+      ppReset();
+      if(!ppfBuildCurrent(PP_FONT_STANDARD, PP_FONT_STANDARD, &live)) {
+        ppTestFailInt("T32b the based product does not build", (int)b, 0);
+        continue;
+      }
+      char sig[192];
+      sig[0] = 0;
+      ppfTestSigNode(live, sig, sizeof(sig));
+      char sub[3] = { (char)0xa4, (char)(0x61 + b - 2), 0 };
+      if(strstr(sig, sub) == NULL) {
+        ppTestFailInt("T32b the leaf lost its base subscript, so the row tests nothing",
+                      (int)b, 0);
+      }
+      else if(strstr(sig, "P(") != NULL) {
+        ppTestFailInt("T32b a based numeral drew bracketed", (int)b, 1);
+      }
+    }
+    ppcTestReset();
+  }
+
+  /* T32c (PP18RR9-2, the wide half): past the plain-digit width limit
+   * the builder re-spells base 2 with the binary glyphs 0xa20e/0xa027.
+   * That spelling is still one numeral and draws bare. */
+  {
+    ppcTestReset();
+    ppcTestType("0");
+    ppcTestOpParam(ITM_toINT, 2);
+    ppcTestOp(ITM_ENTER);
+    ppcTestType("1");
+    ppcTestOpParam(ITM_toINT, 2);
+    ppcTestOp(ITM_SUB);          // all 64 bits set at the default WSIZE
+    if(getRegisterDataType(REGISTER_X) != dtShortInteger) {
+      ppTestFail("T32c the value is not a short integer, so the row tests nothing");
+    }
+    else {
+      ppcTestOp(ITM_ENTER);
+      ppcShadowInvalidate();   // forget the 0-1 formula: the product's
+                               // left side must be a VALUE leaf
+      lastIntegerBase = 0;     // leave base-2 entry mode so '2' types
+      ppcTestType("2");
+      ppcTestOp(ITM_MULT);
+      uint8_t live = PP_NONE;
+      ppReset();
+      if(!ppfBuildCurrent(PP_FONT_STANDARD, PP_FONT_STANDARD, &live)) {
+        ppTestFail("T32c the wide binary product does not build");
+      }
+      else {
+        char sig[192];
+        sig[0] = 0;
+        ppfTestSigNode(live, sig, sizeof(sig));
+        char bin[3] = { (char)0xa2, (char)0x0e, 0 };
+        if(strstr(sig, bin) == NULL) {
+          ppTestFail("T32c the spelling never reached the binary glyphs, so the row tests nothing");
+        }
+        else if(strstr(sig, "P(") != NULL) {
+          ppTestFail("T32c a wide binary numeral drew bracketed");
+        }
+      }
+    }
+    ppcTestReset();
+  }
+
+  /* T34 (PP18RR9-1): a filed row the fonts cannot draw still holds its
+   * place in the PHIST pager as a placeholder line. The fixture is the
+   * round-9 probe: a RAD polar complex, too wide for the standard rung,
+   * with the 0x82b3 unit suffix that tinyFont lacks. */
+  {
+    ppcTestReset();
+    ppcTestOp(ITM_PCLR);                   // an empty history isolates the row
+    reallocateRegister(REGISTER_X, dtComplex34, 0, amNone);
+    int32ToReal34(3, REGISTER_REAL34_DATA(REGISTER_X));
+    int32ToReal34(4, REGISTER_IMAG34_DATA(REGISTER_X));
+    setComplexRegisterAngularMode(REGISTER_X, amRadian);
+    setComplexRegisterPolarMode(REGISTER_X, amPolar);
+    ppcShadowInvalidate();
+    ppcTestType("123456789012345678901234567890");
+    ppcTestOp(ITM_MULT);
+    ppcTestOp(ITM_CLSTK);                  // files the one undrawable row
+    ppcTestExpectHist("T34 the RAD polar row files", 1);
+    uint8_t probeRoot;
+    int16_t probeAsc, probeH;
+    if(ppfBuildRow(0, 0, false, &probeRoot, &probeAsc, &probeH)) {
+      ppTestFail("T34 the row builds after all, so the fixture tests nothing");
+    }
+    else {
+      calcMode = CM_PRETTY_BROWSER;   // the pager paints only in-mode;
+                                      // any other mode routes to the browser
+      lastErrorCode = 0;
+      lcd_fill_rect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, LCD_SET_VALUE);
+      fnPrettyHist(NOPARAM);
+      calcMode = CM_NORMAL;
+      if(ppvSumRows(25, 163) == 0) {
+        ppTestFail("T34 an undrawable filed row vanished from the pager with no placeholder");
+      }
+      screenHoldsDrawnPixels = false;
+    }
+    ppcTestOp(ITM_PCLR);
+    ppcTestReset();
+  }
+
+  /* T33 (PP18RR9-1): every spelling a value leaf can emit, enumerated
+   * against the three fonts. A cell marked noTiny is an ACCEPTED
+   * decline: the tiny rung refuses that spelling and the pager shows
+   * the placeholder line. Every other cell must resolve in all three
+   * fonts, so a formatter or font change that widens a fatal alphabet
+   * reddens here instead of shipping a vanished row. */
+  {
+    real34_t r;
+    struct { real34_t re, im; } cp;
+    uint64_t sword = 0x2aULL;
+    int32ToReal34(5, &r);
+    int32ToReal34(3, &cp.re);
+    int32ToReal34(4, &cp.im);
+    static const struct { const char *what; uint8_t dt; uint8_t tag; uint8_t noTiny; } cells[] = {
+      { "real none",         dtReal34,       amNone,                        0 },
+      { "real degree",       dtReal34,       amDegree,                      0 },
+      { "real radian",       dtReal34,       amRadian,                      1 },
+      { "real grad",         dtReal34,       amGrad,                        1 },
+      { "real dms",          dtReal34,       amDMS,                         0 },
+      { "complex rect",      dtComplex34,    amNone,                        0 },
+      { "complex polar deg", dtComplex34,    (uint8_t)(amDegree | amPolar), 0 },
+      { "complex polar rad", dtComplex34,    (uint8_t)(amRadian | amPolar), 1 },
+      { "shortint base 16",  dtShortInteger, 16,                            0 },
+    };
+    const font_t *fonts[3] = { &numericFont, &standardFont, &tinyFont };
+    for(size_t i = 0; i < sizeof(cells) / sizeof(cells[0]); i++) {
+      const uint8_t *pay;
+      uint8_t bytes;
+      if(cells[i].dt == dtReal34)         { pay = (const uint8_t *)&r;     bytes = 16; }
+      else if(cells[i].dt == dtComplex34) { pay = (const uint8_t *)&cp;    bytes = 32; }
+      else                                { pay = (const uint8_t *)&sword; bytes = 8;  }
+      char spell[200];
+      if(!ppfTestStagedSpelling(cells[i].dt, cells[i].tag, pay, bytes, spell, sizeof(spell))) {
+        ppTestFailInt("T33 a cell does not format, so it records nothing", (int)i, 0);
+        continue;
+      }
+      for(int f = 0; f < 3; f++) {
+        uint16_t missing = 0;
+        for(uint16_t p2 = 0; spell[p2] != 0; ) {
+          uint16_t code = (uint8_t)spell[p2];
+          if(code >= 0x80) {
+            code = (uint16_t)((code << 8) | (uint8_t)spell[p2 + 1]);
+            p2 = (uint16_t)(p2 + 2);
+          }
+          else {
+            p2++;
+          }
+          if(code == 0x0001 || (code >= 0xa000 && code <= 0xa00f)) {
+            continue;   // space-class: no glyph needed
+          }
+          if(findGlyphExact(fonts[f], code) < 0) {
+            missing = code;
+          }
+        }
+        bool_t expectOk = (f != 2) || !cells[i].noTiny;
+        if(expectOk && missing != 0) {
+          printf("prettyPrint test FAIL: T33 %s: code 0x%04x missing from font %d\n",
+                 cells[i].what, (unsigned)missing, f);
+          ppTestFailures++;
+        }
+        else if(!expectOk && missing == 0) {
+          printf("prettyPrint test FAIL: T33 %s: recorded as a tiny decline, and tiny now draws it — update the record\n",
+                 cells[i].what);
+          ppTestFailures++;
+        }
+      }
+    }
+  }
+
   /* T29 (PP18RR8-1): an unknown glyph fails the run in EVERY font.
    * findGlyph's id-based fallback reports a tinyFont miss as glyph 0,
    * so the eˣ catalog name (0xa147 0x82e3) measured and painted as
@@ -1754,6 +1947,9 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
       ppcTestOp(ITM_ADD);             // each ADD mints a PPN_VAL leaf
       ppcTestOp(ITM_ADD);
       ppcTestOp(ITM_CLSTK);           // displacing the formula files it
+      // two entries: the second ADD displaces the first ADD's formula,
+      // which files it, and CLSTK files the second
+      ppcTestExpectHist("T30 the wide integer formula files", 2);
       uint8_t filed = PP_NONE;
       ppReset();
       if(ppfBuildEntry(ppcHistoryEntry(0, NULL, NULL), PP_FONT_STANDARD,
@@ -1794,6 +1990,11 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
         if(strstr(sig, "\xa2\x21") == NULL) {
           ppTestFail("T31 a polar-tagged value leaf redrew in rectangular form");
         }
+        else if(strstr(sig, "53.130") == NULL) {
+          // the angle half of the two-argument fix: a regressed tag
+          // prints the radian magnitude under a degree sign
+          ppTestFail("T31 the angle is not the degree magnitude");
+        }
       }
     }
     ppcTestReset();
@@ -1812,6 +2013,12 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
     }
     if(rows < 61) {
       ppTestFailInt("FB1 the SYSFL catalog is too short to fill two screens", 61, (int)rows);
+    }
+    else if(prettySysflRows() != rows) {
+      // the browser's bound and this row derive from the same table;
+      // a drift between them is the walk reading past the array
+      ppTestFailInt("FB1 the browser's bound disagrees with the catalog",
+                    (int)rows, (int)prettySysflRows());
     }
     else {
       lastErrorCode = 0;
@@ -3447,6 +3654,25 @@ void prettyTestEquation(uint16_t unusedButMandatoryParameter) {
     if(ppqParse(big, PP_FONT_STANDARD, PP_FONT_TINY, &root)) {
       ppTestFail("EQ36 a numeral vanished into the text pool and the parse still succeeded");
     }
+  }
+
+  /* EQ37 (PP18RR9-OOF-1): the text pool's bound, asserted directly. A
+   * run of PP_TEXT_BYTES-1 bytes fills the pool exactly (cost is the
+   * length plus one). A second, empty run must be refused. This pin
+   * does not depend on the parser's run accounting, so it closes the
+   * one-byte slack EQ36's derivation leaves. */
+  {
+    static char fill[PP_TEXT_BYTES];
+    memset(fill, '7', sizeof(fill) - 1);
+    fill[sizeof(fill) - 1] = 0;
+    ppReset();
+    if(ppNewRun(fill, (uint16_t)(PP_TEXT_BYTES - 1), PP_FONT_STANDARD) == PP_NONE) {
+      ppTestFail("EQ37 a run that fills the pool exactly was refused");
+    }
+    else if(ppNewRun("", 0, PP_FONT_STANDARD) != PP_NONE) {
+      ppTestFail("EQ37 the pool accepted one byte past its bound");
+    }
+    ppReset();
   }
 
   /* EQ4b: radix parity. The evaluator treats ',' and '.' as the same

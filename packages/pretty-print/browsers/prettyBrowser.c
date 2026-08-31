@@ -82,7 +82,9 @@ static void pbPaint(void) {
         lcd_fill_rect(0, (uint32_t)y, 3, (uint32_t)h, LCD_EMPTY_VALUE);
       }
       if(!built) {
-        showString("(too large to show)", &standardFont, 8, (uint32_t)y,
+        // width is one reason of several: a glyph the font lacks also
+        // lands here, so the message must not claim to know (PP18RR9-1)
+        showString("(cannot draw)", &standardFont, 8, (uint32_t)y,
                    vmNormal, false, true);
         y = (int16_t)(y + h + 5);
         continue;

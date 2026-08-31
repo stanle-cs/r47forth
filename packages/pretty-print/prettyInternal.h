@@ -169,6 +169,8 @@ void             ppcShadowInvalidate(void);   ///< dispatch-bypassing mutations 
 uint8_t          ppcTestCurrentRaw(void);   ///< test only: the current root before the opaque screen
 uint8_t          ppcTestSlotRaw(uint8_t k);   ///< test only: slot k's raw arena index
 void             ppcTestDeinit(void);         ///< test only: re-arm the cold-start path
+bool_t           ppfTestStagedSpelling(uint8_t dataType, uint8_t tag, const uint8_t *payload,
+                                       uint8_t bytes, char *out, size_t cap);   ///< test only: a staged value's display spelling
 
 // prettyFormula.c: the browser reuses the pager's packed row builder.
 // canPan: the browser can scroll a row sideways, so it accepts any

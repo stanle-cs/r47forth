@@ -1,22 +1,18 @@
 diff --git a/src/c47/browsers/flagBrowser.c b/src/c47/browsers/flagBrowser.c
-index d7858c6945ea91e5918b867bc9c2188b98b79e47..2068c85f25e112d86b6fbe37fe19626c13e3fbe6 100644
+index d7858c6945ea91e5918b867bc9c2188b98b79e47..8aa60a6eb33c606dfbcd1d3f2f4cc680b18a3d18 100644
 --- a/src/c47/browsers/flagBrowser.c
 +++ b/src/c47/browsers/flagBrowser.c
-@@ -274,8 +274,19 @@ TO_QSPI const  letteredFlagDisplay_t letteredFlagDisplay[] = {
+@@ -274,8 +274,15 @@ TO_QSPI const  letteredFlagDisplay_t letteredFlagDisplay[] = {
        uint16_t systemFlag;
        uint16_t param;
        uint16_t x1, x2, y1, fOffset = currentFlgScr == SYSTEM_FLAGS_SCREEN_1 ? 0 : 60;
 +      /* pretty-print package: bound the walk by the catalog's own row
 +       * count, not the shared flag count. A package build can reserve a
 +       * flag id without a catalog row, so the two counts differ and a
-+       * count-bound loop reads past the array (audit PP18RR8-2). */
-+      int16_t sysflRows = NUMBER_OF_SYSTEM_FLAGS;
-+      for(uint16_t m = 0; softmenu[m].menuItem != 0; m++) {
-+        if(softmenu[m].menuItem == -MNU_SYSFL) {
-+          sysflRows = softmenu[m].numItems;
-+          break;
-+        }
-+      }
++       * count-bound loop reads past the array (audit PP18RR8-2).
++       * Upstream's own shape for this: fnOpenMenu scans softmenu[] for
++       * -menu and takes numItems (softmenus.c). */
++      int16_t sysflRows = prettySysflRows();
        for(f=0; f<=59; f++) {
 -        if(f+fOffset > NUMBER_OF_SYSTEM_FLAGS - 1) {
 +        if(f+fOffset > sysflRows - 1) {

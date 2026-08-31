@@ -37,6 +37,10 @@ void fnPrettyShow(uint16_t unusedButMandatoryParameter);
 void fnPrettyHist     (uint16_t unusedButMandatoryParameter);
 void fnPrettyHistClear(uint16_t unusedButMandatoryParameter);
 
+// the generated menu_SYSFL row count, from the softmenu table; the
+// flag-browser override bounds its walk with this
+int16_t prettySysflRows(void);
+
 // browser handlers, called from the keyboard.c / screen.c hooks
 void prettyBrowser     (uint16_t unusedButMandatoryParameter);
 void prettyBrowserUp   (void);

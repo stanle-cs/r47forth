@@ -277,14 +277,10 @@ TO_QSPI const  letteredFlagDisplay_t letteredFlagDisplay[] = {
       /* pretty-print package: bound the walk by the catalog's own row
        * count, not the shared flag count. A package build can reserve a
        * flag id without a catalog row, so the two counts differ and a
-       * count-bound loop reads past the array (audit PP18RR8-2). */
-      int16_t sysflRows = NUMBER_OF_SYSTEM_FLAGS;
-      for(uint16_t m = 0; softmenu[m].menuItem != 0; m++) {
-        if(softmenu[m].menuItem == -MNU_SYSFL) {
-          sysflRows = softmenu[m].numItems;
-          break;
-        }
-      }
+       * count-bound loop reads past the array (audit PP18RR8-2).
+       * Upstream's own shape for this: fnOpenMenu scans softmenu[] for
+       * -menu and takes numItems (softmenus.c). */
+      int16_t sysflRows = prettySysflRows();
       for(f=0; f<=59; f++) {
         if(f+fOffset > sysflRows - 1) {
           break;

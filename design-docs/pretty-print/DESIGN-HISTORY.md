@@ -1648,3 +1648,31 @@ red, so the current shape is the deliberate one.
 
 Exit criterion: not met. The counter stays at zero. Report:
 AUDIT_PP18-restarted-round-9-COMPLETE-*_2026-08-31-r9.md.
+
+## 2026-08-31 — the round-9 fix wave: all nine findings closed
+
+PP18RR9-1: the PHIST pager keeps a fixed-height "(cannot draw)" line
+for a row the fonts cannot draw, in both packing passes, and the
+browser's fallback message stops claiming width. T33 enumerates every
+value-leaf spelling against the three fonts through a test seam
+(ppfTestStagedSpelling); the RAD and GRAD tiny declines are recorded as
+accepted cells. PP18RR9-2: ppfTextIsAtom admits the uppercase hex
+digits and the wide base-2 glyphs — a based integer is one numeral in
+every base and every spelling. T32b drives all fifteen bases, which
+covers PP18RR9-7's window edges; T32c drives the substituted binary
+alphabet. PP18RR9-3: the A8 handoff clause is restored and the sibling
+report is paste-ready. PP18RR9-4: the walk bound lives in
+prettySysflRows() and FB1 asserts the browser's own derivation.
+PP18RR9-5/-6: T31 asserts the degree magnitude; T30 gains its filing
+control. PP18RR9-OOF-1: EQ37 asserts the text-pool bound directly.
+PP18RR9-8: the override comment names fnOpenMenu as upstream's shape.
+
+Evidence: six hex rows red then green; the two repairs that predate
+their pins are proved by marked mutations — the placeholder revert
+reds T34 and the window revert reds T32c, each as the sole new
+failure, probes verified in the built artifact and restored by inverse
+edit. Three fixture lessons: a digit key after →INT 2 is refused in
+base-2 entry mode, a live 0−1 formula is not a value leaf, and
+fnPrettyHist routes to the browser unless calcMode is already
+CM_PRETTY_BROWSER — the pager pin measured the wrong surface's ink for
+two cycles before that read.
