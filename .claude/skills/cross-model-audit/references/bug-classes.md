@@ -609,18 +609,18 @@ predicate") is then true of the producers it counted and false of the one
 it missed.
 
 Found: `b27394db6` taught two leaf producers to stake precedence and
-deleted the consumer-side scan that had covered all of them; the history
+deleted the consumer-side scan that had covered all of them. The history
 decoder was the third producer and kept staking `PPF_PREC_ATOM`. The filed
 row lost the bracket the live row gained, on the same screen.
 
 Hunt it at: any fix whose message counts sites ("both", "all three").
-Grep the call graph for the moved rule's consumers and producers; compare
+Grep the call graph for the moved rule's consumers and producers. Compare
 the count against the fix's own claim.
 
 ## two size gates on one path, and the reasoned-about gate is not the deciding one (pretty-print, PP18 r7)
 
-A path carries two length checks. The fix reasons about one (and sizes it
-correctly); the other, smaller one decides first. The proof beside the
+A path carries two length checks. The fix reasons about one, and sizes
+it correctly. The other, smaller one decides first. The proof beside the
 first gate is sound and irrelevant.
 
 Found: the `dtShortInteger` repair guarded a 200-byte copy, but the
@@ -629,7 +629,7 @@ on the same path. A base-2 64-bit row (160 bytes) vanished behind "too
 large to show" while upstream drew the same value on one line.
 
 Hunt it at: every buffer-size fix. List EVERY length comparison between
-the formatter and the paint, with the values multiplied out; the smallest
+the formatter and the paint, with the values multiplied out. The smallest
 one is the contract.
 
 ## one sentinel, two meanings (pretty-print, PP18 r7)
@@ -640,7 +640,7 @@ meaning receives the second, and the parse continues from a position that
 already moved.
 
 Found: `ppqNumber` consumes its digits, then its `ppNewRun` fails on the
-length-dependent text pool and returns `PP_NONE` unlatched; `ppqPrimary`
+length-dependent text pool and returns `PP_NONE` unlatched. `ppqPrimary`
 reads that as "not a number" and parses a name from the advanced position.
 A 507-byte equation drew with its 492-digit numeral missing and reported
 success.
@@ -663,5 +663,5 @@ long integers. Green stayed green because the capture hook snapshots the
 typed text before the base suffix.
 
 Hunt it at: every reset/teardown helper in a test harness. Enumerate the
-globals the harness's own drivers can write; the helper must restore that
+globals the harness's own drivers can write. The helper must restore that
 set, not the set the author remembered.

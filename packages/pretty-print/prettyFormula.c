@@ -603,7 +603,7 @@ bool_t ppfBuildEntry(const uint8_t *entry, uint8_t ctxFont, uint8_t childFont,
           resultRun = ppfRun(ppfValBuf, ctxFont);
           if(resultRun == PP_NONE) {
             return false;   // a lost "= result" tail must decline, not degrade:
-                            // the recall path would still find the TKRES
+                            // the recall path still finds the TKRES
           }
         }
         else {

@@ -1571,13 +1571,13 @@ fixes, zero after, each for its predicted reason.
 
 Ruled and recorded, not fixed: -6 (the separator alphabet waits for the
 predicate's next touch), -8 (the hook table is the rebaser's document),
--7 beyond the header obligation now on `ppfTextIsAtom`, and -5's code
+-7 beyond the header obligation on `ppfTextIsAtom`, and -5's code
 half — the `tmpString` scratch write stays, and §1's fallback rule now
 names it as the one exception.
 
 Two process facts this wave paid for. `make pkg_build` refreshes AFTER
 its suite runs, so its first run after an edit tests the stale mirror —
-run the refresh first (CLAUDE.md now says so). And the comment pass
+run the refresh first (CLAUDE.md says so). And the comment pass
 that landed as `fd080dee9` had changed the meaning of fifteen comments;
 an independent review of all 376 rewritten hunks found them, worst
 being an inverted XEQ-latch direction and a bracket rule that claimed a
@@ -1589,14 +1589,14 @@ Round 8's subject was the round-7 fix wave (f4421da32..7fdda3129).
 In-family on Opus: ten confirmed (PP18RR8-1..10), five of them wave-0
 defects the rotated axis (what the new pins cannot see) reached first.
 Out of family: Sol read the pin net (2 of 7 survived), Gemini read the
-repairs (0 of 3 survived); a refutation-only completion pass judged all
+repairs (0 of 3 survived). A refutation-only completion pass judged all
 ten after the in-family half filled the verification cap. Round totals:
 34 raised, 12 confirmed, 3 plausible, 19 refuted. The two surviving
 out-of-family findings are mutation-proved coverage defects: the
 equality oracle is font-blind on the ctxFont axis, and no equality row
 reaches a name leaf. Reports:
 AUDIT_PP18-restarted-round-8-*_2026-08-30-r8.md and its completion
-half. Verdict: do not ship this tip; the exit criterion counter stays
+half. Verdict: do not ship this tip. The exit criterion counter stays
 at zero. The round-7 fix wave's measured device cost: flash +8 bytes,
 RAM +104 bytes of BSS (make dmcp5r47 at 4361b80e9 against f4421da32).
 Packet lesson encoded (template class 9): an excluded body must be
@@ -1612,8 +1612,8 @@ per PP18RR8-8's one-byte-margin mutation. The flag browser gained a
 one-hunk override that bounds the SYSFL walk by the catalog's own row
 count — correct in every package combination — and A8's arithmetic in
 DESIGN.md §7 is corrected (solo 115/114, combined 115/115). The A8
-class test could not be a count-equality pin: the count covers RESERVED
-ids by design, so equality is false in every solo build; the bound
+class test cannot be a count-equality pin: the count covers RESERVED
+ids by design, so equality is false in every solo build. The bound
 itself moved to the generated array instead. PP18RR8-6 (the base
 subscript outside ppfTextIsAtom's window) awaits the owner's ruling;
 -7, -9, -10, OOF-2 and OOF-1's general half stay open by the round-8

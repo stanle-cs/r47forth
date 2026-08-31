@@ -1733,7 +1733,7 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
    * the entry DECLINES rather than paint without its "= result" tail.
    * LEAD.0 in base 2 at WSIZE 64 spells each value at 160 bytes, so
    * three value leaves and two operators leave no room for the tail
-   * (the recall path would still find the TKRES and push a number the
+   * (the recall path still finds the TKRES and pushes a number the
    * row never showed). */
   {
     setSystemFlag(FLAG_LEAD0);
@@ -5664,9 +5664,9 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
   // 255. The name must still resolve to 'w'.
   ppvTestExpect("V70 variable name interned past offset 255", "VOFF",
                 "INTEG(w;w;0;2)");
-  // V71: the invented counter must avoid enclosing bindings, free
-  // names, and the limit subtrees. A closed sibling's counter is out
-  // of scope and its name is reusable (V77 pins that).
+  // V71: the invented counter must not collide with enclosing
+  // bindings, free names, or the limit subtrees. A closed sibling's
+  // counter is out of scope and its name is reusable (V77 pins that).
   {
     char want[64];
     sprintf(want, "SUM(m%sm;m;1;n)", STD_CROSS);

@@ -95,9 +95,9 @@ finding.
         numbers in front of them.
      9. AN EXCLUDED BODY MUST BE INERT FOR THE QUESTION ASKED. PP18
         round 8 excluded ppfBigop's body from a font-divergence packet
-        because only its precedence stake seemed relevant; the body
-        RESTYLES both limit subtrees (ppSetFontDeep), which killed the
-        reader's top finding. If the question turns on a property
+        because only its precedence stake seemed relevant. The body
+        RESTYLES both limit subtrees (ppSetFontDeep), and that killed
+        the reader's top finding. If the question turns on a property
         (fonts, sizes, positions), every excluded function that can
         TRANSFORM that property between the included excerpts must be
         included, or the Orientation must state its effect on that
