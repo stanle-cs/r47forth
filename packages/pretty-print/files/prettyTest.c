@@ -5868,9 +5868,10 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
    * gate green. Both bits are SET first, or the assertion passes on an
    * ambient that was already clear. The reach check is mandatory here —
    * a probe counted SIX calls in this suite that get as far as a paint
-   * arm, and all six take the stack-window arm at its first rung. V27
+   * arm, and all six took the stack-window arm at its first rung. V27
    * is one of them (an earlier note said otherwise; it read a decline
-   * belonging to another call). V-FULL below drives the other arm. */
+   * belonging to another call). V-FULL was written from that count and
+   * is the seventh — it drives the full-screen arm, which had none. */
   {
     calcRegister_t id = findNamedLabel("VPRC", GLOBAL_LABELS);
     calcMode = CM_NORMAL;
