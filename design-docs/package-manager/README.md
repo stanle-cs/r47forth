@@ -512,6 +512,27 @@ real size and the limit, and the oversized zip is deleted, not left behind
 as a false-positive artifact. Override with
 `make pkg_build PKG=packages/my-pkg PKG_MAX_SIZE=2000000`.
 
+**Dependent packages (`PKG_TEST_WITH`, added at PP19).** A package can
+require another package (pretty-print-extra requires pretty-print: it
+calls the core engine's API and never links alone). The resolver has no
+dependency concept — the requirement is documented in the package's
+DESIGN.md and enforced by its gate script. For `pkg_build`, pass the
+package's minimal working composition:
+
+```
+make pkg_build PKG=packages/pretty-print-extra \
+  PKG_TEST_WITH=packages/pretty-print,packages/pretty-print-extra
+```
+
+The gating test run uses the `PKG_TEST_WITH` list; the zip still
+contains only `$(PKG)`'s own `patches/`+`files/`. Unset, the test runs
+against `$(PKG)` alone (unchanged behavior).
+
+`make clean` no longer removes `pkg_dist/` (changed at PP19): pkg_build
+starts with `make clean`, so with two packages the second run destroyed
+the first artifact. Each pkg_build refreshes its own zip. Remove
+`pkg_dist/` by hand when you want it gone.
+
 > **The cap is a tripwire, not a firmware budget** (raised from 200000,
 > 2026-07-25). The original figure came from a "DM42-class flash/RAM"
 > rationale; the target is R47 specifically, so that rationale is void.

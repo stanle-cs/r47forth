@@ -94,6 +94,11 @@ replacing the other. Two packages editing different parts of one
 function is fine. If both touch the same lines, configure fails and
 tells you which patch did it.
 
+A package can require a second package. The post that ships it names
+the requirement. Put both in the CUSTOM_PKG list, with the required
+package first. The dependent package alone does not build: the
+compile stops with a named error.
+
 
 REFRESH BEFORE YOU BUILD
 ------------------------

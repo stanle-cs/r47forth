@@ -1,19 +1,37 @@
-# Pretty-print package — testing
+# Pretty-print + pretty-print-extra — testing
 
-The package is tested in upstream harness 2 (`src/testSuite/`), the same way
-undo-history is: coverage drivers registered in `funcTestNoParam[]` with
-`coverageDriver = 1`, driven by `testSuite/tests/pretty_print.txt`
-(`In:/Func:/Out:` blocks; each driver writes its failure count into X as a
-long integer, `Out: EC=0 RX=LonI:"0"`). Drivers live in the package file
-`prettyTest.c` under `#if defined(PC_BUILD)` — test-only code, never built
-for the device (undo-history's driver shape, packages/undo-history/
-undoHistory.c PC_BUILD section).
+This file is the test contract for BOTH halves of the PP19 split. The
+pins grew as one battery across eighteen stages and nine audit rounds,
+they share one scaffolding (the `ppTest*` helpers, exported from the
+core's prettyTest.c), and they run in one suite. A split of the
+registry only breaks its cross-references.
 
-The gate is `./packages/pretty-print/build-test.sh` (refresh → configure →
-build → testSuite, solo AND combined with forth-core + undo-history; exit
-status and the success banner both required). An edit to the flat working
-area is invisible until `tools/pkg_patch_refresh.py` runs — the gate script
-does this first, always.
+Both packages are tested in upstream harness 2 (`src/testSuite/`), the
+same way undo-history is: coverage drivers registered in
+`funcTestNoParam[]` with `coverageDriver = 1` (`In:/Func:/Out:` blocks;
+each driver writes its failure count into X as a long integer,
+`Out: EC=0 RX=LonI:"0"`). All drivers build under
+`#if defined(PC_BUILD)` only — test code never reaches the device.
+
+Driver-to-package map since PP19:
+
+| package | driver file | drivers | test scripts |
+|---|---|---|---|
+| pretty-print | `prettyTest.c` | Measure, Pixels, Fallback, Show, Equation, Visual, Real | `tests/pretty_print.txt`, `tests/pretty_visual_real.txt` |
+| pretty-print-extra | `prettyExtraTest.c` | Capture, Formula, EqLang | `tests/pretty_extra.txt` |
+
+The gates run refresh → configure → build → testSuite per pass, and
+each pass requires the exit status AND the success banner:
+
+- `./packages/pretty-print/build-test.sh` — solo, trio (forth-core +
+  undo-history + core), full (all four packages).
+- `./packages/pretty-print-extra/build-test.sh` — pair (core + extra),
+  full. There is no solo pass: the package cannot link alone, by
+  design.
+
+An edit to the flat working area is invisible until
+`tools/pkg_patch_refresh.py` runs — the gate scripts do this first,
+always.
 
 ## Drivers (stage PP1)
 
@@ -450,8 +468,8 @@ fixed — the forth-core 2026-07-21 rule applies unchanged.
 
 - Keep the pre-change testSuite log; diff sorted `PASS:` lines after.
 - BSS delta measured at every stage gate (`size` on the sim binary,
-  before/after); the §8 budget in DESIGN.md is the ceiling.
-- Flash: `make dmcp5r47 CUSTOM_PKG=packages/forth-core,packages/undo-history,packages/pretty-print
+  before/after); the §6 budgets in the two DESIGN.md files are the ceiling.
+- Flash: `make dmcp5r47 CUSTOM_PKG=packages/forth-core,packages/undo-history,packages/pretty-print,packages/pretty-print-extra
   CUSTOM_PKG_RECONFIGURE=1` delta recorded in the stage commit (without the
   reconfigure flag the number is the previous tree's).
 - Visual confirmation via the run-sim skill's capture driver (not a gate;

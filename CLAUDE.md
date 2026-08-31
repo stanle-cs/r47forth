@@ -6,7 +6,10 @@
   which are generated output — the build reads ONLY those, never your edits
   directly. Gate: ./packages/forth-core/build-test.sh (it refreshes first).
   That gate stays green under a broken pretty-print (audit round 7, §2).
-  For pretty-print work, the gate is `make pkg_build PKG=packages/pretty-print`.
+  For pretty-print work, the gate is `make pkg_build PKG=packages/pretty-print`;
+  for pretty-print-extra it is `make pkg_build PKG=packages/pretty-print-extra
+  PKG_TEST_WITH=packages/pretty-print,packages/pretty-print-extra` (the extra
+  package cannot build solo — it requires pretty-print).
   Run `tools/pkg_patch_refresh.py` first: pkg_build refreshes AFTER its suite
   runs, so its first run after an edit tests the stale mirror.
 - Forth sources live in packages/forth-core/; the docs live in

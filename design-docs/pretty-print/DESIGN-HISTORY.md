@@ -1676,3 +1676,136 @@ base-2 entry mode, a live 0−1 formula is not a value leaf, and
 fnPrettyHist routes to the browser unless calcMode is already
 CM_PRETTY_BROWSER — the pager pin measured the wrong surface's ink for
 two cycles before that read.
+
+## 2026-08-31 — PP19: the package split (pretty-print / pretty-print-extra)
+
+Stan asked for two packages: a `pretty-print` that holds the visual
+engine, independent and able to draw alone, and a `pretty-print-extra`
+for the non-essential code. The ruled boundary: the core draws what a
+register value looks like (layout engine, value converters, inline
+lines, PSHOW, both flags). The extra package draws where results came
+from (capture, formula history, pager + browser, EQN surfaces, the
+equation-language constructs, VISUAL) and owns the whole UI story
+(MNU_PP, the DISP/EQN menu slots, keyboard.c). The extra package
+requires the core. The core never references an extra symbol.
+
+The one code path that crossed the boundary was the T-line live
+formula: `prettyTryRegisterLine` (core) called `ppfBuildCurrent`
+(capture viewer). It now runs through `ppTlineExtension`, a function
+pointer the extra package registers at its lazy init — no formula can
+exist before the first capture hook runs, and every capture hook runs
+`ppcInit` first, so the registration always precedes the first
+possible draw. `prettyReset` got the same treatment
+(`ppResetExtension`): the core owns the flag defaults, the extra
+package re-arms its own engine, and a NULL pointer means nothing ran,
+so nothing needs re-arming. Cost: 8 B of BSS.
+
+Item moves forced by the touching-line rule: `PCLR` 461→985 and
+`PHIST` 462→986, because rows 461/462 touch the core's 459/460 and a
+sibling row that touches another package's row is a 3-way conflict.
+They now sit beside `VISUAL` in the free 984-987 run. Nothing shipped
+references the old ids. The 215-219 hunk (PTLIN, EQSHW, MNU_PP, both
+SYSFL rows) moved to the extra package whole, because a split of that hunk
+creates new adjacencies. Consequences, documented as design: a solo
+core build has no softmenu and no SYSFL rows (catalog access only,
+`FLAG_PTLINE` is a reserved hole), and the flagBrowser bound override
+stays in the core, where every combination needs it.
+
+New anchors so four patch stacks compose: the extra package's c47.h
+include after `statusBar.h` (:124), its five items.c stubs after
+`fn42Prompt` (:1660), its five funcTest rows after `fnSetC47` (:692).
+One relearned lesson, loudly: the trio configure FAILED when the split
+reworded the `NUMBER_OF_SYSTEM_FLAGS` comment — the identical-edit
+claim covers the COMMENT TEXT too, byte for byte, because the unifier
+is the 3-way merge, not the preprocessor.
+
+Infrastructure: `pkg_build` learned `PKG_TEST_WITH` (Makefile), so a
+package that cannot build solo can still gate its artifact against its
+required composition. The extra package's gate runs pair + full. The
+core's runs solo + trio + full. All five passes were green at the split
+commit. Combined behavior is byte-identical to the pre-split tree
+except the two renumbered item ids.
+
+Tests: prettyTest.c split at its own section boundary — the shared
+`ppTest*` scaffolding stays in the core and is exported through
+prettyInternal.h's PC_BUILD block. The Capture/Formula/Equation/
+Visual/Real drivers moved to `prettyExtraTest.c` unchanged.
+TESTING.md stays ONE file for the pair, by decision: the pins grew as
+one battery, and a split of the registry breaks its
+cross-references.
+
+## 2026-08-31 — PP19 amended: VISUAL and the native-function drawing return to the core
+
+Stan corrected the boundary the same day the split first shipped:
+"visual should be with core pretty print. anything that is used to
+draw native functions should not be in extra." The first cut had put
+every non-value surface in the extra package. The amended rule is
+cleaner: the core DRAWS (values, equations, constructs, programs, and
+the shared infix builders), the extra package REMEMBERS (capture, the
+history ring, and the views of that history).
+
+Moved back to the core: prettyVisual.c, prettyEquation.c, the whole
+solver/equation.c patch, and the native-drawing half of
+prettyFormula.c — carved into a new core file, prettyInfix.c
+(ppfBuildOp1/2, the bracket rules, ppfPowBase, ppfTextIsAtom, the name
+decodes). The PTLIN command moved too: it only flips a core-owned
+flag. The extra package keeps the capture-fed half of prettyFormula.c
+(staged value formatting, capture-tree decoding, the pager, the
+browser row builder, ppfTlineTry) and everything it kept before.
+
+The item map moved again, still under the touching-line rule: the core
+now owns the contiguous runs 459-462 (PSHOW, PPON, EQSHW, PTLIN) and
+984-986 (VISUAL, then both SYSFL rows), and the extra package owns
+215-217 (PCLR, PHIST, MNU_PP) — the same one-untouched-row gap to
+forth-core's row 213 the pre-split hunk proved. Menus stay whole in
+the extra package: they reference core item ids — legal, because
+the extra package never builds without the core.
+
+**New bug class, found by the reordering and paid for with two red
+pins: a pin that inherits ambient machine state tests whatever ran
+before it.** V38 asserted the classic-mode lift-latch decline while
+the walker's ENTER arm reads the machine's FLAG_ERPN — the capture
+driver's eRPN trace used to run first and restore the flag, so the pin
+was green by accident. T31 asserted the DEGREE angle magnitude while
+the staged amNone tag displays in the ambient angular mode. Both pins
+now set the state they assert and restore it after, by their own hand.
+The class joins the catalog beside R4-1's vacuity family: reachability
+through a real gesture is not enough, the MODE the gesture runs in is
+part of the pin.
+
+The five-pass gate matrix reran green. The shared test scaffolding
+grew: the program-fixture loader (ppcTestWriteAndLoadPgm and its label
+registry) and the layout-signature decoders (ppfTestSigNode,
+ppfTestExpect, ppfTestPowersScoped, ppfTestRunEndsSup, ppTreeHasRun,
+ppvSumRows) now live in the core's prettyTest.c, exported through
+prettyInternal.h, because the equation and walker pins moved to the
+core while the capture and formula pins still decode the same shapes.
+
+## 2026-08-31 — PP19, third ruling: the invented equation language is extra's
+
+Stan: "the package invented equation language should go into extra."
+The construct EVALUATOR — the parseEquation interception and the
+slice-evaluation machinery, the bulk of the 578 solver/equation.c
+lines — moved to pretty-print-extra. The RENDER arm stays in the
+core's `ppqParse` (it draws, and drawing is the core's): in a solo
+build it is unreachable, because without the evaluator no construct
+equation can be saved, so the picture-that-will-not-compute hazard
+needs both halves present, and there the shared `ppEqConstructIs`
+test keeps the spellings aligned. solver/equation.c is now a
+two-package file — core's `ppEqFunctionItem` (:213) and paint hook
+(:684) against extra's forward declaration (:736), interception
+(:1370) and tail block — and the pair gate proves the five hunks
+compose.
+
+The construct pins (EQ14-EQ29), the walker's two loop-closing pins
+(V18, V65 — they evaluate the walker's own output) and their solver
+state moved to a new extra driver, prettyTestEqLang. Its list line
+carries an ordering contract: after the core's prettyTestVisual
+(whose program fixtures it reads) and before serialize_cov (the
+reset).
+
+The ambient-state pin class claimed a third member: V36b asserted
+"the softkey row repaints after a typed VISUAL" while inheriting
+whichever menu an earlier pin had left up — the moved EQ blocks used
+to leave the EQN menu on the stack. The pin now pushes MNU_DISP by
+its own hand and pops it after.

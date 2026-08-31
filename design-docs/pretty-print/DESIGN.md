@@ -1,16 +1,27 @@
 # Pretty-print package — design
 
 This document is authoritative for `packages/pretty-print/`. Amendments and
-rejected shapes go to DESIGN-HISTORY.md; the test contract lives in TESTING.md.
+rejected shapes go to DESIGN-HISTORY.md. The test contract lives in
+TESTING.md.
 
 Pretty print means **natural display of calculations** (ruled 2026-08-26):
 textbook-style rendering of values (stacked fractions with a real bar, √ with
-a vinculum, raised exponents) and of the user's chained RPN operations
-reconstructed as infix formulas (`2+3 = 5`), eventually including 2D display
-of EQN formulas. It is an external package with the same structure and
-discipline as `packages/undo-history/`: flat working area mirroring upstream
-paths, generated `patches/`+`files/`, gate at
-`./packages/pretty-print/build-test.sh` (solo + combined passes).
+a vinculum, raised exponents), 2D display of EQN formulas, and the user's
+chained RPN operations reconstructed as infix formulas (`2+3 = 5`). Since
+the PP19 split (2026-08-31, boundary amended same day) this package holds
+**everything that draws native functions**: the layout engine, the value
+converters, the inline lines, PSHOW, the 2D equation surfaces (strip,
+EQSHW), and the VISUAL program walker. The calculation-capture engine,
+the formula history with its views, and the package-invented equation
+language (the SUM/PROD/DERIV/INTEG evaluator) live in
+`packages/pretty-print-extra`
+(design-docs/pretty-print-extra/DESIGN.md). That package requires this
+one. This one builds and works alone.
+
+It is an external package with the same structure and discipline as
+`packages/undo-history/`: flat working area mirroring upstream paths,
+generated `patches/`+`files/`, gate at
+`./packages/pretty-print/build-test.sh` (solo + trio + full passes).
 
 Upstream baseline facts the whole design leans on: value rendering is strictly
 one-baseline glyph strings (`display.c` builders → `showString`); fractions
@@ -73,29 +84,6 @@ denominator's starts `fracGap+2` below), so the ordering there is retained
 for uniformity, not because it is load-bearing. Keep the rule; do not
 re-derive its reason from the fraction case, which no longer demonstrates
 it.
-
-**Softkey containment is a RANGE, and it is not ours (BINDING, audit
-R5-3).** A modal browser must stop softkeys executing underneath it.
-Upstream does this in THREE places — `btnFnPressed`, `btnFnReleased` and
-`executeFunction` — each enumerating its own browsers by name
-(`CM_REGISTER_BROWSER`, `CM_FLAG_BROWSER`, `CM_ASN_BROWSER`,
-`CM_FONT_BROWSER`). A package browser is invisible to that list. Both
-sibling packages therefore carry the byte-identical clause
-`&& calcMode < 19 /* package browsers 19-23, claims registry */` on all
-three lines, and 3-way merge unifies them (the same identical-edit claim
-the `NUMBER_OF_SYSTEM_FLAGS` line uses).
-
-This package carried the guard only in `processKeyAction`, which is the
-DIRECT-key half of the driver. In the combined build undo-history's range
-edit covered us anyway, so the hole was invisible; in the SOLO build —
-one of the two gated configurations — pressing F3 while browsing ran
-`PCLR` and wiped the history being browsed, with the browser repainting
-over the evidence. Found by the round-5 fix review, which correctly
-flagged that it could not tell whether a sibling closed it. Never rely on
-a sibling for containment: the range clause is now in this package's
-`keyboard.c` too, and FV19 pins `CM_PRETTY_BROWSER` inside 19..23, since
-renumbering it out of that range would silently reopen the hole with
-nothing else going red.
 
 **Clearing-extent rule (BINDING, audit R3-13): a node clears exactly the box
 it measured, and never more.** Glyph runs go through `ppShowRun()`, which
@@ -166,143 +154,74 @@ upstream would have shown. Parse failure → fallback rule.
 - Long integers, strings, matrices, short integers, dates, times, configs:
   never pretty — immediate false.
 
-## §3 The capture engine (`prettyCapture.c`)
+## §3 The package boundary and the extension points (PP19)
 
-**Invariant (BINDING): shadow slot k always holds an expression whose value
-equals the live contents of register `REGISTER_X + k`. When a transform
-cannot maintain that, the slot degrades to a value leaf snapshotted from its
-register (truthful by construction) or the whole shadow invalidates. The
-display never lies; over-invalidation only costs history granularity.**
+The split rule, amended on the owner's correction the same day it first
+shipped: this package draws — register values AND the mathematics of
+native functions (operators, named functions, Σ/∏/∫, equations,
+programs). The extra package remembers — it captures live calculations
+into formula trees, keeps the history ring, and owns the views of that
+history (pager, browser, T line) plus the whole menu story. The extra
+package never draws a pixel itself: it decodes capture trees into
+layout nodes through this package's §1 and prettyInfix.c builders.
 
-State (all static BSS, ~640 B + 692 B ring): `ppArena[24]` of 24-byte nodes
-(op/literal/value/register/constant/opaque), shadow slots `ppSlot[8]` + L,
-current-formula root, pending-lift/enter latches, NIM text snapshot, staged
-transform. Literal leaves store **as-typed text** (`2.50` stays `2.50`);
-value leaves store raw register payloads ≤16 B (complex via a two-child
-header), formatted only at display time by staging into `TEMP_REGISTER_1` and
-calling the standard display builders — the same lazy-preview rule
-undo-history pinned. Matrix/string/oversized payloads become `PPN_OPAQUE`,
-which poisons the containing tree into never-being-shown.
+What the solo build contains, stated because it is a real install: the
+inline register lines, PSHOW, EQSHW and the 2D EQN strip, VISUAL,
+PPON, PTLIN and both system flags. The invented equation language is
+the extra package's, so a solo build cannot save construct equations
+(the base grammar rejects them). There is no softmenu — `MNU_PP` and every menu placement belong
+to the extra package, so solo users reach the commands through the
+catalog. The SYSFL catalog rows for the two flags are this package's
+(items.c rows 985/986). `PTLIN` toggles its flag in the solo build,
+and nothing reads it — the T-line renderer is the extra package's.
 
-**Two-phase operator mirroring.** Hooks sit around the verified dispatch site
-in `reallyRunFunction` (items.c: `stackWatermarkBeforeDispatch();` /
-`indexOfItems[func].func(param);` / `stackWatermarkAfterDispatch();`, ~:412):
-STAGE classifies the item and upgrades any UNKNOWN operand slots from the
-pre-op registers; DONE applies the staged transform only when
-`lastErrorCode == ERROR_NONE`, else discards it and invalidates the shadow (a
-failed function may have partially moved the stack).
+**Extension points (BINDING for the pair).** This package never
+references an extra symbol. Where a core code path must reach extra
+behavior, the core exposes a function pointer in prettyPrint.h and the
+extra package fills it in at its lazy init (`ppcInit`):
 
-**Number entry** is mirrored at the `closeNim` funnel, not at NIM open: the
-NIM-open hook only latches `FLAG_ASLIFT` (the flag is consumed by
-`closeNim`'s own head before commit); the leaf push plus lift-or-overwrite
-happen at `closeNim_exit` when the commit succeeded
-(`calcMode != CM_NIM && lastErrorCode == 0` — upstream's own commit
-predicate). A NIM aborted by backspace-to-empty runs upstream `undo()` and
-needs no shadow rollback, because nothing was applied. A head hook snapshots
-`aimBuffer` before `closeNim` mutates it (base suffixes, `#` truncation).
+- `ppTlineExtension` — `prettyTryRegisterLine` calls it for
+  `REGISTER_T` before the value rendering. The extra package draws the
+  live formula there (`ppfTlineTry`, gated on `FLAG_PTLINE`). The
+  registration timing is sound because no formula can exist before the
+  first capture hook runs, and every capture hook runs `ppcInit` first.
+- `ppResetExtension` — `prettyReset()` calls it before it restores the
+  flag defaults. A NULL pointer means the capture engine never ran, so
+  there is nothing to re-arm.
 
-**Coverage classifier.** A hand table (verified: no usable arity metadata
-exists upstream — `EIM_DY` shares its bit with `RESULT_IN_X` and is
-vestigial): dyadic and monadic op lists mirroring `isDyadicFunction`
-(equation.c:839), stack motions (ENTER incl. the eRPN no-dup branch, x<>y,
-R↑/R↓, CLX, DROP, CLSTK, FILL, LASTx, RCL/STO, x<>reg). **Default rule
-(BINDING): an unknown item that is undo-enabled (`US_ENABLED`/`US_ENABL_XEQ`)
-invalidates the whole shadow; an unknown `US_UNCHANGED`/`US_CANCEL` item is
-ignored** — upstream maintains that annotation for its own undo correctness,
-so it maintains our invalidation predicate too. Hand exceptions (stack
-mutators that are `US_UNCHANGED`): `ITM_UNDO`, undo-history's REDO (item
-428). Capture scope: manual interactive only — not `PGM_RUNNING`, not
-`FLAG_SOLVING`/`FLAG_INTING`, calcMode `CM_NORMAL`/`CM_NIM`.
+A NULL pointer is skipped, and the core behaves as if the extra
+package were absent. The measured sim BSS delta for the two pointers
+is zero — they sit in existing alignment padding (r47, PP19 gate).
 
-### Big operators (PP12)
+**prettyInfix.c** holds the shared 2D infix builders
+(`ppfBuildOp1`/`ppfBuildOp2`, the bracket rules, `ppfPowBase`,
+`ppfTextIsAtom`, the display-time name decodes). Every producer of a
+2D form calls through it — the equation renderer and the walker here,
+the capture viewer in the extra package — so precedence is decided in
+one place.
 
-`PPN_BIGOP` captures a Σₙ/∏ₙ (and integer variants) or ∫yx dispatch:
-`item` = the ITM id, `pad[0..1]` = the LABEL id shown in the body
-(display-time best-effort decode through `labelList`; a stale id falls
-back to `LBL nn`), `payload` = the step real34 for sums (the ∫ stores
-the integration-variable id in payload[0..1] instead), `child[0]/[1]` =
-from/to VAL leaves snapshotted PRE-op. Binding semantics:
+### Flag scope (RULED, PP15; both commands core-owned since the PP19 amendment)
 
-- Sums capture only the direct label-param form (`FIRST_LABEL..LAST_LABEL`);
-  the register-letter form resolves a label indirectly and invalidates.
-- The ∫ captures only the dispatch that actually integrates: a
-  named-variable param over a preselected label program
-  (`!USES_FORMULA && currentSolverProgram < numberOfLabels`). The
-  label/register param is the interactive SETUP form — it still harvests
-  X,Y into ULIM/LLIM and drops them but leaves NO result, so it
-  invalidates rather than mint a node that would display a lie. Formula
-  targets belong to the EQN surface (PP13), not capture.
-- Limits are consumed by VALUE, never by structure: an op tree in a
-  consumed slot displaces (emits) at STAGE, and the current root is
-  superseded unconditionally — the new root never contains it.
-- After DONE the label program has run with the machine's full keyboard:
-  slot 0 holds the BIGOP (its value is the result in X), every other
-  slot and slot L go UNKNOWN and re-materialize lazily as VAL leaves.
-- A non-unit step must be visible in the under-limit or the display
-  lies (`n=from,Δstep`); step 1 renders as plain `n=from`.
+`FLAG_PRETTYP` governs only what the calculator draws **on its own
+initiative** — the inline register lines. The explicit view commands
+`PSHOW` and `EQSHW` ignore it: asking to see something should show it.
+`FLAG_PTLINE` is a second, independent opt-in for the T-line live
+formula, default OFF.
 
-`PP_BIGOP` (layout kind 9) carries children body/under/over; `textOff`
-holds the operator ITM id (`ppSetBoxTag`) and the paint arm picks the
-stroke glyph (Σ chevron+bars, ∏ bar+verticals, ∫ the PP_INT shape) —
-strokes AFTER children per the binding paint-order rule. `PPT_TKBIG`
-serializes postfix as from-VAL, to-VAL, then {item u16, label u16,
-payload 16B}, popping two.
+Init and factory-reset are SEPARATE (PP15, after a latent PP11 bug):
+the extra package's `ppcInit()` prepares its own data and is what its
+lazy first-use path calls; `prettyReset()` here restores both flag
+defaults AND re-arms the extra package through `ppResetExtension`, and
+only `doFnReset` may call it. A lazy path that restores defaults
+overwrites the user's saved preferences, which is exactly what
+persisting them was meant to prevent.
 
-The capture hooks are nesting-safe: `prettyNoteFunction` checks scope
-BEFORE touching the stage, because a BIGOP's label program runs every
-step through `runFunction` (under FLAG_SOLVING/PGM_RUNNING) and an
-unconditional stage clear would destroy the outer op's staging.
 
-## §4 Segmentation — where a formula ends (RULED 2026-08-26)
+## §4 Surfaces
 
-**The rule: liveness + new-root supersession.** A formula (an op-rooted tree)
-is emitted to history when either
-1. **displacement** — its root leaves the shadow stack unconsumed:
-   overwritten in X, dropped, wiped (CLX/CLSTK/invalidation), swapped out to
-   a register, or pushed off the stack top by lifts; or
-2. **supersession** — a new operator node is created whose operands do *not*
-   include the current root. The old formula emits immediately (its
-   `= result` read from the register that still holds it — the §3 invariant
-   guarantees truth), stays on the shadow stack flagged EMITTED, and can
-   still be consumed later to continue a larger formula (flag cleared on
-   consumption, so nothing emits twice).
-
-ENTER never terminates a formula — pressing ENTER on a result to duplicate
-and continue (`2 ENTER 3 + ENTER ×` = (2+3)²) is a continuation idiom that
-an ENTER-terminates rule would break, and the operand-separator ENTER is
-already invisible to segmentation. Bare literals/values/RCL leaves never emit
-(a number alone is not a formula). UNDO discards the current formula (the
-user revoked it) but never un-emits history; a formula, once finished,
-happened. Consequence accepted: undo-then-redo can eventually duplicate a
-history entry.
-
-Reference traces (normative; TESTING.md pins them):
-- `2 ENTER 3 + 4 ×` → one formula `(2+3)×4`, nothing emitted early.
-- `2 ENTER 3 + 5 ENTER 6 +` → at the second `+`, the new root doesn't
-  contain `(2+3)` → history `2+3 = 5`, current `5+6`.
-- `2 ENTER 3 + CLX` → displacement → history `2+3 = 5` (CLX is the natural
-  explicit terminator).
-- `5 1/x 3 +` → single formula `1/5+3`.
-- `12 SIN` → current `sin(12)`.
-- `2 ENTER ENTER ×` → `2×2` (ENTER dup mirrored as deep copy).
-
-## §5 History ring and display handoff
-
-Finished formulas are serialized **eagerly as postfix token streams by pure
-byte copies** — literal (as-typed text), value (raw payload), register,
-constant, op tokens, plus a result snapshot. No display formatter runs at
-capture time; formatting stays lazy (§3), which keeps both the letter and the
-spirit of the no-strings-at-capture rule while letting the arena free the
-tree on emission. Ring: `ppHist[640]` + 12 offsets, oldest-first eviction
-(undo-history's eviction shape). Oversized entries (> half the ring) are
-dropped, not stored.
-
-Renderer-facing API (all lazy): `ppCurrentFormulaRoot()` (+ read-only arena
-access), `ppHistoryCount()` / `ppHistoryEntry(idx, &len, &seq)`,
-`ppHistoryClear()`. The renderer owns the item-id → infix-form table
-(precedent: print.c:21-38) and precedence-driven parenthesization.
-
-## §6 Surfaces
+The formula-history views (pager, browser, T line) are the extra
+package's — design-docs/pretty-print-extra/DESIGN.md §4. This
+package's surfaces:
 
 - **Inline register lines** (PP1): one hook arm in `_refreshRegisterLine`,
   inserted immediately before the `/*Main type dtReal34 FLAG_FRACT*/` arm
@@ -342,20 +261,6 @@ access), `ppHistoryCount()` / `ppHistoryEntry(idx, &len, &seq)`,
   — a SHOWMODE screen has that cleared for it on the next press. A
   self-painted surface therefore follows the dismissal contract of the
   mode it is raised in, and a new one must say which that is.
-- **Formula view** (PP4, RULED 2026-08-26): a PAGER, not a browser mode.
-  `PHIST` (row 462) renders the current formula plus the finished-formula
-  history as 2D infix — division stacked, powers raised, roots under
-  vinculums, precedence parens (glyph or synthesized-tall) — four rows per
-  page on the same manual-paint protocol as PSHOW. Repeated `PHIST`
-  presses page forward; any other key releases the screen. `PCLR` (row
-  461) clears the ring. Value leaves and results format at display time
-  via TEMP_REGISTER_1 staging (undo-history's lazy-preview recipe),
-  never at capture. Zero keyboard.c/defines.h churn; the full
-  CM-mode browser (selection, per-row scrolling) remains an explicitly
-  possible upgrade on reserved calcMode 20 — it was traded away because
-  keyboard.c is the project's riskiest three-package composition surface,
-  not because the pager is the end state.
-
 ### Solver-surface frames (PP13)
 
 EQSHW frames the equation with the interactive solver's own numbers:
@@ -370,176 +275,20 @@ framing (`f(x)=0`) is deliberately absent:
 a stale INTERACTIVE bit would frame a plain view with an `= 0` the user
 never asked for — un-determinable state stays unframed.
 
-### Equation-language big operators (PP14) — RULED design
+### The equation-language constructs draw here, and evaluate in extra
 
-**Render and eval nesting limits MATCH (ruled on Stan's request).**
-The old fixed eval-depth cap of 2 is replaced by a measured
-stack-consumption guard: the outermost construct records the stack
-pointer, and every deeper construct or delegate refuses cleanly once
-consumption exceeds PPEQ_STACK_ALLOWANCE (8 KB; the reference tower
-high-waters 5.3 KB on the 64-bit sim, ARM frames are smaller). The
-depth cap (8) remains only as a runaway backstop. **Known UPSTREAM defect (measured 2026-08-26, corrects an earlier
-mis-statement here).** `fn2ndDerivEq` sizes its sampling step as a
-FRACTION of the evaluation point — upstream's own comment at
-differentiate.c:478 says "the step is relative to x, and at x = 0 it
-collapses", and an absolute fallback covers exactly zero. At small
-NONZERO points the step underflows against the function's own scale,
-the second difference cancels to noise, and dividing by h² amplifies
-it. Measured on the plain formula `6/(X+2)` through the built-in
-second derivative, NO package code involved (true value ≈ 1.4978):
-
-| x | d/dx (true ≈ −1.5) | d²/dx² (true ≈ 1.5) |
-|---|---|---|
-| 1 | −0.666… ✓ (true −0.667) | 0.444… ✓ (true 0.444) |
-| 0.001 | −1.4985 ✓ | **−1511.79 ✗** |
-| 1e−8 | −1.49999998 ✓ | **−9.28e7 ✗** |
-| 1e−12 | −1.4999999999985 ✓ | 1.5000000 ✓ (lucky) |
-| 1e−16 | −1.49999999999999985 ✓ | **1.51e29 ✗** |
-| 1e−24 | −1.50000000 ✓ | **0E+17 ✗** |
-| 1e−40 | **0E+41 ✗** | **0E+82 ✗** |
-| 0 | −1.4999999999999999999 ✓ | 1.5000000000000000002 ✓ |
-
-So exactly zero WORKS and small nonzero values FAIL — the reverse of
-what was written here before. The first derivative is robust to
-~1e−24; only the second derivative is fragile, which is what the h²
-division predicts. The failing band for this function begins below
-about x = 0.01 (0.01 is exact, 0.005 already returns 4.28 for a true
-1.4888) — which is why upstream's own AN0022 derivative plots, which
-sample −5..5 at roughly 0.025 intervals, never meet it.
-
-**There is an upstream-native remedy, and it is complete.** The
-derivative honours a user-set step in the named variable
-`δ_d` (`deriv_user_step`, differentiate.c:240 — exposed as the Δ
-softkey in the derivative menu). With it set, the relative-step
-collapse cannot happen. Measured on the case this package cares about,
-`INTEG(DERIV(SUM(X;X;1;3)/(X+2);X;X;2);X;0;1)`, true value 5/6:
-
-- default relative step → **−2.947e23** (garbage)
-- `δ_d` = 0.001 → **0.8333333333333333333333333332992391** in 266 ms
-
-EQ28 pins that remedy. So the guidance is: for a derivative sampled
-near zero — which any `INTEG(DERIV(...))` over a range touching zero
-will do — SET THE STEP, or keep the range away from zero.
-
-Status: a genuine, silent, user-reachable UPSTREAM defect (the
-built-in d²/dx² key at X = 0.005 answers confidently with nonsense at
-default settings), fully mitigable with an existing built-in control
-that the application notes never connect to this failure. Not the
-package's to patch — and not worth patching around, since setting the
-step is the upstream-convention answer. UPSTREAM-REPORTABLE.
-Nested INTEG-in-INTEG works: the new double-exponential path never
-increments the engine counter, so upstream refuses nothing; the stack
-guard is the bound, and a refused engine (old path, defensive) turns
-into a clean error rather than a stale-X read.
-
-**Separator choice — evidence, not assertion (verified 2026-08-26 on
-Stan's challenge).** `,` is UNAVAILABLE: the parser rewrites every comma
-inside a number to `.` (equation.c:1191), so `1,5` IS the number 1.5 and
-a comma-separated argument list would be silently ambiguous. `;` is
-free: the grammar rejects it with a dedicated error ("cannot be appeared
-in equations"). There is no upstream convention to conform to, because
-upstream has NO working multi-argument call syntax — `MAX`, `MIN` and
-`atan2` are in the alias table but every shape tried
-(`MAX(3,5)`, `MAX(3;5)`, `3 MAX 5`, `MAX(3)(5)`, `MAX(3 5)`,
-`3 MAX(5)`, `MAX 3 5`, `MAX(3)+0`) fails, most with
-ERROR_ITEM_TO_BE_CODED. **Forward-compatibility risk, OPEN:** that error
-is a statement of intent, so upstream will one day pick a separator; if
-they pick anything but `;` this package's syntax becomes foreign on
-their own machine. Ask them before this reaches users — the question
-belongs with the derivative report.
-
-Typeability is CONFIRMED, not assumed: `;` lives in the ALPHA
-punctuation softmenu (`menu_alphaMisc`, beside `.` `,` `:`) and the
-catalog branch of the equation-mode gate admits it. EQ29 types
-`SUM(X;X;1;3)` one softkey at a time, runs the commit ENTER runs
-(setEquation plus the MVAR parse) and evaluates it to 6 — MUT-56 (the
-Bug 1 shape) turns it red with syntax error 45, which is also proof
-that Bug 1 would have made these constructs impossible to SAVE from the
-keyboard, not merely wrong under a derivative.
-
-Syntax (parse-level, package-side): `SUM(body;var;from;to[;step])`,
-`PROD(body;var;from;to[;step])`, `DERIV(body;var;at[;order])`,
-`INTEG(body;var;from;to)`. The separator is `;` — today a hard parse
-error, so the syntax space is free, and unlike `,` it can never collide
-with a radix mark. The constructs nest (a SUM body may hold another);
-depth caps at 2 and errors beyond.
-
-BINDING, spelling (2026-08-27, owner-reported): a construct answers to
-its **all-upper and all-lower spellings and nothing else** — `SUM(` and
-`sum(`, never `Sum(`. This is upstream's convention, not a choice:
-`functionAlias[]` carries both spellings of every name a user types into
-an equation ("sinh" beside "SINH", "asinh" beside "ASINH",
-solver/equation.c) because `compareString`'s CMP_NAME folds superscript,
-subscript and struck forms but never case (sort.c:137). The test lives
-in exactly one place, `ppEqConstructIs` (prettyPrint.h), and BOTH the
-renderer and the evaluator call it. They must: a spelling one accepts
-and the other declines gives the user a number with no picture, or a
-picture that will not compute, with no error either way. Whoever adds a
-construct adds it to both and pins the same spelling through both.
-
-Machinery (one hook line at the top of parseEquation's scan loop + an
-appended block in the same file):
-
-- **Interception.** In XEQ mode the hook consumes the whole
-  `NAME(...)` span (paren-depth scan finds the close), slices the
-  arguments at top-level `;`, and pushes one value onto the OUTER
-  numeric stack; the outer parser state is never touched. In MVAR mode
-  it consumes ONLY the name and `(` so the construct name is not
-  collected as a variable; the arguments scan normally (the bound
-  variable appears in the menu — harmless, documented).
-- **Slice evaluation.** parseEquation's entire state lives in its
-  caller's mvarBuffer, so nested evaluation is re-entrant by
-  construction with private buffers. A slice becomes a HIDDEN formula
-  slot appended at the LIST END (own appender — fnEqNew opens the
-  editor and moves currentFormula; deleteEquation's tail-delete is
-  side-effect free for user slots, but resets currentSolverVariable,
-  which the construct restores). Slice buffers are TRANSIENT pool
-  allocations (allocC47Blocks) freed on every exit — zero resident
-  BSS. Live blocks never relocate (free-list allocator, no
-  compaction), so the outer parse's string pointer stays valid across
-  the appends.
-- **Loop binding.** The bound variable is written DIRECTLY
-  (reallocateRegister + real34Copy), never through reallyRunFunction —
-  no dispatch inside the eval. Its prior content is saved and restored
-  with the saveRegisterSnapshot idiom (differentiate.c's own).
-- **SUM/PROD** accumulate in real_t under ctxtReal75 with
-  _programmableSumProd's counter walk (sign-aware termination, the
-  same direction guard) — package loop, upstream accumulator
-  discipline. Result: real path only in v1; a complex or error result
-  from the body aborts the equation with the body's own error.
-- **DERIV/INTEG delegate to the upstream engines** (fn1stDerivEq /
-  fn2ndDerivEq / _fnIntegrate with a variable param) against the temp
-  slot, so the numbers are IDENTICAL to the interactive surfaces. The
-  delegate snapshots the outer parse's tmpString regions
-  (buffer 1024 B + parser state) into a transient block plus the
-  solver globals (currentFormula/SolverVariable/SolverStatus/
-  currentSolverProgram, ULIM/LLIM for INTEG) and the X register flow
-  is upstream's own (result read from X; the equation's final X
-  overwrites it exactly as fnEqCalc would). _fnIntegrate's saveForUndo
-  fires per INTEG — one extra undo point, same as the interactive ∫,
-  accepted and documented.
-- **Rendering** (ppqParse arms): SUM/PROD → PP_BIGOP Σ/∏ with
-  `var=from` under (`,Δstep` when a step slice exists — textual, not
-  evaluated), `to` over, the body as the operand; INTEG → PP_BIGOP ∫
-  with from/to under/over and ` dvar` appended; DERIV → the PP13
-  d/dx (d²/dx²) fraction with the body in tall parens and `var=at`
-  appended as a subscript-style suffix. Malformed constructs decline
-  the whole strip/EQSHW render (strict; the linear line remains).
-
-### Flag scope (RULED, PP15)
-
-`FLAG_PRETTYP` governs only what the calculator draws **on its own
-initiative** — the inline register lines. The explicit view commands
-`PSHOW` and `EQSHW` ignore it: asking to see something should show it.
-`FLAG_PTLINE` is a second, independent opt-in for the T-line live
-formula, default OFF.
-
-Init and factory-reset are SEPARATE (PP15, after a latent PP11 bug):
-`ppcInit()` prepares the package's own data and is what the lazy
-first-use path calls; `prettyReset()` does that AND restores both flag
-defaults, and only `doFnReset` may call it. A lazy path that restores
-defaults overwrites the user's saved preferences, which is exactly what
-persisting them was meant to prevent.
+`SUM(...)`, `PROD(...)`, `DERIV(...)` and `INTEG(...)` are the
+package-invented equation language, and the language belongs to
+pretty-print-extra (ruled 2026-08-31): its parser interception and its
+evaluation machinery are that package's solver/equation.c hunks, and
+its design is design-docs/pretty-print-extra/DESIGN.md §5. The RENDER
+arm for the constructs stays here, inside `ppqParse`: it draws the
+language's picture, and both sides call the one spelling test
+(`ppEqConstructIs`, prettyPrint.h), so a spelling one side accepts and
+the other declines cannot exist in the pair. In a solo build the arm
+is unreachable: without the evaluator, construct text is a hard parse
+error in the base grammar, so no construct equation can be saved and
+no picture without a computation can appear.
 
 ### VISUAL — a program as its mathematics (PP17)
 
@@ -694,7 +443,7 @@ saying so — V55 is that pin.
   stale integrate or derivative bit would wrap a program's drawing in an
   integral sign it never asked for (V19). VISUAL is raised in
   `CM_NORMAL` and inherits that mode's dismissal contract via
-  `TI_SHOWNOTHING`, as §6 requires a new self-painted surface to state.
+  `TI_SHOWNOTHING`, as §4 requires a new self-painted surface to state.
 - **Nothing is painted on a decline**: the whole text is composed before
   a pixel is touched (V20).
 - **The drawing goes in the Z/T rows, and the measurement decides that.**
@@ -774,57 +523,60 @@ with the text back end. A tree holds its body as a child, so there is
 nothing to roll back and no scratch buffer whose reuse has to be timed.
 
 
-## §7 Composition claims (BINDING for other packages)
+## §5 Composition claims (BINDING for other packages)
 
-Verified against the tree at branch point (undo-history/stage-u2 tip,
-70f8b7db7):
+First verified against the tree at branch point (undo-history/stage-u2
+tip, 70f8b7db7). PP19 re-verified the split placements. This table
+and the extra package's (design-docs/pretty-print-extra/DESIGN.md §5)
+together are the claims registry for the pair.
 
 | resource | claim | verified placement |
 |---|---|---|
-| item rows | **459 `PSHOW`, 460 `PPON`, 461 `PCLR`, 462 `PHIST`** | spare `itemToBeCoded` rows at items.c:2290-2293 — ~30 lines below undo-history's 427-429 hunk (ends :2260); items.h defines at :484-487, ~30 lines below its hunk (:446-454) |
-| calcMode | **20 `CM_PRETTY_BROWSER`, WIRED since PP10** | PP4 shipped the history view as a manual-paint PAGER instead of a browser mode (see §6), avoiding ~20 keyboard.c sites in the one file where forth-core rewrites the determineItem chain undo-history already squeezed into. If a full browser lands later, its `#define` must NOT be adjacent to undo-history's `CM_HIST_BROWSER 19` insertion (after defines.h:1721) — anchor ≥4 context lines away |
-| system flag | **50 `FLAG_PRETTYP` (0x8071)**, **51 `FLAG_PTLINE` (0x8072)** | superseded the v1 "none" ruling. The single `NUMBER_OF_SYSTEM_FLAGS` line cannot be edited by two packages independently, so BOTH packages carry the byte-identical `64+51` line and 3-way unifies them (identical-edit claim). Undo-history owns 49; 50 and 51 are ours. **AMENDED (audit r1, A8):** both SYSFL catalog rows (`PPRTY`, `PTLINE`) now live in THIS package's items.c at rows **218/219**, NOT in undo-history's. They were exiled there by the touching-line rule when they sat at 2300/2301 next to a sibling edit; at 218/219 they are inside our own existing 215-217 hunk and touch nothing of anyone else's. The move was forced: with the count here and the rows there, a SOLO pretty-print build indexed past the end of `menu_SYSFL`. **CORRECTED (audit r8, PP18RR8-2): the A8 arithmetic was wrong by one in both numbers.** Solo is 115 declared / 114 supplied — flag id 112 is undo-history's reserved `UHIST`, a hole with no catalog row — and combined is 115/115 exact, not 116. A single hardcoded count cannot be right for every package combination. The package overrides `browsers/flagBrowser.c` with one hunk: the SYSFL walk bounds by the catalog's OWN row count (`softmenu[].numItems` for `-MNU_SYSFL`, through `prettySysflRows()`). That bound is correct in every combination — solo pretty (114), combined (115), solo undo-history (113). No package supplies a row for a reserved id. **KNOWN, NOT OURS TO FIX ALONE (restored, PP18RR9-3):** the override ships only in THIS package. A solo undo-history build still reads two entries past its 113-row array, and that repair needs its owner — see `SIBLING_REPORT_undo-history_menu_SYSFL.md`. |
-| item row | **984 `VISUAL`** (PP17) | a `CAT_FREE` "0984" row at items.c:2830, ~400 lines clear of every sibling hunk. Row 214 was rejected despite being contiguous with our own 215-219 block: it abuts forth-core's edited row 213, and the touching-line rule makes adjacency a conflict. **`PTP_LABEL`, not `PTP_DISABLED`** — copying a sibling PP row's status verbatim would have left the command un-programmable |
-| menu id | **item 217 = `MNU_PP`** (CAT_MENU) | a `CAT_FREE` "0217" row adjacent to our own 215/216 claims, so the items.c hunk stays contiguous and nowhere near either sibling. forth-core's precedent: it turned free row 213 into `CAT_MENU` "FWRD". |
-| test-list slot | **`pretty_visual_real` anchored before `graphs_cov`** (PP18) | NOT at EOF: forth-core appends `forth_interp` there, and both patches produced the same `@@ -507,3` hunk — a real conflict, caught by the combined gate. It must still come after `programs.txt`, because it clears program memory. The tail of a shared list is contended exactly like the tail of a table |
-| softmenu slot | `menu_PP` slot 6 → `ITM_VISUAL` (PP17) | a softmenu's slots 6-11 ARE its f-shifted row, so VISUAL joins without displacing an announced key; the array pads to 12 with `ITM_NULL`, as every upstream menu is a multiple of six. `menu_PP` is our own array — no sibling can collide |
-| softmenu slots | `menu_DISP` row 5 slot 3 → `-MNU_PP`; `menu_EQN` row 2 slot 2 → `ITM_EQSHW` | DISP and EQN are untouched by BOTH siblings (verified by diff), so neither edit can collide. The stack menu is deliberately AVOIDED: undo-history put `UHIST`/`REDO`/`HCLR` in its free slots and edited that exact line, leaving one slot and a guaranteed touching-line conflict. |
-| softmenu table | new entry inserted immediately BEFORE the `/* 186 */` sentinel | the table's own instruction ("do not add menus here, add them at the end"). forth-core inserted mid-table at `/* 022 */`; anchoring at the tail keeps us ~160 lines clear of it. |
-| resident pool | **zero** | all pretty-print state is BSS (~2.8 KiB end-state); the ~1.6 KiB pool slack remaining after undo-history's 4 KiB ring stays untouched |
+| item rows | **459 `PSHOW`, 460 `PPON`, 461 `EQSHW`, 462 `PTLIN`** | the spare `itemToBeCoded` run at items.c:2290-2293 — ~30 lines below undo-history's 427-429 hunk (ends :2260); items.h defines at :484-487. EQSHW and PTLIN moved here from 216/215 at PP19: their old rows sit inside the extra package's 215-217 hunk, and a sibling row that touches another package's row is a 3-way conflict (the touching-line rule). |
+| item rows | **984 `VISUAL`, 985 `PPRTY` + 986 `PTLINE` (CAT_SYFL)** | the `CAT_FREE` 984-987 run at items.c:2826+, ~400 lines clear of every sibling hunk. The SYSFL rows moved here from 218/219 at PP19 (same touching-line reasoning). The generated SYSFL catalog carries the same row count from either home, and `prettySysflRows()` bounds every walk. Row 987 stays free — the pair's growth room. `VISUAL` keeps `PTP_LABEL` (a `PTP_DISABLED` copy makes the command un-programmable). |
+| system flag | **50 `FLAG_PRETTYP` (0x8071)**, **51 `FLAG_PTLINE` (0x8072)** | superseded the v1 "none" ruling. The single `NUMBER_OF_SYSTEM_FLAGS` line cannot be edited by two packages independently, so undo-history and THIS package carry the byte-identical `64+51` line and 3-way unifies them (identical-edit claim). Undo-history owns 49; 50 and 51 are ours. The extra package carries NO defines.h flag edit. The comment on the count line is part of the byte-identical claim — editing it in one package alone breaks the trio configure (re-learned at PP19, loudly). |
+| SYSFL bound | `browsers/flagBrowser.c` override | ONE hunk: the SYSFL walk bounds by the catalog's OWN row count (`softmenu[].numItems` for `-MNU_SYSFL`, through `prettySysflRows()`), correct in every package combination (audit r8, PP18RR8-2). Virgin file for every sibling. **KNOWN, NOT OURS TO FIX ALONE (PP18RR9-3):** a solo undo-history build still reads two entries past its own shorter array — see `SIBLING_REPORT_undo-history_menu_SYSFL.md`. |
+| test-list slots | **`pretty_print` after `matrix`; `pretty_visual_real` before `graphs_cov`** | two hunks in one patch. `pretty_visual_real` CLEARS PROGRAM MEMORY, so it must come after every case that expects preloaded programs — and NOT at EOF: the tail is forth-core's claim, and two packages appending there is a real conflict (caught at PP18). The extra package's one list line sits after `program_flow_cov`, ~11 lines above our tail hunk. |
+| resident pool | **zero** | all state is BSS (§6); the ~1.6 KiB pool slack remaining after undo-history's 4 KiB ring stays untouched |
 
 Upstream files hooked, with verified adjacency to sibling packages' hunks:
 
 | file | hook | adjacency notes |
 |---|---|---|
-| `c47.h` | `#include "prettyPrint.h"` | undo-history's include sits near :131; anchor ours on a different neighbor ≥4 lines away. forth-core does not patch c47.h. |
-| `screen.c` | FIVE hunks: the glyph pre-clear x-guard (:1238), the doubled-write column clamps (:1275), the §6 inline arm (:3936), the menu/status repaint guard on the total early return (:5864), and `case CM_PRETTY_BROWSER` in the calcMode dispatch (:6163) | forth-core's nearest hunks clear ours by 61 lines (its :5930 against our :5864) and 73 (its :1162 against our :1238); the rest (:6, :817-:937, :5665) are far away. **undo-history's second hunk is the tight one**: its context ends at :6158 and ours starts at :6160, so ONE untouched line separates them. Both packages add a case to the same `calcMode` switch, so that site is contended by construction — it is below the ≥ 4-line rule this table applies elsewhere, and the combined gate is what proves the two compose. Not moved: re-anchoring inside the same switch buys a hypothetical future rebase at the cost of a green combined build. The include goes via c47.h precisely so we do NOT touch screen.c's include block (forth-core patches it at :6). |
-| `items.c` | STAGE/DONE around dispatch (:412-414); rows 459-461; catalog stub after :1670 | >95 lines from undo-history's :292-315 hunk. The catalog stub anchors after `fnTripleFlipPolar` (:1670): BOTH siblings insert stubs at the tail of that list (undo-history after :1677, forth-core after :1685) and the first combined pass conflicted there — the anchor must precede :1675. |
-| `bufferize.c` | `closeNim` head (:2341-2344) + `closeNim_exit` (:2688) | **forth-core has a hunk at :2691**, immediately after `closeNim` ends (:2690). Non-overlapping edits; contexts abut. Composes via normal patch offsetting — the combined gate pass is the proof, and a conflict there is loud, which is the intended failure mode. |
-| `calcMode.c` | `calcModeNim` success-path latch | virgin file (no package patches it) |
-| `browsers/flagBrowser.c` | ONE hunk: the SYSFL walk bounds by the catalog's own row count, not the shared flag count (PP18RR8-2) | virgin file (no sibling patches it) |
-| `config.c` | `prettyReset()` in `doFnReset` | anchor ≥4 lines from forth-core's hunks (:1541, :1964) and undo-history's (:1697) |
-| `testSuite/testSuite.c` + `testSuiteList.txt` | ONE hunk (three `funcTestNoParam` rows after `fnGetNDEC` :707) + one list line after `matrix` | **No declaration hunk**: testSuite.c includes c47.h, which carries prettyPrint.h — the declaration region (:83-:94) is where both siblings insert and conflicts. Table rows anchor ≥2 lines above undo-history's (:712+) and forth-core's (:713+) row hunks. List line far from `nested_cov` (undo-history) and EOF (forth-core). |
+| `c47.h` | `#include "prettyPrint.h"` after the TESTSUITE_BUILD block (:134) | undo-history's include sits after :130 (`ui/tone.h`); the extra package's sits after :124 (`statusBar.h`). Three includes, three anchors. forth-core does not patch c47.h. |
+| `screen.c` | FOUR hunks: the glyph pre-clear x-guard (:1238), the doubled-write column clamps (:1275), the §4 inline arm (:3936), and the menu/status repaint guard on the total early return (:5864) | forth-core's nearest hunks clear ours by 61 lines (its :5930 against our :5864) and 73 (its :1162 against our :1238). The `case CM_PRETTY_BROWSER` hunk is the extra package's. The include goes via c47.h precisely so we do NOT touch screen.c's include block (forth-core patches it at :6). The repaint guard serves every manual-paint surface: PSHOW, EQSHW and VISUAL here, the pager there. |
+| `items.c` | rows 459-462 and 984-986; five catalog stubs after `fnTripleFlipPolar` (:1669) | >95 lines from undo-history's :292-315 hunk. BOTH siblings insert stubs at the tail of that list (undo-history after :1677, forth-core after :1685) and the first combined pass conflicted there — the anchor must precede :1675. The extra package's two stubs anchor after `fn42Prompt` (:1660), nine lines above ours. |
+| `defines.h` | the two flag defines (:1016) + the count line (:1021) | undo-history edits the SAME count line byte-identically (see the flags claim). `CM_PRETTY_BROWSER` is the extra package's. |
+| `solver/equation.c` | TWO hunks: `ppEqFunctionItem` after fnEqCalc (:213) and the EQN strip paint hook (:684) | virgin file for both siblings. The extra package patches the SAME file for its equation language (its hunks at :736, :1370 and the file tail) — ~50 lines from ours at the closest point, and the pair gate proves the five hunks compose. |
+| `config.c` | `prettyReset()` in `doFnReset` | anchor ≥4 lines from forth-core's hunks (:1541, :1964) and undo-history's (:1697). The extra package needs NO config.c hunk: its reset rides `ppResetExtension`. |
+| `testSuite/testSuite.c` + `testSuiteList.txt` | ONE hunk (seven `funcTestNoParam` rows after `fnGetNDEC` :704) + the two list lines above | **No declaration hunk**: testSuite.c includes c47.h, which carries prettyPrint.h — the declaration region (:83-:94) is where both siblings insert and conflicts. Table rows anchor ≥2 lines above undo-history's (:712+) and forth-core's (:713+) row hunks. The extra package's two rows anchor after `fnSetC47` (:692), twelve lines above ours. |
 
-No patches to `stack.c`, `defines.h`, `keyboard.c`, `softmenus.c`,
-`statusBar.c` until PP4 (the browser stage).
+No patches to `stack.c`, `keyboard.c`, `softmenus.c`, `statusBar.c`,
+`bufferize.c` or `calcMode.c`. The browser, the capture hooks and the
+menus live in the extra package's patch stack.
 
-## §8 Budgets
+## §6 Budgets
 
-- **RAM:** all BSS, no resident pool. End-state ≈ 2.8 KiB (renderer pools
-  ~1.5 KiB, capture ~0.65 KiB, history ring ~0.7 KiB). Measure the BSS delta
-  at every stage gate; contingency is shrinking `ppPool`/`ppText`.
-  **PP1 measured (2026-08-26): 1,609 B device-relevant** — prettyLayout
-  1,408 B BSS (pool 768 + text 512 + metrics/counters) + prettyValue 200 B
-  BSS + 1 B data (the toggle); prettyTest's 4,304 B is PC_BUILD-only and
-  never reaches the device. Zero resident-pool use confirmed.
-- **Flash:** increases are fine when justified (project rule); record the
-  measured `make dmcp5r47 CUSTOM_PKG=… CUSTOM_PKG_RECONFIGURE=1` delta in
-  each stage commit. **PP1 measured: +1,920 B** (R47_flash.bin 1,120,752 →
-  1,122,672, baseline forth-core+undo-history at 70f8b7db7).
-- **Per-frame cost:** measure+paint is O(glyphs) integer work, no FP, no
-  allocation; runs only when the toggle is on and the type is supported.
+- **RAM:** all BSS, no resident pool. Engine + converters + toggles ≈
+  1.6 KiB device-relevant: prettyLayout 1,408 B BSS (pool 768 + text
+  512 + metrics/counters) + prettyValue ~200 B BSS + 1 B data (PP1
+  measured 2026-08-26). VISUAL has NO BSS: its whole state is one
+  ~1.5 KiB stack frame in `fnPrettyVisual` plus ~50 B per recursion
+  level, capped at depth 5 (measured 2026-08-28). The two extension
+  pointers cost no measured BSS (they sit in alignment padding).
+  prettyTest's BSS is PC_BUILD-only and never reaches the device.
+  Zero resident-pool use.
+- **Flash:** increases are fine when justified (project rule); record
+  the measured `make dmcp5r47` delta for the PAIR in each stage commit
+  (the split moved code between packages, so the pair's combined
+  number is the honest one). **PP1 measured: +1,920 B**. The PP19
+  split's pair delta against the pre-split trio is in the stage
+  commit.
+- **Per-frame cost:** measure+paint is O(glyphs) integer work, no FP,
+  no allocation; runs only when the toggle is on and the type is
+  supported, or on the explicit view commands.
 
-## §9 Staging
+## §7 Staging
 
 | stage | content | ships when |
 |---|---|---|
@@ -833,6 +585,8 @@ No patches to `stack.c`, `defines.h`, `keyboard.c`, `softmenus.c`,
 | **PP3** | capture engine complete (no UI): hooks, classifier, segmentation, ring | all capture pins green through real key paths |
 | **PP4** | `prettyExpr.h` contract; tree→2D infix with precedence parens + `PP_PAREN` synthesis; current-formula line; history browser (calcMode 20, the keyboard.c stage) | formula view usable end to end |
 | **PP5** | EQN strip 2D: strict display-string grammar, '/' terms stack (standard/tiny, 17 px in the 23 px strip row), √ gets vinculums, parens unwrap under both; one hunk at solver/equation.c's paint site, no-cursor path only | SHIPPED 2026-08-26 (authorized by the proceed-with-all-stages instruction) |
+
+| **PP19** | the split, boundary amended same day: everything that draws stays here (engine, values, EQN surfaces, constructs, VISUAL); capture and the history views move to `packages/pretty-print-extra` with their hooks; extension points added | all five gate passes green; combined behavior byte-identical except four renumbered item ids |
 
 Branch per stage (`pretty-print/stage-pp1`, …), single clean commit series,
 gate green per stage. PP1 branches from the undo-history/stage-u2 tip because
