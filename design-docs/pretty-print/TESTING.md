@@ -693,6 +693,35 @@ window" from "a one-line form that happens to sit inside it". A
 fallback path that lands in the same region as the path under test will
 mask its failure.
 
+**Running the suite under AddressSanitizer.** The simulator build sets
+`b_sanitize=none`, so nothing in the normal gate can prove a memory-safety
+claim. Configure a separate tree for it — do not disturb `build.sim`:
+
+```
+meson setup build.asan --buildtype=custom -DRASPBERRY=false \
+  -DDECNUMBER_FASTMUL=true -Db_sanitize=address \
+  -DCUSTOM_PKG=packages/forth-core,packages/undo-history,packages/pretty-print
+meson configure build.asan -Dc_args='-DFORTH_DEBUG_SELFTEST'
+ninja -C build.asan
+build.asan/src/testSuite/testSuite build.asan/custom_pkg_shadow/testSuite/tests/testSuiteList.txt
+```
+
+Run the binary directly. `meson test` sets its own `ASAN_OPTIONS`, so an
+`ASAN_OPTIONS=` on the command line is discarded, and `halt_on_error=0`
+does not help either — a stack-buffer-overflow is not a recoverable class
+without `-fsanitize-recover=address`. To sweep PAST a known error, edit the
+copy in `build.asan/custom_pkg_shadow/` (materialized files are real files,
+not symlinks — check with `ls -l` first) and rebuild that tree only.
+
+**Two things this run reports that are not defects.** The one ASAN error is
+upstream's and is written up in `UPSTREAM_REPORTS_addons_resultingIntStr.md`.
+And every `evaluate the drawing` pin fails under ASAN — EQ16/17/18/26/27/28/
+32/33/34, V18, V65 — while no drawing or measurement pin does.
+`PPEQ_STACK_ALLOWANCE` is 8000 bytes measured against a real stack probe
+(`solver/equation.c:1756`), and ASAN's redzones inflate every frame, so the
+evaluator crosses its budget and correctly refuses. With the upstream read
+guarded locally the sweep completes with **zero** memory errors.
+
 **And the caveat that was recorded against V27 was wrong.** Round 6 noted
 that the same fixture returned `lastErrorCode` 24 with
 `screenHoldsDrawnPixels` false, so it never reached a paint arm at all. A
