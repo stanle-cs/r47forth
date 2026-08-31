@@ -316,7 +316,10 @@ const LENSES = [
   { key: 'intent',       text: 'INTENT — is this documented as deliberate? Search the comments, DESIGN.md, the stage sheets and DESIGN-HISTORY.md. If the design ruled on it, the finding is REFUTED and you cite the ruling.' },
 ]
 
-const CAP = 24
+/* Round 8's in-family findings filled the old cap of 24 and left all ten
+ * out-of-family findings unverified; a refutation-only completion pass had
+ * to close the round. 32 leaves room for both halves. */
+const CAP = 32
 if (unique.length > CAP) {
   log(`NOTE: ${unique.length - CAP} findings beyond the ${CAP} verified are listed UNVERIFIED in the report, not dropped`)
 }

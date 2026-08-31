@@ -1618,3 +1618,33 @@ itself moved to the generated array instead. PP18RR8-6 (the base
 subscript outside ppfTextIsAtom's window) awaits the owner's ruling;
 -7, -9, -10, OOF-2 and OOF-1's general half stay open by the round-8
 verdict's own leave-alone list.
+
+## 2026-08-31 — round 9 closed with three families, nine confirmed
+
+Round 9's subject was the round-8 fix wave, the PP18RR8-6 ruling and
+the slop pass (7fdda3129..2ae202759). In-family on Opus: eight
+confirmed. Out of family: Sol read the measurement-semantics packet and
+raised zero findings after real construction attempts. Gemini read the
+six-repair packet and raised four, of which two survived. The raised
+verification cap (32) let every finding verify inside the main pass, so
+no completion half was necessary. Round totals: 29 raised, 13 verified
+findings confirmed into nine IDs, the rest refuted or merged.
+
+The two headline defects converged across families. PP18RR9-1: a polar
+or angle-tagged value leaf carries glyphs tinyFont lacks, so the PHIST
+pager drops the row with no placeholder — the formatter's emit alphabet
+was never enumerated against the fonts. PP18RR9-2: the ruled atom
+window admits base subscripts but not hex letters, so `2A₁₆·2` brackets
+while `21₁₆·2` draws bare on the same screen. The report names these
+two as one task: enumerate the alphabets, on both sides.
+
+Also confirmed: the A8 row now reads as closed while solo undo-history
+still over-reads by two (PP18RR9-3), FB1 stays green under a full
+revert of the browser bound (PP18RR9-4, mutation-proved), three
+coverage pins (RR9-5/-6/-7), the EQ36 one-byte slack (RR9-OOF-1), and
+the override-precedent note (RR9-8). Killed in refutation: the
+carve-out font-blindness claim — a font-aware window turns five pins
+red, so the current shape is the deliberate one.
+
+Exit criterion: not met. The counter stays at zero. Report:
+AUDIT_PP18-restarted-round-9-COMPLETE-*_2026-08-31-r9.md.
