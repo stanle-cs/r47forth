@@ -47,9 +47,12 @@ static bool_t ppfFormatStaged(char *dest, size_t destSize) {
                             buf, &standardFont, 180, 8, LIMITEXP, !FRONTSPACE, NOIRFRAC);
       break;
     case dtComplex34:
+      // the staged tag carries the polar bit; a literal false here redrew
+      // every polar value in rectangular form (audit PP18RR8-5)
       complex34ToDisplayString(REGISTER_COMPLEX34_DATA(TEMP_REGISTER_1), buf, &standardFont,
                                180, 8, LIMITEXP, !FRONTSPACE, NOIRFRAC,
-                               (uint16_t)getRegisterTag(TEMP_REGISTER_1), false);
+                               getComplexRegisterAngularMode(TEMP_REGISTER_1),
+                               getComplexRegisterPolarMode(TEMP_REGISTER_1) == amPolar);
       break;
     case dtShortInteger:
       /* This builder does not write from the front: it lays digits out
@@ -596,6 +599,10 @@ bool_t ppfBuildEntry(const uint8_t *entry, uint8_t ctxFont, uint8_t childFont,
         off = (uint16_t)(off + bytes);
         if(tok == PPT_TKRES) {
           resultRun = ppfRun(ppfValBuf, ctxFont);
+          if(resultRun == PP_NONE) {
+            return false;   // a lost "= result" tail must decline, not degrade:
+                            // the recall path would still find the TKRES
+          }
         }
         else {
           if(sp >= 8) {

@@ -45,7 +45,9 @@ static bool_t ppMetReady = false;
 static bool_t ppMetOk    = false;
 
 static const glyph_t *ppGlyphOf(const font_t *font, uint16_t charCode) {
-  int16_t gi = findGlyph(font, charCode);
+  // exact probe: findGlyph's id-based fallback reports a tinyFont miss
+  // as valid glyph index 0 (audit PP18RR8-1)
+  int16_t gi = findGlyphExact(font, charCode);
   return gi < 0 ? NULL : &font->glyphs[gi];
 }
 
@@ -191,6 +193,10 @@ static bool_t ppRunInk(const char *s, const ppMetrics_t *m, int16_t *asc, int16_
     }
     if(code == 0x0001) {   // STD_NOCHAR: showGlyphCode paints nothing for it
       continue;
+    }
+    if(code >= 0xa000 && code <= 0xa00f) {
+      continue;   // digit-group spaces: width comes from stringWidth,
+                  // and a space contributes no ink in any font
     }
     const glyph_t *g = ppGlyphOf(m->font, code);
     if(g == NULL) {

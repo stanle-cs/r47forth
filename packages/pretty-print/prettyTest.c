@@ -1665,6 +1665,130 @@ void prettyTestCapture(uint16_t unusedButMandatoryParameter) {
     ppcTestReset();
   }
 
+  /* T29 (PP18RR8-1): an unknown glyph fails the run in EVERY font.
+   * findGlyph's id-based fallback reports a tinyFont miss as glyph 0,
+   * so the eˣ catalog name (0xa147 0x82e3) measured and painted as
+   * blanks. Digit-group spaces stay measurable: they are space-class
+   * in every font. */
+  {
+    ppReset();
+    uint8_t bad = ppNewRun("\xa1\x47", 2, PP_FONT_TINY);
+    if(bad == PP_NONE) {
+      ppTestFail("T29 the run does not build, so the row tests nothing");
+    }
+    else if(ppMeasure(bad, 0)) {
+      ppTestFail("T29 a glyph tinyFont lacks still measures");
+    }
+    ppReset();
+    uint8_t sep = ppNewRun("1\xa0\x08" "2", 4, PP_FONT_TINY);
+    if(sep == PP_NONE || !ppMeasure(sep, 0)) {
+      ppTestFail("T29 a digit-group space must stay measurable in the tiny font");
+    }
+    ppReset();
+    uint8_t badStd = ppNewRun("\xff\xfe", 2, PP_FONT_STANDARD);
+    if(badStd == PP_NONE || ppMeasure(badStd, 0)) {
+      ppTestFail("T29 an unknown glyph measures in the standard font");
+    }
+  }
+
+  /* T30 (PP18RR8-3): when the text pool cannot hold the result run,
+   * the entry DECLINES rather than paint without its "= result" tail.
+   * LEAD.0 in base 2 at WSIZE 64 spells each value at 160 bytes, so
+   * three value leaves and two operators leave no room for the tail
+   * (the recall path would still find the TKRES and push a number the
+   * row never showed). */
+  {
+    setSystemFlag(FLAG_LEAD0);
+    ppcTestReset();
+    ppcTestType("0");
+    ppcTestOpParam(ITM_toINT, 2);
+    ppcTestOp(ITM_ENTER);
+    ppcTestType("1");
+    ppcTestOpParam(ITM_toINT, 2);
+    ppcTestOp(ITM_SUB);
+    if(getRegisterDataType(REGISTER_X) != dtShortInteger) {
+      ppTestFail("T30 the value is not a short integer, so the row tests nothing");
+    }
+    else {
+      ppcTestOp(ITM_ENTER);
+      ppcTestOp(ITM_ENTER);
+      ppcTestOpParam(ITM_toINT, 2);   // unclassified: the slots go UNKNOWN
+      ppcTestOp(ITM_ADD);             // each ADD mints a PPN_VAL leaf
+      ppcTestOp(ITM_ADD);
+      ppcTestOp(ITM_CLSTK);           // displacing the formula files it
+      uint8_t filed = PP_NONE;
+      ppReset();
+      if(ppfBuildEntry(ppcHistoryEntry(0, NULL, NULL), PP_FONT_STANDARD,
+                       PP_FONT_STANDARD, true, &filed)) {
+        ppTestFail("T30 a filed entry whose result run cannot fit painted without its tail");
+      }
+    }
+    clearSystemFlag(FLAG_LEAD0);
+    ppcTestReset();
+  }
+
+  /* T31 (PP18RR8-5): a polar-tagged complex keeps its polar spelling
+   * on the formula view. The staged formatter passed a literal false
+   * for tagPolar, so the leaf redrew as a+ib while the stack line
+   * showed the polar form. 0xa221 is the measured-angle glyph. */
+  {
+    ppcTestReset();
+    reallocateRegister(REGISTER_X, dtComplex34, 0, amNone);
+    int32ToReal34(3, REGISTER_REAL34_DATA(REGISTER_X));
+    int32ToReal34(4, REGISTER_IMAG34_DATA(REGISTER_X));
+    setComplexRegisterPolarMode(REGISTER_X, amPolar);
+    if(getComplexRegisterPolarMode(REGISTER_X) != amPolar) {
+      ppTestFail("T31 the tag is not polar, so the row tests nothing");
+    }
+    else {
+      ppcShadowInvalidate();
+      ppcTestType("2");
+      ppcTestOp(ITM_MULT);
+      uint8_t live = PP_NONE;
+      ppReset();
+      if(!ppfBuildCurrent(PP_FONT_STANDARD, PP_FONT_STANDARD, &live)) {
+        ppTestFail("T31 the polar product does not build, so the row tests nothing");
+      }
+      else {
+        char sig[192];
+        sig[0] = 0;
+        ppfTestSigNode(live, sig, sizeof(sig));
+        if(strstr(sig, "\xa2\x21") == NULL) {
+          ppTestFail("T31 a polar-tagged value leaf redrew in rectangular form");
+        }
+      }
+    }
+    ppcTestReset();
+  }
+
+  /* FB1 (PP18RR8-2): the flag browser walks the catalog this build
+   * actually generated. The row derives the row count the same way the
+   * fixed browser does, then drives both system-flag screens. */
+  {
+    int16_t rows = -1;
+    for(uint16_t m = 0; softmenu[m].menuItem != 0; m++) {
+      if(softmenu[m].menuItem == -MNU_SYSFL) {
+        rows = softmenu[m].numItems;
+        break;
+      }
+    }
+    if(rows < 61) {
+      ppTestFailInt("FB1 the SYSFL catalog is too short to fill two screens", 61, (int)rows);
+    }
+    else {
+      lastErrorCode = 0;
+      flagBrowser(SYSTEM_FLAGS_SCREEN_1);
+      currentFlgScr = SYSTEM_FLAGS_SCREEN_2;
+      flagBrowser(SYSTEM_FLAGS_SCREEN_2);
+      if(lastErrorCode != ERROR_NONE) {
+        ppTestFailInt("FB1 the flag browser raised an error", 0, (int)lastErrorCode);
+      }
+      calcMode = CM_NORMAL;
+      currentFlgScr = 0;
+    }
+    ppcTestReset();
+  }
+
   /* T23c: a slot must be maintained wherever its register is
    * writable, even where the live stack does not reach. Fixture: fill
    * the slots under SSIZE8, switch to SSIZE4, store over A. The
@@ -3252,18 +3376,35 @@ void prettyTestEquation(uint16_t unusedButMandatoryParameter) {
   ppReset();
   if(ppqParse("\x83\xc0" "/2", PP_FONT_STANDARD, PP_FONT_TINY, &root))  ppTestFail("EQ4 unknown glyph accepted");
 
-  /* EQ36 (PP18RR7-3): a numeral whose run does not fit the text pool
-   * must fail the parse, not vanish from the drawing. The leading
-   * terms lift ppTextLen so the legal-length numeral overflows while
-   * the short name after it still fits. */
+  /* EQ36 (PP18RR7-3, hardened per PP18RR8-8): a numeral whose run does
+   * not fit the text pool must fail the parse, not vanish from the
+   * drawing. The fixture arithmetic derives from PP_TEXT_BYTES and a
+   * fit-exactly control must PARSE, so a drift in the pool size or the
+   * preamble cost breaks this block loudly instead of silencing the
+   * overflow rows. Costs: the "1+" preamble is ten runs at two pool
+   * bytes each (20), the numeral run is N+1, the denominator run is 2. */
   {
-    static char big[520];
+    static char big[PP_TEXT_BYTES + 24];
+    const int fit  = PP_TEXT_BYTES - 23;   // 20 + (fit+1) + 2 == PP_TEXT_BYTES
+    const int over = PP_TEXT_BYTES - 20;   // the numeral run alone overflows
     int p = 0;
     for(int i = 0; i < 5; i++) { big[p++] = '1'; big[p++] = '+'; }
-    for(int i = 0; i < 492; i++) { big[p++] = '7'; }
+    for(int i = 0; i < fit; i++) { big[p++] = '7'; }
+    big[p++] = '/'; big[p++] = '2'; big[p] = 0;
+    ppReset();
+    if(!ppqParse(big, PP_FONT_STANDARD, PP_FONT_TINY, &root)) {
+      ppTestFail("EQ36 the fit-exactly control does not parse: the pool or preamble arithmetic drifted");
+    }
+    p = 10;
+    for(int i = 0; i < over; i++) { big[p++] = '7'; }
+    big[p++] = '/'; big[p++] = '2'; big[p] = 0;
+    ppReset();
+    if(ppqParse(big, PP_FONT_STANDARD, PP_FONT_TINY, &root)) {
+      ppTestFail("EQ36 a numeral one byte past the pool still parsed");
+    }
+    p = 10 + over;
     big[p++] = 'a'; big[p++] = 'b'; big[p++] = 'c';
-    big[p++] = '/'; big[p++] = '2';
-    big[p] = 0;
+    big[p++] = '/'; big[p++] = '2'; big[p] = 0;
     ppReset();
     if(ppqParse(big, PP_FONT_STANDARD, PP_FONT_TINY, &root)) {
       ppTestFail("EQ36 a numeral vanished into the text pool and the parse still succeeded");
