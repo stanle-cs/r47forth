@@ -1582,3 +1582,23 @@ that landed as `fd080dee9` had changed the meaning of fifteen comments;
 an independent review of all 376 rewritten hunks found them, worst
 being an inverted XEQ-latch direction and a bracket rule that claimed a
 `+` neighbour brackets a big operator.
+
+## 2026-08-31 — round 8 closed with three families, twelve confirmed
+
+Round 8's subject was the round-7 fix wave (f4421da32..7fdda3129).
+In-family on Opus: ten confirmed (PP18RR8-1..10), five of them wave-0
+defects the rotated axis (what the new pins cannot see) reached first.
+Out of family: Sol read the pin net (2 of 7 survived), Gemini read the
+repairs (0 of 3 survived); a refutation-only completion pass judged all
+ten after the in-family half filled the verification cap. Round totals:
+34 raised, 12 confirmed, 3 plausible, 19 refuted. The two surviving
+out-of-family findings are mutation-proved coverage defects: the
+equality oracle is font-blind on the ctxFont axis, and no equality row
+reaches a name leaf. Reports:
+AUDIT_PP18-restarted-round-8-*_2026-08-30-r8.md and its completion
+half. Verdict: do not ship this tip; the exit criterion counter stays
+at zero. The round-7 fix wave's measured device cost: flash +8 bytes,
+RAM +104 bytes of BSS (make dmcp5r47 at 4361b80e9 against f4421da32).
+Packet lesson encoded (template class 9): an excluded body must be
+inert for the question asked — ppfBigop's restyle killed Sol's top
+finding, and only the packet was at fault.

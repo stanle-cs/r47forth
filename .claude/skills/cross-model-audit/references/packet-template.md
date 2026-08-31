@@ -93,6 +93,16 @@ finding.
         HISTORY_SUMS_BYTES (~1.3 KiB) vs the 1 KiB entry cap makes it
         unreachable by construction, and neither could know without the
         numbers in front of them.
+     9. AN EXCLUDED BODY MUST BE INERT FOR THE QUESTION ASKED. PP18
+        round 8 excluded ppfBigop's body from a font-divergence packet
+        because only its precedence stake seemed relevant; the body
+        RESTYLES both limit subtrees (ppSetFontDeep), which killed the
+        reader's top finding. If the question turns on a property
+        (fonts, sizes, positions), every excluded function that can
+        TRANSFORM that property between the included excerpts must be
+        included, or the Orientation must state its effect on that
+        property with a line citation. The reader named the gap, so the
+        packet was at fault, not the reader.
 -->
 
 ## The code
