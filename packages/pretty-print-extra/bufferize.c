@@ -2342,7 +2342,7 @@ TO_QSPI static const numStr NumMsg[] = { { "^0" }, { "^1" }, { "^2" }, { "^3" },
     setSystemFlag(FLAG_ASLIFT);
     //printf("closeNim\n");
     screenUpdatingMode &= ~(SCRUPD_MANUAL_STACK | SCRUPD_SKIP_STACK_ONE_TIME);
-    prettyNoteNimText(aimBuffer);   // pretty-print package: as-typed snapshot before mutation
+    prettyNoteNimText(aimBuffer);   // pretty-print-extra package: as-typed snapshot before mutation
 
     if(nimNumberPart == NP_INT_10) {                //JM Input default type vv
       switch(Input_Default) {
@@ -2687,7 +2687,7 @@ TO_QSPI static const numStr NumMsg[] = { { "^0" }, { "^1" }, { "^2" }, { "^3" },
     #endif //OPTION_IR_PRINTING
 
     closeNim_exit:
-    prettyNoteNumberCommit();   // pretty-print package: mirror the committed number
+    prettyNoteNumberCommit();   // pretty-print-extra package: mirror the committed number
     nimNumberPart = NP_EMPTY;   //Added to ensure test for nimNumberPart in insertStepInProgram() will have the correct value
   }
 

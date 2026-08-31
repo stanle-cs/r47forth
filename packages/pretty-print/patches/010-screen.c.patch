@@ -1,5 +1,5 @@
 diff --git a/src/c47/screen.c b/src/c47/screen.c
-index d2ac868bd18f9f4c20608f5dc90d5652844afcc6..f2c392b37504f284a28c66ec81770af8dd346d96 100644
+index d2ac868bd18f9f4c20608f5dc90d5652844afcc6..1c455a8a940e4608379eab5cd39d2fb32ecf5ac7 100644
 --- a/src/c47/screen.c
 +++ b/src/c47/screen.c
 @@ -1235,7 +1235,9 @@ return res;
@@ -72,17 +72,3 @@ index d2ac868bd18f9f4c20608f5dc90d5652844afcc6..f2c392b37504f284a28c66ec81770af8
            goto RETURN_NORMAL;
          }
  
-@@ -6160,6 +6187,13 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
-         force_refresh(force);
-         break;
- 
-+      case CM_PRETTY_BROWSER:
-+        last_CM = calcMode;
-+        prettyBrowser(NOPARAM);
-+        refreshStatusBar();
-+        force_refresh(force);
-+        break;
-+
-       case CM_REGISTER_BROWSER:
-         last_CM = calcMode;
-         clearScreen(11);

@@ -4,7 +4,9 @@
 /**
  * \file prettyInternal.h
  * Pretty-print engine internals, shared between the package's own
- * translation units (prettyLayout.c, prettyValue.c, prettyTest.c) only.
+ * translation units (prettyLayout.c, prettyValue.c, prettyTest.c).
+ * The pretty-print-extra package's sources include this header too:
+ * the layout model below is the contract its builders target.
  * Include after c47.h. Not part of the public surface.
  *
  * Layout model: a node tree measured then painted. For a node whose
@@ -24,6 +26,8 @@ enum { PP_RUN = 0, PP_HBOX = 1, PP_FRAC = 2, PP_RAD = 3, PP_SUP = 4, PP_PAREN = 
 // PP_RAD children: radicand, then an optional second child = the index
 // (ⁿ√), above-left of the sign. PP_SUB mirrors PP_SUP downward
 // (log_b). PP_BARS wraps its child in |absolute-value| strokes.
+// Only the extra package's builders produce PP_SUB, PP_BARS, PP_INT
+// and PP_BIGOP; the paint arms for them live here in the engine.
 enum { PP_FONT_NUMERIC = 0, PP_FONT_STANDARD = 1, PP_FONT_TINY = 2 };
 
 #define PP_NONE        0xFF
@@ -62,62 +66,20 @@ void            ppPaintAt(uint8_t root, int16_t x, int16_t baseline);
 void            ppSetFontDeep(uint8_t n, uint8_t fontId);
 int16_t         ppPreferredBase(int16_t baseY);   ///< baseY + numericFont box ascent
 
-/* ==== capture engine (prettyCapture.c) ==================================
- * The shadow expression stack's arena, node kinds, and the postfix token
- * stream finished formulas serialize into. Shared with the viewer and
- * the test drivers only. */
+// prettyValue.c: converters and the toggles' test hooks
+bool_t ppParseFraction(const char *src, uint8_t ctxFont, uint8_t childFont, uint8_t *rootOut);
+bool_t ppParseExponent(const char *src, uint8_t ctxFont, uint8_t childFont, uint8_t *rootOut);
+bool_t ppParseIrfrac  (const char *src, uint8_t ctxFont, uint8_t childFont, uint8_t *rootOut);
+bool_t ppParseRealAny (const char *src, uint8_t ctxFont, uint8_t childFont, uint8_t *rootOut);
+bool_t ppParseComplex (const char *src, uint8_t ctxFont, uint8_t childFont, uint8_t *rootOut);
+void   prettySetEnabled(bool_t on);
+void   prettySetTline(bool_t on);
 
-#define PPC_NODES      24
-#define PPC_NIL        0xFF
-#define PPC_UNKNOWN    0xFE
-#define PPC_HIST_BYTES 640
-#define PPC_HIST_MAX   12
-#define PPA_EMITTED    0x01
-// A literal leaf stores its text as a head payload plus one LIT2
-// continuation, 15 bytes each. Anything longer degrades to a value leaf.
-#define PPC_LIT_CAPACITY 30
-
-enum { PPN_FREE = 0, PPN_OP1, PPN_OP2, PPN_LIT, PPN_LIT2, PPN_VAL,
-       PPN_RCL, PPN_CONST, PPN_OPAQUE, PPN_BIGOP, PPN_VAL2 };
-// PPN_VAL2: a VAL whose payload exceeds one node continues into a
-// continuation on child[0], the shape PPN_LIT/PPN_LIT2 already use.
-// A complex34 is 32 bytes, so it fits in 16 + 16.
-#define PPC_VAL_CAPACITY 32
-// PPN_BIGOP: item = ITM id, pad[0..1] = label param (LE), payload = the
-// step real34 (zeros for the integral), child[0]/child[1] = the limits.
-// Its VALUE is the result the dispatch left in X, so chains continue.
-
-// postfix stream tokens (history entries: 6-byte header {totalBytes u16,
-// seq u16, nTokens u8, flags u8} then tokens; TKRES trails when present)
-enum { PPT_TKL = 1,    // literal: len u8, text bytes (as typed)
-       PPT_TKV,        // value: dataType u8, tag u8, allocParam u16, len u8, payload
-       PPT_TKR,        // register/variable leaf: param u16
-       PPT_TKC,        // constant: item u16
-       PPT_TKO1,       // monadic op: item u16
-       PPT_TKO2,       // dyadic op: item u16
-       PPT_TKRES,      // result snapshot: same shape as TKV
-       PPT_TKBIG };    // big operator: item u16, label u16, step real34(16B); pops from,to
-
-typedef struct {
-  uint8_t  kind;        ///< PPN_*
-  uint8_t  aux;         ///< LIT/LIT2: text length; VAL: dataType; OP: PPA_* flags
-  uint16_t item;        ///< OP/CONST: item id; RCL: param; VAL: allocParam
-  uint8_t  child[2];    ///< arena indices; LIT: child[0] = continuation; free list via child[0]
-  uint8_t  pad[2];      ///< VAL: tag, payloadBytes
-  uint8_t  payload[16]; ///< LIT text / VAL raw register payload
-} ppcNode_t;
-
-// prettyEquation.c: EQN display-string -> 2D strip layout
-bool_t ppqParse(const char *src, uint8_t ctxFont, uint8_t childFont, uint8_t *rootOut);
-bool_t ppqShowRender(const char *src);
-void   ppqFitWithEllipsis(const char *src, char *out, uint16_t cap);   ///< fit a line to the screen, marking any cut
-uint8_t ppqFrameIntegral(uint8_t eq);                    ///< ∫ with real ULIM/LLIM limits + d<var>, or bare PP_INT without them
-uint8_t ppqFrameDerivative(uint8_t eq, bool_t second);   ///< d/dx (d²/dx²) framing
-
-/* prettyFormula.c: the shared 2D node builders, used by the capture
- * viewer and the walker so precedence is decided in one place. Only
- * ADD and MUL need brackets: PP_SUP scopes itself. Call ppfPowBase for
- * every PP_SUP base. */
+/* prettyInfix.c: the shared 2D node builders, used by the equation
+ * renderer, the program walker and pretty-print-extra's capture viewer
+ * so precedence is decided in one place. Only ADD and MUL need
+ * brackets: PP_SUP scopes itself. Call ppfPowBase for every PP_SUP
+ * base. */
 #define PPF_PREC_ADD  1
 #define PPF_PREC_MUL  2
 #define PPF_PREC_ATOM 3
@@ -131,6 +93,17 @@ uint8_t ppfBuildOp1(uint16_t item, uint8_t a, int aPrec,
                     uint8_t ctxFont, uint8_t childFont, int *outPrec);
 uint8_t ppfBuildOp2(uint16_t item, uint8_t a, int aPrec, uint8_t b, int bPrec,
                     uint8_t ctxFont, uint8_t childFont, int *outPrec);
+
+// prettyInfix.c: display-time name decodes (best-effort, fall back)
+void ppfVariableName(uint16_t varId, char *out);         ///< out cap >= 17; falls back to "x"
+void ppfLabelName(uint16_t param, char *out);            ///< out cap >= 17; falls back to "LBL nn"
+
+// prettyEquation.c: EQN display-string -> 2D strip layout
+bool_t ppqParse(const char *src, uint8_t ctxFont, uint8_t childFont, uint8_t *rootOut);
+bool_t ppqShowRender(const char *src);
+void   ppqFitWithEllipsis(const char *src, char *out, uint16_t cap);   ///< fit a line to the screen, marking any cut
+uint8_t ppqFrameIntegral(uint8_t eq);                    ///< ∫ with real ULIM/LLIM limits + d<var>, or bare PP_INT without them
+uint8_t ppqFrameDerivative(uint8_t eq, bool_t second);   ///< d/dx (d²/dx²) framing
 
 // prettyEquation.c: node assembly, shared with the walker
 enum { PPQ_BIG_SUM = 0, PPQ_BIG_PROD = 1, PPQ_BIG_DERIV = 2, PPQ_BIG_INTEG = 3 };
@@ -151,39 +124,35 @@ bool_t ppvTestBuildNodes(uint16_t labelIdx, uint8_t ctxFont, uint8_t childFont,
                          uint8_t *rootOut, uint32_t *visitsOut);   ///< the tree the product paints
 #endif // PC_BUILD || TESTSUITE_BUILD
 
-// prettyFormula.c: display-time name decodes (best-effort, fall back)
-void ppfVariableName(uint16_t varId, char *out);         ///< out cap >= 17; falls back to "x"
-
-// prettyFormula.c: capture tree / token stream -> infix layout
-bool_t ppfBuildCurrent(uint8_t ctxFont, uint8_t childFont, uint8_t *rootOut);
-bool_t ppfBuildEntry(const uint8_t *entry, uint8_t ctxFont, uint8_t childFont,
-                     bool_t withResult, uint8_t *rootOut);
-
-// viewer/test API: all lazy, no formatter runs at capture time
-const ppcNode_t *ppcNodeAt(uint8_t n);
-uint8_t          ppcCurrentFormulaRoot(void);
-uint8_t          ppcHistoryCount(void);
-const uint8_t   *ppcHistoryEntry(uint8_t idx, uint16_t *lenOut, uint16_t *seqOut);
-void             ppcHistoryClear(void);
-void             ppcShadowInvalidate(void);   ///< dispatch-bypassing mutations (browser recall)
-uint8_t          ppcTestCurrentRaw(void);   ///< test only: the current root before the opaque screen
-uint8_t          ppcTestSlotRaw(uint8_t k);   ///< test only: slot k's raw arena index
-void             ppcTestDeinit(void);         ///< test only: re-arm the cold-start path
-bool_t           ppfTestStagedSpelling(uint8_t dataType, uint8_t tag, const uint8_t *payload,
-                                       uint8_t bytes, char *out, size_t cap);   ///< test only: a staged value's display spelling
-
-// prettyFormula.c: the browser reuses the pager's packed row builder.
-// canPan: the browser can scroll a row sideways, so it accepts any
-// width. The pager cannot, so it refuses an over-wide row.
-bool_t ppfBuildRow(uint8_t row, uint8_t haveCurrent, bool_t canPan, uint8_t *rootOut, int16_t *ascOut, int16_t *hOut);
-
-// prettyValue.c: converters and the toggle's test hook
-bool_t ppParseFraction(const char *src, uint8_t ctxFont, uint8_t childFont, uint8_t *rootOut);
-bool_t ppParseExponent(const char *src, uint8_t ctxFont, uint8_t childFont, uint8_t *rootOut);
-bool_t ppParseIrfrac  (const char *src, uint8_t ctxFont, uint8_t childFont, uint8_t *rootOut);
-bool_t ppParseRealAny (const char *src, uint8_t ctxFont, uint8_t childFont, uint8_t *rootOut);
-bool_t ppParseComplex (const char *src, uint8_t ctxFont, uint8_t childFont, uint8_t *rootOut);
-void   prettySetEnabled(bool_t on);
-void   prettySetTline(bool_t on);
+#if defined(PC_BUILD)
+/* Shared test scaffolding, defined in prettyTest.c. The extra
+ * package's test driver (prettyExtraTest.c) links against these, so
+ * they are non-static and declared here rather than per-file. */
+// the X-line band ppTestCapture snapshots
+#define PPT_BAND_TOP   (Y_POSITION_OF_REGISTER_X_LINE - 4)
+#define PPT_BAND_ROWS  43
+extern uint32_t ppTestFailures;
+void   ppTestFail(const char *what);
+void   ppTestFailInt(const char *what, int32_t expected, int32_t actual);
+void   ppTestWriteLonI(calcRegister_t regist, uint32_t value);
+void   ppTestSetRealX(const char *value);
+bool_t ppTestIsLonI(calcRegister_t regist, uint32_t expected);
+void   ppTestClearBand(void);
+bool_t ppTestRowAllLit(uint32_t row, uint32_t x0, uint32_t x1);
+bool_t ppTestRowAnyLit(uint32_t row, uint32_t x0, uint32_t x1);
+bool_t ppTestRectAnyLit(uint32_t r0, uint32_t r1, uint32_t x0, uint32_t x1);
+void   ppTestCaptureBand(int which, uint32_t top, uint32_t rows);
+void   ppTestCapture(int which);
+bool_t ppTestSnapsEqual(void);
+// program-fixture loader + layout-signature decoders, shared the same
+// way (the prefixes name their subject, not their home)
+void        ppcTestWriteAndLoadPgm(const uint8_t *pgm, size_t n);
+uint32_t    ppvSumRows(int16_t top, int16_t bottom);
+void        ppfTestSigNode(uint8_t n, char *out, size_t cap);
+void        ppfTestExpect(const char *what, uint8_t root, const char *expected);
+bool_t      ppfTestPowersScoped(uint8_t n);
+bool_t      ppfTestRunEndsSup(uint8_t n);
+bool_t      ppTreeHasRun(uint8_t n, const char *text);
+#endif // PC_BUILD
 
 #endif // !PRETTYINTERNAL_H

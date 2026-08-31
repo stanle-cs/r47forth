@@ -1325,7 +1325,7 @@ bool_t ppvTranspile(uint16_t labelIdx, char *out, uint16_t cap,
 
 /* ==== the Z/T window ====================================================
  * The formula paints across the T and Z rows (rows 20..91, DESIGN.md
- * §6 VISUAL), so the answer stays visible in X underneath. Anything
+ * §4 VISUAL), so the answer stays visible in X underneath. Anything
  * taller falls through to the full-screen view. */
 
 #define PPV_BAND_TOP    (Y_POSITION_OF_REGISTER_T_LINE - 4)
@@ -1471,7 +1471,7 @@ void fnPrettyVisual(uint16_t label) {
     screenUpdatingMode &= (uint8_t)~(SCRUPD_MANUAL_MENU | SCRUPD_MANUAL_SHIFT_STATUS);
     screenHoldsDrawnPixels = true;
     // a self-painted screen declares itself one, or EXIT cannot
-    // dismiss it (DESIGN.md §6)
+    // dismiss it (DESIGN.md §4)
     temporaryInformation = TI_SHOWNOTHING;
   }
   else if(!ppvPaintFullScreen(&ctx, root)) {

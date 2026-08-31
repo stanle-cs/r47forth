@@ -266,7 +266,7 @@
     calcMode = CM_NIM;
     clearSystemFlag(FLAG_ALPHA);
 
-    prettyNoteNimOpen();   // pretty-print package: latch the deferred lift decision
+    prettyNoteNimOpen();   // pretty-print-extra package: latch the deferred lift decision
 
     liftStack();
     real34SetZero(REGISTER_REAL34_DATA(REGISTER_X));

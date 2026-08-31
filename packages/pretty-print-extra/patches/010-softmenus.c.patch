@@ -1,5 +1,5 @@
 diff --git a/src/c47/softmenus.c b/src/c47/softmenus.c
-index 6d036d9a0c49cf030d1e1b82d0deb5b32cc02183..90ac60fb61f82e8b52d3e9def2192790c4dd6631 100644
+index 6d036d9a0c49cf030d1e1b82d0deb5b32cc02183..b2b0dd3c98390f53c46b2c1c69b076722680ef50 100644
 --- a/src/c47/softmenus.c
 +++ b/src/c47/softmenus.c
 @@ -60,7 +60,7 @@ TO_QSPI const int16_t menu_DISP[]        = { ITM_FIX,                       ITM_
@@ -15,8 +15,8 @@ index 6d036d9a0c49cf030d1e1b82d0deb5b32cc02183..90ac60fb61f82e8b52d3e9def2192790
                                               ITM_LF_PIC,                    ITM_SMALL_SQUARE,             ITM_NULL,                     ITM_NULL,                     ITM_NULL,                     ITM_NULL                  };
  
  
-+/* pretty-print package: the natural-display softmenu (claims registry
-+ * §7). VISUAL sits on the f-shifted row (slots 6-11). The padding
++/* pretty-print-extra package: the natural-display softmenu (claims registry
++ * §6). VISUAL sits on the f-shifted row (slots 6-11). The padding
 + * keeps the array a multiple of six, as every upstream menu is. */
 +TO_QSPI const int16_t menu_PP[]          = { ITM_PSHOW,                     ITM_PHIST,                  ITM_PCLR,                 ITM_EQSHW,             ITM_PPON,                    ITM_PTLIN,
 +                                             ITM_VISUAL,                    ITM_NULL,                   ITM_NULL,                 ITM_NULL,              ITM_NULL,                    ITM_NULL                      };
@@ -31,7 +31,7 @@ index 6d036d9a0c49cf030d1e1b82d0deb5b32cc02183..90ac60fb61f82e8b52d3e9def2192790
  /* 184 */  {.menuItem = -MNU_CONV_P_LOAD,   .numItems = sizeof(menu_CONV_PLoad    )/sizeof(int16_t), .softkeyItem = menu_CONV_PLoad     },       // NOTE !! do not add menus here, add them at the end. The menu numbers are fixed for the Wiki references. 2024-02-21 jm
  /* 185 */  {.menuItem = -MNU_TAMLOCALLABEL, .numItems = sizeof(menu_TamLocalLabel )/sizeof(int16_t), .softkeyItem = menu_TamLocalLabel  },       // NOTE !! do not add menus here, add them at the end. The menu numbers are fixed for the Wiki references. 2024-02-21 jm
  
-+/* 185b*/  {.menuItem = -MNU_PP,            .numItems = sizeof(menu_PP            )/sizeof(int16_t), .softkeyItem = menu_PP             },       // pretty-print package: added at the tail per this table's own instruction (forth-core inserts near the top)
++/* 185b*/  {.menuItem = -MNU_PP,            .numItems = sizeof(menu_PP            )/sizeof(int16_t), .softkeyItem = menu_PP             },       // pretty-print-extra package: added at the tail per this table's own instruction (forth-core inserts near the top)
  /* 186 */  {.menuItem =  0,                 .numItems = 0,                                           .softkeyItem = NULL                }
  
  
@@ -39,7 +39,7 @@ index 6d036d9a0c49cf030d1e1b82d0deb5b32cc02183..90ac60fb61f82e8b52d3e9def2192790
              }
            }                                                                      //JM^^
  
-+          /* pretty-print package: the two toggles in our own menu show
++          /* pretty-print-extra package: the two toggles in our own menu show
 +           * their state the way their DISP neighbours do. The generic
 +           * checkbox path next door only fires for fnGetSystemFlag items
 +           * inside -MNU_TAMFLAG, and reads the flag out of the item's

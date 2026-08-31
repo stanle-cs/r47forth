@@ -1713,7 +1713,6 @@ static inline uint8_t regCtoKS(const int16_t regC) {
 #define CM_PLOT_STAT                               8 // Plot stats mode
 #define CM_ERROR_MESSAGE                           9 // Error message in one of the register lines
 #define CM_BUG_ON_SCREEN                          10 // Bug message on screen
-#define CM_PRETTY_BROWSER                         20 // pretty-print formula browser (package browsers 19-23, claims registry)
 #define CM_CONFIRMATION                           11 // Waiting for confirmation or canceling
 #define CM_MIM                                    12 // Matrix input mode tbd reorder
 #define CM_EIM                                    13 // Equation input mode

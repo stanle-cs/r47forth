@@ -1,0 +1,37 @@
+diff --git a/src/c47/items.c b/src/c47/items.c
+index f65402f25fdbbf808a058f4acae3a95b83683e9d..5f6c233fda01de98e47cd298488f25c3a99d8da9 100644
+--- a/src/c47/items.c
++++ b/src/c47/items.c
+@@ -410,8 +410,10 @@ bool_t isFunctionOldParam16(uint16_t func) {
+     //**RunFunction
+     if(!itemNotAvail(func)) {
+       stackWatermarkBeforeDispatch();
++      prettyNoteFunction(func, param);       // pretty-print-extra package: STAGE (pre-op registers)
+       indexOfItems[func].func(param);
+       stackWatermarkAfterDispatch();
++      prettyNoteFunctionDone();              // pretty-print-extra package: DONE (apply / invalidate)
+ 
+       #if defined(OPTION_IR_PRINTING)
+         printTraceTI();
+@@ -1659,6 +1661,8 @@ bool_t isFunctionOldParam16(uint16_t func) {
+   void fn42Xtoa                   (uint16_t unusedButMandatoryParameter) {}   //DL
+   void fn42VarMnu                 (uint16_t unusedButMandatoryParameter) {}   //DL
+   void fn42Prompt                 (uint16_t unusedButMandatoryParameter) {}   //DL
++  void fnPrettyHist               (uint16_t unusedButMandatoryParameter) {}
++  void fnPrettyHistClear          (uint16_t unusedButMandatoryParameter) {}
+   void fnDeltaToStar              (uint16_t unusedButMandatoryParameter) {}
+   void fnStarToDelta              (uint16_t unusedButMandatoryParameter) {}
+   void fnSymToAbc                 (uint16_t unusedButMandatoryParameter) {}
+@@ -2034,9 +2038,9 @@ TO_QSPI const item_t indexOfItems[] = {
+ /*  212 */  { fnConstant,                      83,                          STD_pi,                                        "pi",                                          (0 << TAM_MAX_BITS) |     0, CAT_CNST | SLS_ENABLED   | US_ENABLED   | EIM_DISABLED | PTP_NONE         | HG_ENABLED         | RESULT_IN_X },
+ /*  213 */  { itemToBeCoded,                   NOPARAM,                     "0213",                                        "0213",                                        (0 << TAM_MAX_BITS) |     0, CAT_FREE | SLS_ENABLED   | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
+ /*  214 */  { itemToBeCoded,                   NOPARAM,                     "0214",                                        "0214",                                        (0 << TAM_MAX_BITS) |     0, CAT_FREE | SLS_ENABLED   | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
+-/*  215 */  { itemToBeCoded,                   NOPARAM,                     "0215",                                        "0215",                                        (0 << TAM_MAX_BITS) |     0, CAT_FREE | SLS_ENABLED   | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
+-/*  216 */  { itemToBeCoded,                   NOPARAM,                     "0216",                                        "0216",                                        (0 << TAM_MAX_BITS) |     0, CAT_FREE | SLS_ENABLED   | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
+-/*  217 */  { itemToBeCoded,                   NOPARAM,                     "0217",                                        "0217",                                        (0 << TAM_MAX_BITS) |     0, CAT_FREE | SLS_ENABLED   | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
++/*  215 */  { fnPrettyHistClear,               NOPARAM,                     "PCLR",                                        "PCLR",                                        (0 << TAM_MAX_BITS) |     0, CAT_FNCT | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
++/*  216 */  { fnPrettyHist,                    NOPARAM,                     "PHIST",                                       "PHIST",                                       (0 << TAM_MAX_BITS) |     0, CAT_FNCT | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
++/*  217 */  { itemToBeCoded,                   NOPARAM,                     "PP",                                          "PP",                                          (0 << TAM_MAX_BITS) |     0, CAT_MENU | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
+ /*  218 */  { itemToBeCoded,                   NOPARAM,                     "0218",                                        "0218",                                        (0 << TAM_MAX_BITS) |     0, CAT_FREE | SLS_ENABLED   | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
+ /*  219 */  { itemToBeCoded,                   NOPARAM,                     "0219",                                        "0219",                                        (0 << TAM_MAX_BITS) |     0, CAT_FREE | SLS_ENABLED   | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
+ 

@@ -1,0 +1,16 @@
+diff --git a/src/testSuite/tests/testSuiteList.txt b/src/testSuite/tests/testSuiteList.txt
+index 6bb764d1b588d13b2767c07e61837d86e4b5a0c0..2432b6936b653521ec529ce56643790babf06a95 100644
+--- a/src/testSuite/tests/testSuiteList.txt
++++ b/src/testSuite/tests/testSuiteList.txt
+@@ -490,6 +490,11 @@ named_variable_cache_cov
+ clearvars_cov
+ program_flow_cov
+ 
++; pretty-print-extra: the capture traces and the formula views. Anchored
++; here, clear of the core package's two list lines and of the sibling
++; packages' tail claims.
++pretty_extra
++
+ ; readp_cov appends one program, so it also runs after programs.txt and before
+ ; serialize_cov resets the calculator.
+ readp_cov

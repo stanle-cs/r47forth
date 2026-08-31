@@ -1688,7 +1688,7 @@ endReturnTrue:
         }
       }
     }
-    // pretty-print package: the browser resolves its own keys. The
+    // pretty-print-extra package: the browser resolves its own keys. The
     // arm is separate because forth-core rewrites the condition above,
     // and two packages cannot edit one line.
     else if(calcMode == CM_PRETTY_BROWSER) {
@@ -2785,7 +2785,7 @@ RELEASE_END:
             }
           }
 
-          // pretty-print package: a key that is not the browser's own
+          // pretty-print-extra package: a key that is not the browser's own
           // must not run its item underneath the browser. The arm is
           // a guard because undo-history adds `case 20:` to the same
           // switch. The .d exemption keeps the pan key reachable: .d

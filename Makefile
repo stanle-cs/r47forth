@@ -43,7 +43,10 @@ clean: $(GMP_MESON_BUILD)
 	rm -f t47$(EXE)
 	rm -rf wp43-windows* wp43-macos* wp43-linux* wp43-dm42*
 	rm -rf c47-windows* c47-macos* c47-linux* c47-dmcp* r47-dmcp*
-	rm -rf build build.sim build.sim.t47 build.dmcp build.dmcp.* build.dmcp5 build.rel build.rel.debug pkg_dist
+	rm -rf build build.sim build.sim.t47 build.dmcp build.dmcp.* build.dmcp5 build.rel build.rel.debug
+	@# pkg_dist stays: clean removes BUILD state, and pkg_build refreshes
+	@# its own zip. With two packages, a clean that wipes pkg_dist makes
+	@# the second pkg_build destroy the first artifact (found at PP19).
 	rm -f src/generated/*.c src/generated/constantPointers.h src/generated/softmenuCatalogs.h
 	rm -rf PROGRAMS/ALLPGMS
 	rm -f src_files_stamp testPgms_stamp
@@ -280,6 +283,15 @@ test: clean check-custom-pkg-sim build.sim testPgms
 # build directory or a binary, which is an order of magnitude away, not 15%.
 PKG_MAX_SIZE = 1000000
 
+# PKG_TEST_WITH (optional): the CUSTOM_PKG list for pkg_build's gating
+# test run, for a package that cannot build solo because it requires
+# another package. The zip still contains only $(PKG)'s own
+# patches/+files/. Example:
+#   make pkg_build PKG=packages/pretty-print-extra \
+#     PKG_TEST_WITH=packages/pretty-print,packages/pretty-print-extra
+# Unset, the test runs against $(PKG) alone (unchanged behavior).
+PKG_TEST_WITH =
+
 pkg_build:
 	@if [ -z "$(PKG)" ]; then \
 		echo "ERROR: pkg_build requires PKG=<package-dir>, e.g. make pkg_build PKG=packages/my-pkg" >&2; \
@@ -290,7 +302,7 @@ pkg_build:
 		exit 1; \
 	fi
 	$(MAKE) clean
-	$(MAKE) test CUSTOM_PKG=$(PKG)
+	$(MAKE) test CUSTOM_PKG=$(if $(PKG_TEST_WITH),$(PKG_TEST_WITH),$(PKG))
 	python3 tools/pkg_patch_refresh.py $(PKG)
 	@mkdir -p "$(CURDIR)/pkg_dist"
 	@rm -f "$(CURDIR)/pkg_dist/$(notdir $(PKG)).zip"

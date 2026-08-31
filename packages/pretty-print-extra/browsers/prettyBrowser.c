@@ -17,6 +17,7 @@
 
 #include "c47.h"
 #include "prettyInternal.h"
+#include "prettyExtraInternal.h"
 #include "browsers/prettyBrowser.h"
 
 static uint8_t pbSelection = 0;

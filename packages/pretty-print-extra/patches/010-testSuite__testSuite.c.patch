@@ -1,0 +1,19 @@
+diff --git a/src/testSuite/testSuite.c b/src/testSuite/testSuite.c
+index bc8a9792a584984b3e18dee2a6626ce81a330205..a993d265a25e8566d95878159914f4fc386852e9 100644
+--- a/src/testSuite/testSuite.c
++++ b/src/testSuite/testSuite.c
+@@ -690,6 +690,14 @@ const funcTest_t funcTestNoParam[] = {
+   {"fnSetNDEC",              fnSetNDEC             },
+   {"fnSetBaseNr",            fnSetBaseNr           },
+   {"fnSetC47",               fnSetC47              },
++  // pretty-print-extra package: coverage drivers for
++  // tests/pretty_extra.txt and pretty_visual_real.txt (declared via
++  // c47.h -> prettyExtra.h, no indexOfItems row). The core package's
++  // drivers anchor after fnGetNDEC below; separate anchors keep the
++  // two packages' hunks composable.
++  {"prettyTestCapture",      prettyTestCapture,   1},
++  {"prettyTestFormula",      prettyTestFormula,   1},
++  {"prettyTestEqLang",       prettyTestEqLang,    1},
+   {"fnSetRJ",                fnSetRJ               },
+   {"fnSetJM",                fnSetJM               },
+   {"fnSetHP35",              fnSetHP35             },

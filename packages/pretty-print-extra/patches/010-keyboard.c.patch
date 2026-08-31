@@ -1,5 +1,5 @@
 diff --git a/src/c47/keyboard.c b/src/c47/keyboard.c
-index bc44026016e94a8865b8acc886386341596641c6..7b549cbb4bb0572313438ef76972ddba09538f6f 100644
+index bc44026016e94a8865b8acc886386341596641c6..0f576afe2e40540d73c8770979b0efe1651cb77e 100644
 --- a/src/c47/keyboard.c
 +++ b/src/c47/keyboard.c
 @@ -687,7 +687,7 @@ static void executeFunction(const char *data, int16_t item_);
@@ -33,7 +33,7 @@ index bc44026016e94a8865b8acc886386341596641c6..7b549cbb4bb0572313438ef76972ddba
          }
        }
      }
-+    // pretty-print package: the browser resolves its own keys. The
++    // pretty-print-extra package: the browser resolves its own keys. The
 +    // arm is separate because forth-core rewrites the condition above,
 +    // and two packages cannot edit one line.
 +    else if(calcMode == CM_PRETTY_BROWSER) {
@@ -48,7 +48,7 @@ index bc44026016e94a8865b8acc886386341596641c6..7b549cbb4bb0572313438ef76972ddba
              }
            }
  
-+          // pretty-print package: a key that is not the browser's own
++          // pretty-print-extra package: a key that is not the browser's own
 +          // must not run its item underneath the browser. The arm is
 +          // a guard because undo-history adds `case 20:` to the same
 +          // switch. The .d exemption keeps the pan key reachable: .d

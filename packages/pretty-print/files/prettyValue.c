@@ -23,7 +23,9 @@ static char ppSpanB[120];
 
 // Both toggles are system flags (FLAG_PRETTYP bit 50, FLAG_PTLINE bit
 // 51, counts reserved by the claims registry). They persist across
-// power cycles and answer to SF/CF/FS? and the flag browser.
+// power cycles and answer to SF/CF/FS? and the flag browser. This
+// package owns both flags, both commands and both defaults; only the
+// T-line rendering lives in pretty-print-extra.
 
 void fnPrettyToggle(uint16_t unusedButMandatoryParameter) {
   (void)unusedButMandatoryParameter;
@@ -35,6 +37,10 @@ void fnPrettyToggle(uint16_t unusedButMandatoryParameter) {
   }
 }
 
+// The PTLIN command only flips the core-owned flag, so it lives here.
+// The T-line rendering itself is pretty-print-extra's, through
+// ppTlineExtension below: in a build without that package the flag
+// holds but nothing reads it.
 void fnPrettyTlineToggle(uint16_t unusedButMandatoryParameter) {
   (void)unusedButMandatoryParameter;
   if(getSystemFlag(FLAG_PTLINE)) {
@@ -52,6 +58,34 @@ void prettySetTline(bool_t on) {
   else {
     clearSystemFlag(FLAG_PTLINE);
   }
+}
+
+// pretty-print-extra's registration slots (prettyPrint.h). NULL until
+// that package's lazy init runs; NULL is skipped.
+bool_t (*ppTlineExtension)(int16_t baseY, int16_t bandTop,
+                           int16_t bandBottom, int16_t *lineWidth) = NULL;
+void   (*ppResetExtension)(void) = NULL;
+
+void prettyReset(void) {
+  if(ppResetExtension != NULL) {
+    (*ppResetExtension)();
+  }
+  // Factory defaults. A RESET wipes the system flags before this hook
+  // runs, so the default-ON flag must be set again here.
+  setSystemFlag(FLAG_PRETTYP);
+  clearSystemFlag(FLAG_PTLINE);
+}
+
+/* The system-flags catalog's generated row count, from the softmenu
+ * table. The flag browser bounds its walk with this, and FB1 asserts
+ * the same derivation, so the two cannot drift (PP18RR9-4). */
+int16_t prettySysflRows(void) {
+  for(uint16_t m = 0; softmenu[m].menuItem != 0; m++) {
+    if(softmenu[m].menuItem == -MNU_SYSFL) {
+      return softmenu[m].numItems;
+    }
+  }
+  return NUMBER_OF_SYSTEM_FLAGS;
 }
 
 bool_t prettyEnabled(void) {
@@ -801,28 +835,13 @@ bool_t prettyTryRegisterLine(calcRegister_t regist, int16_t baseY, int16_t *line
   int16_t bandTop    = baseY - 4;
   int16_t bandBottom = baseY + ((regist == REGISTER_X) ? 38 : 31);
 
-  // T-line live formula (opt-in): while a formula is open, the T line
-  // shows the formula. No formula or no fit falls through to the
-  // ordinary value rendering below.
-  if(regist == REGISTER_T && getSystemFlag(FLAG_PTLINE)) {
-    static const uint8_t tRungs[2][2] = {
-      { PP_FONT_STANDARD, PP_FONT_STANDARD },
-      { PP_FONT_STANDARD, PP_FONT_TINY     },
-    };
-    for(int r = 0; r < 2; r++) {
-      uint8_t root;
-      ppReset();
-      if(!ppfBuildCurrent(tRungs[r][0], tRungs[r][1], &root)) {
-        break;
-      }
-      if(r == 1) {
-        ppSetFontDeep(root, PP_FONT_TINY);   // whole-tree shrink, as in the pager
-      }
-      if(ppRenderRightAligned(root, SCREEN_WIDTH, bandTop, bandBottom, ppPreferredBase(baseY))) {
-        *lineWidth = ppNodeAt(root)->width;
-        return true;
-      }
-    }
+  // T-line live formula (opt-in, pretty-print-extra): while a formula
+  // is open, the T line shows the formula. An absent extra package, no
+  // formula or no fit falls through to the ordinary value rendering
+  // below.
+  if(regist == REGISTER_T && ppTlineExtension != NULL
+      && (*ppTlineExtension)(baseY, bandTop, bandBottom, lineWidth)) {
+    return true;
   }
 
   for(int r = 0; r < 3; r++) {

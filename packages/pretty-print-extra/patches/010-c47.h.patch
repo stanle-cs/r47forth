@@ -1,0 +1,13 @@
+diff --git a/src/c47/c47.h b/src/c47/c47.h
+index 1dade6b5c0efe403bb366e388d204d42b0a32709..6ce4ee121cfd8e2acee972177ae9abe6d7ce7bca 100644
+--- a/src/c47/c47.h
++++ b/src/c47/c47.h
+@@ -122,6 +122,8 @@
+     #include "stack.h"
+     #include "stats.h"
+     #include "statusBar.h"
++
++    #include "prettyExtra.h"   // pretty-print-extra package (requires the pretty-print package's prettyPrint.h below)
+     #include "store.h"
+     #include "stringFuncs.h"
+     #include "timer.h"

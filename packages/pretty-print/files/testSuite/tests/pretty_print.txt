@@ -39,30 +39,12 @@ Func: prettyTestShow
 In:  FL_ASLIFT=1 RX=LonI:"99"
 Out: EC=0 RX=LonI:"0"
 
-Func: prettyTestFormula
-
-; FV1 precedence parens (2+3)x4; FV2 division as a stacked fraction; FV3
-; a history entry decoding with its = result; FV4 sqrt/square scoping;
-; FV5 the PHIST pager frames + manual-paint protocol + PCLR.
-In:  FL_ASLIFT=1 RX=LonI:"99"
-Out: EC=0 RX=LonI:"0"
-
 Func: prettyTestEquation
 
 ; EQ1 '/' binds factors; EQ2 parens unwrap under the bar; EQ3 vinculum
 ; over a parenthesized radicand; EQ4 strict declines; EQ5 the strip
 ; render pins the bar row; EQ6-8 the EQSHW full view: nested fractions
 ; at full size, frames + protocol, and the big integral in integrate mode.
-In:  FL_ASLIFT=1 RX=LonI:"99"
-Out: EC=0 RX=LonI:"0"
-
-Func: prettyTestCapture
-
-; The 15 normative traces from DESIGN.md §4, driven through the REAL
-; paths (addItemToNimBuffer/closeNim/runFunction): chaining, supersession,
-; monadic, ENTER dup, CLX displacement, as-typed 2.50, NIM abort, swap,
-; UNDO discard, error invalidation, arena exhaustion, LASTx, the
-; unknown-item default, and the eRPN ENTER leg.
 In:  FL_ASLIFT=1 RX=LonI:"99"
 Out: EC=0 RX=LonI:"0"
 

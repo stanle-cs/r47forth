@@ -6,7 +6,7 @@
  * The shadow expression stack. It turns chained RPN operations into
  * expression trees, decides where a formula ends, and keeps a bounded
  * ring of finished formulas as postfix token streams. The rules are in
- * DESIGN.md §3-§5.
+ * DESIGN.md §1-§3.
  *
  * At quiescence, slot k always holds an expression whose value equals
  * register REGISTER_X + k. When a transform cannot keep this true, the
@@ -22,6 +22,7 @@
 
 #include "c47.h"
 #include "prettyInternal.h"
+#include "prettyExtraInternal.h"
 
 extern bool_t nimWhenButtonPressed;   // keyboard.c file scope, non-static
 
@@ -80,8 +81,13 @@ static bool_t ppcIsSlotRegister(uint16_t r) {
       && r < (uint16_t)REGISTER_X + (uint16_t)(sizeof(ppcSlot) / sizeof(ppcSlot[0]));
 }
 
+static void ppxReset(void);
+
 /* Initializes package data only. It must not set the system flags:
- * only prettyReset restores the factory defaults. */
+ * only the core's prettyReset restores the factory defaults. It also
+ * fills the core package's extension slots: every capture entry point
+ * runs through here first, and no formula can exist before one does,
+ * so the T-line extension is always registered before it can draw. */
 static void ppcInit(void) {
   for(uint8_t i = 0; i < PPC_NODES; i++) {
     ppcArena[i].kind = PPN_FREE;
@@ -100,18 +106,18 @@ static void ppcInit(void) {
   ppcHistCount = 0;
   ppcHistSeq = 0;
   ppcInited = true;
+  ppTlineExtension = ppfTlineTry;
+  ppResetExtension = ppxReset;
 }
 
 void ppcTestDeinit(void) {
   ppcInited = false;   // the next dispatch takes the cold-start path
 }
 
-void prettyReset(void) {
+/* The core's prettyReset calls this through ppResetExtension. The
+ * flag defaults are the core's own job there. */
+static void ppxReset(void) {
   ppcInit();
-  // Factory defaults. A RESET wipes the system flags before this hook
-  // runs, so the default-ON flag must be set again here.
-  setSystemFlag(FLAG_PRETTYP);
-  clearSystemFlag(FLAG_PTLINE);
 }
 
 static uint8_t ppcAlloc(uint8_t kind) {
@@ -197,7 +203,7 @@ static uint8_t ppcValLeafFromRegister(calcRegister_t regist) {
     return ppcAlloc(PPN_OPAQUE);
   }
   uint32_t bytes = TO_BYTES((uint32_t)getRegisterFullSizeInBlocks(regist));
-  /* Only complex34 gets the two-node continuation (DESIGN.md §3): an
+  /* Only complex34 gets the two-node continuation (DESIGN.md §1): an
    * oversized long integer stays opaque. */
   const uint32_t cap = (dt == dtComplex34) ? (uint32_t)PPC_VAL_CAPACITY
                                            : (uint32_t)sizeof(((ppcNode_t *)0)->payload);
@@ -255,7 +261,7 @@ static void ppcEnsureKnown(uint8_t slot) {
 }
 
 
-/* ==== emission (DESIGN.md §4/§5) ======================================== */
+/* ==== emission (DESIGN.md §2/§3) ======================================== */
 
 static bool_t ppcTreeHasOpaque(uint8_t n) {
   if(n == PPC_NIL || n == PPC_UNKNOWN) {
@@ -468,7 +474,7 @@ static void ppcEmit(uint8_t root, calcRegister_t resultReg) {
 }
 
 /* The tree in `slot` is about to leave the shadow stack unconsumed
- * (DESIGN.md §4 rule 1). Emit it if it is an unemitted op root. */
+ * (DESIGN.md §2 rule 1). Emit it if it is an unemitted op root. */
 static void ppcDisplaced(uint8_t slot, bool_t registerStillLive) {
   uint8_t n = ppcSlot[slot];
   if(n == PPC_NIL || n == PPC_UNKNOWN) {
@@ -494,7 +500,7 @@ static void ppcInvalidate(bool_t emitCurrent) {
 }
 
 
-/* ==== classifier (DESIGN.md §3) ========================================= */
+/* ==== classifier (DESIGN.md §1) ========================================= */
 
 static uint8_t ppcClassify(int16_t func) {
   switch(func) {
@@ -555,7 +561,7 @@ static uint8_t ppcClassify(int16_t func) {
     case ITM_RS: case ITM_SST:
       return PPC_INVALIDATE;
     case 427: case 428:
-      // undo-history composition (DESIGN.md §7): the U.HIST restore
+      // undo-history composition (DESIGN.md §6): the U.HIST restore
       // bypasses item dispatch, and REDO rewrites the stack. Both
       // invalidate.
       return PPC_INVALIDATE;
@@ -677,7 +683,7 @@ void prettyNoteFunction(int16_t func, uint16_t param) {
       ppcEnsureKnown(0);
       ppcEnsureKnown(1);
       // a new root whose operands do not include the current formula
-      // finishes it now (DESIGN.md §4 rule 2)
+      // finishes it now (DESIGN.md §2 rule 2)
       if(ppcCurrent != PPC_NIL && ppcSlot[0] != ppcCurrent && ppcSlot[1] != ppcCurrent) {
         ppcSupersedeCurrent();
       }
@@ -758,7 +764,7 @@ void prettyNoteFunction(int16_t func, uint16_t param) {
       break;
     case PPC_BIGOPSUM: {
       // Z=from, Y=to, X=step are consumed by value. Consumed slots and
-      // the current root are emitted here (DESIGN.md §4).
+      // the current root are emitted here (DESIGN.md §2).
       if(!(ppcStage.param >= FIRST_LABEL && ppcStage.param <= LAST_LABEL)) {
         // the register-letter form resolves a label indirectly: not modeled
         ppcStage.cls = PPC_INVALIDATE;
