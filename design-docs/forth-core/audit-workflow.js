@@ -52,6 +52,11 @@ const FILES   = A.files   || '(discover from the commit range)'
  * had to derive the tip itself — the guard worked only because they did. */
 const TIP = A.tip || (RANGE.includes('..') ? RANGE.split('..').pop() : 'HEAD')
 
+/* Optional model override for every agent this run spawns (round 7: the
+ * owner asked for Opus readers to cut token cost). Absent -> inherit the
+ * session model, exactly as before. */
+const MODEL = A.model ? { model: A.model } : {}
+
 /* Round + out-of-family accounting — REQUIRED (owner ruling 2026-08-29).
  * Four PP18 rounds closed in-family only: a green `dispatch.sh probe all`
  * was mistaken for the pass, and round 3's report carried the omission in
@@ -266,7 +271,7 @@ YOUR DIMENSION — stay in it, someone else has the others; duplicated coverage 
 worth less than independent coverage:
 
 ${d.q}`,
-    { label: `find:${d.key}`, phase: 'Find', schema: FINDING_SCHEMA, effort: d.effort })
+    { label: `find:${d.key}`, phase: 'Find', schema: FINDING_SCHEMA, effort: d.effort, ...MODEL })
 ))).filter(Boolean)
 
 const all = []
@@ -396,7 +401,7 @@ Otherwise do not edit the tree at all.
 Answer REFUTED or SURVIVES, one paragraph of why, then your evidence: the path
 you constructed, the trace you followed, or the ruling you found.`,
     { label: `refute:${lens.key}:${f.file.split('/').pop()}:${f.line}`, phase: 'Refute',
-      schema: VERDICT_SCHEMA, effort: 'high',
+      schema: VERDICT_SCHEMA, effort: 'high', ...MODEL,
       /* AUDIT round 5 earned this: verifiers mutate to prove a coverage claim,
        * they run concurrently, and in the owner's shared tree two of three
        * mutation runs were contaminated by a sibling's live edit.  A worktree
@@ -460,7 +465,7 @@ ${JSON.stringify(reports.map((r, i) => ({ dimension: dims[i].key, coverage: r.co
 
 Write the report to design-docs/forth-core/AUDIT_${(SUBJECT || 'subject').replace(/[^A-Za-z0-9]+/g, '-')}_${A.date || 'report'}.md
 and return the absolute path plus a five-line summary.`,
-  { label: 'synthesise-report', phase: 'Synthesis', effort: 'xhigh' })
+  { label: 'synthesise-report', phase: 'Synthesis', effort: 'xhigh', ...MODEL })
 
 return {
   subject: SUBJECT,

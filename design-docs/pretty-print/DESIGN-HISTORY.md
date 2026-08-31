@@ -1537,3 +1537,48 @@ The last whitespace-only churn finding went at the same time.
 encloses. The enclosed line keeps its own indentation now, which is the
 idiom `aafd38f7d` established for `screen.c`. `patch_churn_scan.py` over
 the package reports zero mechanical findings.
+
+## 2026-08-30 — round 7 closed with three families, and its fix wave
+
+Round 7 was the first round of the restarted series with all three
+families inside it: eight in-family dimensions on Opus, Gemini on the
+leaf-producer packet, Sol on the parser-latch packet. Nine findings
+confirmed (PP18RR7-1..9). Six of the nine sit inside round 6's own
+repairs. The report is `AUDIT_PP18-restarted-round-7-*_2026-08-30-r7.md`
+in design-docs/forth-core/.
+
+The fix wave (`4361b80e9`) landed red-first: eight pins red before the
+fixes, zero after, each for its predicted reason.
+
+- **PP18RR7-1** (with -4's pin). The bracket rule had moved onto the
+  leaf producers, and the census missed the history decoder.
+  `ppfBuildEntry`'s literal and value arms now ask `ppfTextIsAtom`.
+  `ppfTestFiledMatchesLive` holds the filed picture equal to the live
+  one across the T25 power rows and the T27 MULT/SUB rows. Class: a
+  rule moved off a consumer chokepoint onto its producers.
+- **PP18RR7-2.** `ppfValBuf` grows from 96 to 200 bytes, the
+  formatter's own budget. The widest reachable spelling is 160 bytes
+  (base 2, WSIZE 64, grouped); T28 decodes it in every base. Class: two
+  size gates on one path, and the reasoned-about gate is not the
+  deciding one.
+- **PP18RR7-3.** `ppqNumber` latches `c->failed` when its run
+  allocation fails; EQ36 pins the decline. Class: one sentinel, two
+  meanings.
+- **PP18RR7-9.** `ppcTestReset` restores `lastIntegerBase`. The unfixed
+  helper reddened an unrelated literal row during this wave's own
+  red-first run — the leak demonstrated itself. Class: a reset helper
+  that covers the state its author had in hand.
+
+Ruled and recorded, not fixed: -6 (the separator alphabet waits for the
+predicate's next touch), -8 (the hook table is the rebaser's document),
+-7 beyond the header obligation now on `ppfTextIsAtom`, and -5's code
+half — the `tmpString` scratch write stays, and §1's fallback rule now
+names it as the one exception.
+
+Two process facts this wave paid for. `make pkg_build` refreshes AFTER
+its suite runs, so its first run after an edit tests the stale mirror —
+run the refresh first (CLAUDE.md now says so). And the comment pass
+that landed as `fd080dee9` had changed the meaning of fifteen comments;
+an independent review of all 376 rewritten hunks found them, worst
+being an inverted XEQ-latch direction and a bracket rule that claimed a
+`+` neighbour brackets a big operator.

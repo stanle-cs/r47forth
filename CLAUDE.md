@@ -5,6 +5,10 @@
   nothing to declare. `tools/pkg_patch_refresh.py` regenerates patches/+files/,
   which are generated output — the build reads ONLY those, never your edits
   directly. Gate: ./packages/forth-core/build-test.sh (it refreshes first).
+  That gate stays green under a broken pretty-print (audit round 7, §2).
+  For pretty-print work, the gate is `make pkg_build PKG=packages/pretty-print`.
+  Run `tools/pkg_patch_refresh.py` first: pkg_build refreshes AFTER its suite
+  runs, so its first run after an edit tests the stale mirror.
 - Forth sources live in packages/forth-core/; the docs live in
   design-docs/forth-core/ — DESIGN.md there is authoritative, DESIGN-HISTORY.md
   is its non-normative amendment trail, TESTING.md covers both test harnesses.

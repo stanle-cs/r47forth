@@ -128,7 +128,8 @@ the template and the linter; the linter's HARD hits are non-negotiable.
   the proven range to 23.9 KB (Gemini) and 19.2 KB (Sol, self-contained
   design packet); the undo-history round-1 refutation packets extended it
   again to 27.9 KB (Gemini) and 26.6 KB (Sol), and the PP18 restarted
-  round 1 to 30.3 KB (Gemini) and 28.9 KB (Sol) — all fully structured
+  round 1 to 30.3 KB (Gemini) and 28.9 KB (Sol), and PP18 restarted
+  round 7 to 36.5 KB (Gemini) and 36.4 KB (Sol) — all fully structured
   answers. Keep packets small for depth, not from fear of size —
   the old 13 KB failure was over-read. Round 10 split two oversized
   packets and the splits cost nothing, so **split on the QUESTION, not on

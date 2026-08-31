@@ -242,13 +242,16 @@ def lint(path):
     # 26.6 KB (Sol) refutation packets, both fully structured answers. PP18
     # restarted round 1 (2026-08-29): 30.3 KB (Gemini, layout end-to-end) and
     # 28.9 KB (Sol, scoping cluster), both structured, both with substantive
-    # deliberately-not-flagged sections.
+    # deliberately-not-flagged sections. PP18 restarted round 7 (2026-08-30):
+    # 36.5 KB (Gemini, four-producer leaf census) and 36.4 KB (Sol, whole-parser
+    # latch semantics) — Sol's reply included a constructed 515-byte reaching
+    # input with the allocation arithmetic worked out.
     # well. Two packets in that round WERE split for size and the split cost
     # nothing, so the ceiling is still advice, not a wall: split for DEPTH — one
     # packet, one question — and let size follow from that.
     note = ('thin — is the whole function really here?' if kb < 2 else
-            'proven range' if kb <= 30.5 else
-            'beyond the tested range (30.3 KB Gemini / 28.9 KB Sol are the largest proven (2026-08-29)); split for depth')
+            'proven range' if kb <= 36.6 else
+            'beyond the tested range (36.5 KB Gemini / 36.4 KB Sol are the largest proven (2026-08-30)); split for depth')
     print(f"  [SIZE] {size} bytes ({kb:.1f} KB) — {note}")
 
     if hard:

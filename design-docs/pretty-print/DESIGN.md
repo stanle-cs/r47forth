@@ -129,9 +129,16 @@ numericFont.
 **Fallback rule (BINDING).** Every pretty path is a `bool_t` try-function.
 Any failure — unsupported type, unexpected glyph, pool/text/depth overflow,
 doesn't fit any rung — paints nothing and returns false, and upstream's own
-arm renders unchanged. The renderer never reads or writes `tmpString`; on
-fallback the upstream path is provably untouched. Overflow is never an error
-screen; it is a legitimate "too complex to pretty-print".
+arm renders unchanged. The renderer never reads `tmpString` and never holds
+a pointer into it. One write exists, as scratch: `ppfFormatStaged`'s
+`dtShortInteger` arm gives `tmpString` to `shortIntegerToDisplayString`,
+because that builder needs an `ERROR_MESSAGE_LENGTH`-byte buffer
+(PP18RR7-5). On every surface that reaches the formatter, upstream holds no
+live `tmpString` data across the call — the try-function declines first
+(the `temporaryInformation` / `lastErrorCode` / `calcMode` gates in
+`prettyTryRegisterLine`). On fallback the upstream path is untouched: each
+upstream arm writes `tmpString` before it reads it. Overflow is never an
+error screen; it is a legitimate "too complex to pretty-print".
 
 ## §2 Value converters (`prettyValue.c`)
 

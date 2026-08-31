@@ -598,3 +598,70 @@ Hunt it at: every call to a display builder. Read the builder's first
 statement, not its output. And when a package documents a constraint on
 shared upstream code, check whether its siblings violate it — the
 document does not travel with the constraint.
+
+## a rule moved off a consumer chokepoint onto its producers (pretty-print, PP18 r7)
+
+A fix relocates a decision from the one consumer that saw every case to
+each producer that knows its own text. The producer census comes from the
+file that was open, not from the call graph, so one producer keeps the old
+behavior. Every contract the fix writes ("both leaves ask the same
+predicate") is then true of the producers it counted and false of the one
+it missed.
+
+Found: `b27394db6` taught two leaf producers to stake precedence and
+deleted the consumer-side scan that had covered all of them; the history
+decoder was the third producer and kept staking `PPF_PREC_ATOM`. The filed
+row lost the bracket the live row gained, on the same screen.
+
+Hunt it at: any fix whose message counts sites ("both", "all three").
+Grep the call graph for the moved rule's consumers and producers; compare
+the count against the fix's own claim.
+
+## two size gates on one path, and the reasoned-about gate is not the deciding one (pretty-print, PP18 r7)
+
+A path carries two length checks. The fix reasons about one (and sizes it
+correctly); the other, smaller one decides first. The proof beside the
+first gate is sound and irrelevant.
+
+Found: the `dtShortInteger` repair guarded a 200-byte copy, but the
+destination `ppfValBuf[96]` refused every spelling over 95 bytes earlier
+on the same path. A base-2 64-bit row (160 bytes) vanished behind "too
+large to show" while upstream drew the same value on one line.
+
+Hunt it at: every buffer-size fix. List EVERY length comparison between
+the formatter and the paint, with the values multiplied out; the smallest
+one is the contract.
+
+## one sentinel, two meanings (pretty-print, PP18 r7)
+
+One return value means both "not mine, consumed nothing" (a probe's no)
+and "resource refusal" (an allocator's no). A caller written for the first
+meaning receives the second, and the parse continues from a position that
+already moved.
+
+Found: `ppqNumber` consumes its digits, then its `ppNewRun` fails on the
+length-dependent text pool and returns `PP_NONE` unlatched; `ppqPrimary`
+reads that as "not a number" and parses a name from the advanced position.
+A 507-byte equation drew with its 492-digit numeral missing and reported
+success.
+
+Hunt it at: every function that can return the same sentinel from a probe
+arm and from an allocation. Check which failures latch the hard-fail flag
+and which fall through to a sibling production.
+
+## a reset helper that covers the state its author had in hand (pretty-print, PP18 r7)
+
+A suite's reset helper restores the globals its author was thinking about
+when it was written. A later row changes a global outside that set (an
+entry MODE, not a value), and every following row runs in the leaked mode
+while its comments describe the clean one.
+
+Found: T26 sets `lastIntegerBase = 16` through `ITM_toINT`;
+`ppcTestReset` restores flags, buffers and mode fields but not the base,
+so five later rows typed base-16 short integers where their comments say
+long integers. Green stayed green because the capture hook snapshots the
+typed text before the base suffix.
+
+Hunt it at: every reset/teardown helper in a test harness. Enumerate the
+globals the harness's own drivers can write; the helper must restore that
+set, not the set the author remembered.
