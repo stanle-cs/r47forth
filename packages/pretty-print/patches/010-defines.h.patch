@@ -1,5 +1,5 @@
 diff --git a/src/c47/defines.h b/src/c47/defines.h
-index 63b9c1a7692f24da093a882ffa1f3be1625bb7a8..06dea8e031eace937673082ebe75dafc3e9a1020 100644
+index 63b9c1a7692f24da093a882ffa1f3be1625bb7a8..022f1312b8348891008c3e18cadc677e129b94ef 100644
 --- a/src/c47/defines.h
 +++ b/src/c47/defines.h
 @@ -1013,10 +1013,12 @@
@@ -12,7 +12,7 @@ index 63b9c1a7692f24da093a882ffa1f3be1625bb7a8..06dea8e031eace937673082ebe75dafc
  #define FLAG_SBadm                            0x806F //48
  
 -#define NUMBER_OF_SYSTEM_FLAGS                 64+48 // We can have a maximum of 128 system flags
-+#define NUMBER_OF_SYSTEM_FLAGS                 64+51 // We can have a maximum of 128 system flags; 51 = two reserved for pretty-print's FLAG_PRETTYP and FLAG_PTLINE (claims registry) — both packages' defines.h carry the IDENTICAL count edit so the 3-way merge unifies
++#define NUMBER_OF_SYSTEM_FLAGS                 64+51 // The system supports at most 128 system flags. Value 51 reserves two flags for pretty-print: FLAG_PRETTYP and FLAG_PTLINE (claims registry). Both packages define the same count, and the three-way merge combines them.
  
                                                       // only used as bit count for setting change detection
  #define SETTING_AMODE                         0x0080 // current angle mode

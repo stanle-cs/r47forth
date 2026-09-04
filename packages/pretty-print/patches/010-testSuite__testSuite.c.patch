@@ -1,5 +1,5 @@
 diff --git a/src/testSuite/testSuite.c b/src/testSuite/testSuite.c
-index bc8a9792a584984b3e18dee2a6626ce81a330205..94433d7dedb0d65fc1959688df7483dc672876ca 100644
+index bc8a9792a584984b3e18dee2a6626ce81a330205..85106358f36944b6d3531fd7a608b79bd89a2efc 100644
 --- a/src/testSuite/testSuite.c
 +++ b/src/testSuite/testSuite.c
 @@ -702,6 +702,17 @@ const funcTest_t funcTestNoParam[] = {
@@ -7,9 +7,9 @@ index bc8a9792a584984b3e18dee2a6626ce81a330205..94433d7dedb0d65fc1959688df7483dc
    {"fnGetHide",              fnGetHide             },
    {"fnGetNDEC",              fnGetNDEC             },
 +  // pretty-print package: coverage drivers for tests/pretty_print.txt
-+  // (declared via c47.h -> prettyPrint.h, no indexOfItems row). The
-+  // extra package's drivers anchor after fnSetC47 above; separate
-+  // anchors keep the two packages' hunks composable.
++  // (declared in prettyPrint.h, no indexOfItems row). The drivers of
++  // the extra package anchor after fnSetC47 above. Separate anchors
++  // prevent patch conflicts between the two packages.
 +  {"prettyTestMeasure",      prettyTestMeasure,   1},
 +  {"prettyTestPixels",       prettyTestPixels,    1},
 +  {"prettyTestFallback",     prettyTestFallback,  1},

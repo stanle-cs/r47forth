@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # pretty-print build + test runner.
-# Canonical build/test invocation — do NOT re-derive meson/ninja flags by hand.
+# Canonical build/test invocation. Do NOT re-derive meson/ninja flags by hand.
 #
 # Usage:
 #   ./packages/pretty-print/build-test.sh            # solo, trio, then full gate
@@ -11,7 +11,7 @@
 #
 # Why refresh + --reconfigure every time:
 #   The resolver builds the shadow tree from the package's GENERATED patches/
-#   and files/ — it never reads the flat working area. An edit to
+#   and files/. It never reads the flat working area. An edit to
 #   packages/pretty-print/<file> is INVISIBLE to the compiler until
 #   tools/pkg_patch_refresh.py regenerates patches/+files/. Without the refresh
 #   step this script reports GREEN for code it did not build.
@@ -20,13 +20,12 @@
 # includes tests/pretty_print.txt), status AND banner both required.
 # Three configurations, because all three are real installs since the
 # split (the extra package's own gate covers core+extra):
-#   solo — this package alone: the engine must stand on its own.
-#   trio — forth-core + undo-history + pretty-print: the no-extra install.
-#   full — all four packages: the shipping composition. A patch-stack
+#   solo = this package alone (the engine must stand on its own).
+#   trio = forth-core + undo-history + pretty-print (the no-extra install).
+#   full = all four packages (the shipping composition). A patch-stack
 #          conflict with pretty-print-extra surfaces here.
-# NOTE: the trio/full passes run the plain testSuite battery only —
-# forth-core's own FORTH_DEBUG_SELFTEST battery is forth-core's gate,
-# not this one.
+# NOTE: the trio/full passes run the plain testSuite battery only.
+# The FORTH_DEBUG_SELFTEST battery is forth-core's own gate.
 
 set -euo pipefail
 
@@ -60,6 +59,7 @@ run_pass() {
     --reconfigure \
     -DRASPBERRY=false \
     -DDECNUMBER_FASTMUL=true \
+    -Dc_args="${cargs}" \
     -DCUSTOM_PKG="${pkgs}"
   # Per-pass c_args, set the reliable way (see forth-core's gate: `meson
   # setup --reconfigure -Dc_args=...` does NOT reliably apply to an existing
@@ -68,6 +68,7 @@ run_pass() {
   # its self-test drivers, which compile only under that define.
   echo "==> [${label}] meson configure c_args='${cargs}'"
   meson configure "${BUILD_DIR}" -Dc_args="${cargs}"
+  sleep 1
   echo "==> [${label}] ninja -C ${BUILD_DIR}"
   ninja -C "${BUILD_DIR}"
   echo "==> [${label}] meson test testSuite"
@@ -89,7 +90,7 @@ run_pass() {
 
 echo "==> repo: ${REPO_ROOT}"
 # Refresh all packages up front: the composed passes compose generated
-# output, and a stale sibling patches/ would test yesterday's sibling.
+# output, and a stale sibling patches/ tests yesterday's sibling.
 echo "==> pkg_patch_refresh ${PKG}"
 python3 tools/pkg_patch_refresh.py "${PKG}"
 if [[ "${DO_TRIO}" -eq 1 || "${DO_FULL}" -eq 1 ]]; then

@@ -703,9 +703,9 @@ const funcTest_t funcTestNoParam[] = {
   {"fnGetHide",              fnGetHide             },
   {"fnGetNDEC",              fnGetNDEC             },
   // pretty-print package: coverage drivers for tests/pretty_print.txt
-  // (declared via c47.h -> prettyPrint.h, no indexOfItems row). The
-  // extra package's drivers anchor after fnSetC47 above; separate
-  // anchors keep the two packages' hunks composable.
+  // (declared in prettyPrint.h, no indexOfItems row). The drivers of
+  // the extra package anchor after fnSetC47 above. Separate anchors
+  // prevent patch conflicts between the two packages.
   {"prettyTestMeasure",      prettyTestMeasure,   1},
   {"prettyTestPixels",       prettyTestPixels,    1},
   {"prettyTestFallback",     prettyTestFallback,  1},

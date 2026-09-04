@@ -1235,8 +1235,8 @@ return res;
     // Clearing the space needed by the glyph
     bool_t rep_enlarge = numDouble || (enlarge && combinationFonts != 0);                //JM ENLARGE
     uint32_t yNewMaxDx = (rep_enlarge ? 2 : 1) * (((glyph->rowsAboveGlyph + glyph->rowsGlyph + glyph->rowsBelowGlyph) >> miniC) - (rep_enlarge ? 4 : 0));
-    /* pretty-print package: the same wrapped x reaches this write as
-     * reaches setPixel below, and lcd_fill_rect does not screen it. */
+    /* pretty-print package: the wrapped x coordinate reaches this write
+     * and setPixel below. lcd_fill_rect does not clip this value. */
     if(!noShow && !noPreClear && x < SCREEN_WIDTH) {
       lcd_fill_rect(x, max(0, yy), (uint32_t)(doubling * ((xGlyph + glyph->colsGlyph + endingCols) >> miniC)) >> 3, max(0, (int32_t)(yNewMaxDx) + (yy<0 ? yy : 0)), (videoMode == vmNormal ? LCD_SET_VALUE : LCD_EMPTY_VALUE));  //JMmini
     }
@@ -1274,11 +1274,11 @@ return res;
           if(x2 > 0) {
             x2--;
           }
-          /* pretty-print package: y is recovered from its wrap and
-           * clamped, x is not. Each write is screened by its own
-           * column, because x2 differs from x1. The enclosed upstream
-           * lines keep their own indentation so the patch carries no
-           * whitespace-only hunks. */
+          /* pretty-print package: the code clamps the wrapped y value,
+           * but does not clamp x. The code clips each write to its own
+           * column because x2 differs from x1. The enclosed upstream lines
+           * keep their original indentation to prevent whitespace changes
+           * in the patch. */
           if(x1 < SCREEN_WIDTH) {
           setPixel(x1, y1);
           if(boldString == 1 && x1 + 1 < SCREEN_WIDTH) {
@@ -3944,9 +3944,9 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
 
 
 
-        /* pretty-print package: natural (textbook) rendering of the value.
-         * A false return paints nothing and every upstream arm below runs
-         * unchanged. On success lineWidth carries the painted width. */
+        /* pretty-print package: draw the value in textbook notation.
+         * If drawing fails, the function paints nothing. Upstream code
+         * then runs. On success, *lineWidth holds the painted width. */
         else if(prettyTryRegisterLine(regist, baseY, &lineWidth)) {
         }
 
@@ -5878,11 +5878,10 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
         }
 
         if(calcMode == CM_NORMAL && screenUpdatingMode != SCRUPD_AUTO && temporaryInformation == TI_SHOWNOTHING) {
-          /* pretty-print package: this return skips the menu and
-           * status bar as well as the stack. Repaint them only for a
-           * caller that took the stack alone. The test reads the
-           * chrome bits, because popSoftmenu clears MANUAL_MENU as
-           * routine bookkeeping. */
+          /* pretty-print package: this return skips the menu and status bar,
+           * plus the stack. Repaint the menu and status bar only when the caller
+           * requested the stack alone. The test reads the chrome bits because
+           * popSoftmenu clears MANUAL_MENU during routine updates. */
           if((screenUpdatingMode
               & (SCRUPD_MANUAL_MENU | SCRUPD_MANUAL_SHIFT_STATUS)) == 0) {
             showSoftmenuCurrentPart();

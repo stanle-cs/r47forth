@@ -3,15 +3,16 @@
 
 /**
  * \file prettyValue.c
- * Register value -> layout tree, the inline stack-line surface, and the
- * PSHOW full-screen surface.
+ * Convert register values to layout trees for stack and PSHOW displays.
  *
- * Builder-first invariant (DESIGN.md §2): the upstream display builder
- * runs first and its output is parsed into the tree. The pretty form can
- * never disagree with what upstream shows, and side effects
- * (displayValueX) happen identically on both paths. Every parser
- * declines (returns false, paints nothing) on anything outside its
- * verified alphabet. Upstream then renders unchanged.
+ * Design rule: the upstream display builder executes first. The parser
+ * then converts the builder output into a layout tree. The pretty
+ * display matches the upstream text output, and side effects occur
+ * identically on both paths.
+ *
+ * If input characters fall outside the supported alphabet, the parser
+ * declines. It returns false and draws nothing. Upstream code then
+ * renders the standard display.
  */
 
 #include "c47.h"
@@ -21,12 +22,8 @@ static char ppScratch[200];
 static char ppSpanA[120];
 static char ppSpanB[120];
 
-// Both toggles are system flags (FLAG_PRETTYP bit 50, FLAG_PTLINE bit
-// 51, counts reserved by the claims registry). They persist across
-// power cycles and answer to SF/CF/FS? and the flag browser. This
-// package owns both flags, both commands and both defaults; only the
-// T-line rendering lives in pretty-print-extra.
-
+/* Toggle the pretty-print system flag.
+ * Inverts the state of FLAG_PRETTYP to enable or disable formatted stack displays. */
 void fnPrettyToggle(uint16_t unusedButMandatoryParameter) {
   (void)unusedButMandatoryParameter;
   if(getSystemFlag(FLAG_PRETTYP)) {
@@ -37,10 +34,8 @@ void fnPrettyToggle(uint16_t unusedButMandatoryParameter) {
   }
 }
 
-// The PTLIN command only flips the core-owned flag, so it lives here.
-// The T-line rendering itself is pretty-print-extra's, through
-// ppTlineExtension below: in a build without that package the flag
-// holds but nothing reads it.
+/* Toggle the formula display on the T stack line.
+ * Inverts FLAG_PTLINE to turn live formula rendering on or off. */
 void fnPrettyTlineToggle(uint16_t unusedButMandatoryParameter) {
   (void)unusedButMandatoryParameter;
   if(getSystemFlag(FLAG_PTLINE)) {
@@ -51,6 +46,9 @@ void fnPrettyTlineToggle(uint16_t unusedButMandatoryParameter) {
   }
 }
 
+/* Set the state of the T stack line formula flag.
+ * If on is true, sets FLAG_PTLINE.
+ * If on is false, clears FLAG_PTLINE. */
 void prettySetTline(bool_t on) {
   if(on) {
     setSystemFlag(FLAG_PTLINE);
@@ -60,12 +58,16 @@ void prettySetTline(bool_t on) {
   }
 }
 
-// pretty-print-extra's registration slots (prettyPrint.h). NULL until
-// that package's lazy init runs; NULL is skipped.
+// Registration hooks for pretty-print-extra (prettyPrint.h).
+// These pointers are NULL before lazy initialization.
+// The dispatch code skips NULL handlers.
 bool_t (*ppTlineExtension)(int16_t baseY, int16_t bandTop,
                            int16_t bandBottom, int16_t *lineWidth) = NULL;
 void   (*ppResetExtension)(void) = NULL;
 
+/* Reset pretty-print settings to default values.
+ * Invokes the extension reset callback if registered.
+ * Enables FLAG_PRETTYP and clears FLAG_PTLINE. */
 void prettyReset(void) {
   if(ppResetExtension != NULL) {
     (*ppResetExtension)();
@@ -76,9 +78,9 @@ void prettyReset(void) {
   clearSystemFlag(FLAG_PTLINE);
 }
 
-/* The system-flags catalog's generated row count, from the softmenu
- * table. The flag browser bounds its walk with this, and FB1 asserts
- * the same derivation, so the two cannot drift (PP18RR9-4). */
+/* Get the number of rows in the system flags menu.
+ * Searches the softmenu catalog for the system flags entry.
+ * Returns the item count, or NUMBER_OF_SYSTEM_FLAGS if not found. */
 int16_t prettySysflRows(void) {
   for(uint16_t m = 0; softmenu[m].menuItem != 0; m++) {
     if(softmenu[m].menuItem == -MNU_SYSFL) {
@@ -88,10 +90,16 @@ int16_t prettySysflRows(void) {
   return NUMBER_OF_SYSTEM_FLAGS;
 }
 
+/* Test whether pretty printing is active.
+ * Reads the current state of FLAG_PRETTYP.
+ * Returns true if enabled, or false otherwise. */
 bool_t prettyEnabled(void) {
   return getSystemFlag(FLAG_PRETTYP);
 }
 
+/* Set the active state of pretty printing.
+ * If on is true, sets FLAG_PRETTYP.
+ * If on is false, clears FLAG_PRETTYP. */
 void prettySetEnabled(bool_t on) {
   if(on) {
     setSystemFlag(FLAG_PRETTYP);
@@ -103,7 +111,8 @@ void prettySetEnabled(bool_t on) {
 
 
 /* ==== glyph classification ==============================================
- * All codes verified against fonts.h; parsers decline on anything else. */
+ * All codes correspond to fonts.h definitions.
+ * Parsers reject unexpected codes. */
 #define PP_IS_SUP_DIGIT(code) ((code) >= 0xa160 && (code) <= 0xa169)
 #define PP_IS_SUB_DIGIT(code) ((code) >= 0xa080 && (code) <= 0xa089)
 #define PP_SUP_MINUS_CODE     0xa16b
@@ -119,6 +128,9 @@ void prettySetEnabled(bool_t on) {
 #define PP_IS_SPACE(code)     (((code) >= 0xa000 && (code) <= 0xa00f) || (code) == ' ')
 #define PP_IS_CONST_NAME(code) ((code) == PP_PI_CODE || (code) == PP_E_CODE || (code) == PP_PHI_CODE)
 
+/* Read a single glyph character code from a string.
+ * Decodes one-byte ASCII or two-byte font characters at the given position.
+ * Writes the next byte index into next and returns the glyph code. */
 static uint16_t ppGlyphAt(const char *s, int16_t pos, int16_t *next) {
   uint16_t code = (uint8_t)s[pos];
   if(code >= 0x80) {
@@ -131,8 +143,9 @@ static uint16_t ppGlyphAt(const char *s, int16_t pos, int16_t *next) {
   return code;
 }
 
-/* Map a digit-run span to plain digits: sup/sub digits become '0'+d, any
- * other glyph (a configured group separator) is kept verbatim. */
+/* Convert superscript or subscript digits into plain ASCII digits.
+ * Copies digit characters to out while keeping number grouping spaces intact.
+ * Returns true on success, or false if the output buffer overflows. */
 static bool_t ppMapDigits(const char *s, int16_t from, int16_t to, bool_t sup,
                           char *out, uint16_t outSize) {
   uint16_t o = 0;
@@ -156,9 +169,10 @@ static bool_t ppMapDigits(const char *s, int16_t from, int16_t to, bool_t sup,
   return true;
 }
 
-
-/* ==== fraction form: head + sup-num '/' sub-den ========================= */
-
+/* Parse a fraction string into a 2D layout fraction tree.
+ * Locates the slash separator between superscript numerator and subscript denominator.
+ * Builds horizontal boxes and a fraction box with a centered bar.
+ * Returns true on success, or false if the input does not match. */
 bool_t ppParseFraction(const char *src, uint8_t ctxFont, uint8_t childFont, uint8_t *rootOut) {
   int16_t len = (int16_t)strlen(src);
   int16_t slashOff = -1, numStart = -1, supMinusOff = -1;
@@ -251,8 +265,10 @@ bool_t ppParseFraction(const char *src, uint8_t ctxFont, uint8_t childFont, uint
 }
 
 
-/* ==== exponent form: mantissa ·₁₀ⁿ -> mantissa·10 with raised n ========= */
-
+/* Parse a scientific notation string into a superscript layout tree.
+ * Finds the base-ten multiplier symbol and extracts the power digits.
+ * Creates a superscript box that displays the power raised above the base.
+ * Returns true on success, or false if parsing fails. */
 bool_t ppParseExponent(const char *src, uint8_t ctxFont, uint8_t childFont, uint8_t *rootOut) {
   int16_t len = (int16_t)strlen(src);
   int16_t markOff = -1, expOff = -1, expEnd = -1;
@@ -315,9 +331,8 @@ bool_t ppParseExponent(const char *src, uint8_t ctxFont, uint8_t childFont, uint
   if(baseLen + 3 > (int16_t)sizeof(ppSpanA)) {
     return false;
   }
-  /* Read the exponent BEFORE writing ppSpanA: ppParseComplex passes its
-   * own ppSpanA in as src, and the base rebuild below lands '1','0','\0'
-   * exactly on expOff. */
+  /* Read the exponent before writing ppSpanA.
+   * The complex parser passes ppSpanA as input, and the base rebuild overwrites it. */
   // exponent digits, sup -> plain ('⁻' -> '-'). The copy stops before
   // the trailing space run.
   char expd[24];
@@ -349,14 +364,11 @@ bool_t ppParseExponent(const char *src, uint8_t ctxFont, uint8_t childFont, uint
 }
 
 
-/* ==== IRFRAC symbolic form ==============================================
- * Template over checkForAndChange's common output:
- *   [spaces] [sign] [multiple: digits·× | digits | sup-digits] name
- *   [/ denominator: sub-digits|digits] [spaces]
- * with name = √(sub-digits|π) or π|e|φ. Anything else (mixed-number
- * constant forms, the (π²)-family, second constants) declines to
- * upstream's linear rendering. */
-
+/* Parse a symbolic mathematical expression into a 2D layout tree.
+ * Recognizes named constants like pi and e alongside square roots.
+ * Formats multipliers and roots into layout boxes.
+ * Builds fraction bars for expressions that contain denominators.
+ * Returns true on success, or false if the expression cannot be parsed. */
 bool_t ppParseIrfrac(const char *src, uint8_t ctxFont, uint8_t childFont, uint8_t *rootOut) {
   int16_t len = (int16_t)strlen(src);
   int16_t pos = 0, next;
@@ -609,6 +621,9 @@ bool_t ppParseIrfrac(const char *src, uint8_t ctxFont, uint8_t childFont, uint8_
 }
 
 
+/* Parse any supported real number format into a 2D layout tree.
+ * Tests exponent and fraction patterns alongside symbolic forms.
+ * Returns true if a parser succeeds, or false if none match. */
 bool_t ppParseRealAny(const char *src, uint8_t ctxFont, uint8_t childFont, uint8_t *rootOut) {
   // The third alternative catches IRFRAC's pure-fraction output (constant
   // = 1): the same sup-num '/' sub-den alphabet the FRACT builder emits.
@@ -617,13 +632,11 @@ bool_t ppParseRealAny(const char *src, uint8_t ctxFont, uint8_t childFont, uint8
       || ppParseFraction(src, ctxFont, childFont, rootOut);
 }
 
-
-/* ==== complex (rectangular only) ========================================
- * Assembly (complex34ToDisplayString2): re ± [i·im | im␣␣i]. The first
- * top-level plain sign after position 0 separates the parts. Polar forms
- * (∠) decline. Each part re-parses through ppParseRealAny, and the whole
- * is pretty only if at least one part is. */
-
+/* Parse a rectangular complex number into a 2D layout tree.
+ * Separates real and imaginary parts across the middle sign character.
+ * Rejects polar forms that contain angle symbols.
+ * Formats parts using 2D trees if either component qualifies.
+ * Returns true on success, or false if formatting fails. */
 bool_t ppParseComplex(const char *src, uint8_t ctxFont, uint8_t childFont, uint8_t *rootOut) {
   int16_t len = (int16_t)strlen(src);
   int16_t pos = 0, next;
@@ -766,11 +779,10 @@ bool_t ppParseComplex(const char *src, uint8_t ctxFont, uint8_t childFont, uint8
 }
 
 
-/* ==== the surfaces ====================================================== */
-
-// Builds the pretty tree for a register at one font rung. Runs the same
-// upstream builder as the matching _refreshRegisterLine arm, with
-// identical arguments (builder-first invariant).
+/* Build a 2D layout tree from a calculator register.
+ * Formats the register value to text using upstream display routines.
+ * Parses real numbers and fractions alongside complex values at the requested font sizes.
+ * Returns true if a layout tree is built, or false otherwise. */
 static bool_t ppBuildRegister(calcRegister_t regist, uint8_t ctxFont, uint8_t childFont, uint8_t *rootOut) {
   uint32_t dt = getRegisterDataType(regist);
 
@@ -818,6 +830,10 @@ static const uint8_t ppFullRungs[4][2] = {
   { PP_FONT_STANDARD, PP_FONT_TINY     },
 };
 
+/* Attempt to render a stack register line using 2D pretty printing.
+ * Verifies system modes and tests line boundary limits.
+ * Tries decreasing font size levels until the formatted equation fits the display band.
+ * Returns true if the line was painted, or false to use standard text. */
 bool_t prettyTryRegisterLine(calcRegister_t regist, int16_t baseY, int16_t *lineWidth) {
   if(!getSystemFlag(FLAG_PRETTYP)
       || calcMode != CM_NORMAL
@@ -858,10 +874,10 @@ bool_t prettyTryRegisterLine(calcRegister_t regist, int16_t baseY, int16_t *line
   return false;
 }
 
-/* PSHOW (ITM_PSHOW, item row 459): full-screen pretty view of X on the
- * fnPixel manual-paint protocol: pixels survive refreshes, and the next
- * keypress releases them. Anything the engine cannot pretty falls back
- * to the ordinary SHOW, so the user always gets a result. */
+/* Display the X register formatted across the full screen.
+ * Implements the PSHOW command using manual screen drawing.
+ * Centers the formatted equation between horizontal boundary lines.
+ * Falls back to standard SHOW if the value cannot be formatted. */
 void fnPrettyShow(uint16_t unusedButMandatoryParameter) {
   (void)unusedButMandatoryParameter;
   // Order matters: an error takes precedence and returns silently.

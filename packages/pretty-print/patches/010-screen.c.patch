@@ -1,5 +1,5 @@
 diff --git a/src/c47/screen.c b/src/c47/screen.c
-index d2ac868bd18f9f4c20608f5dc90d5652844afcc6..1c455a8a940e4608379eab5cd39d2fb32ecf5ac7 100644
+index d2ac868bd18f9f4c20608f5dc90d5652844afcc6..357b0644a17b30574145cceea815178577397a03 100644
 --- a/src/c47/screen.c
 +++ b/src/c47/screen.c
 @@ -1235,7 +1235,9 @@ return res;
@@ -7,8 +7,8 @@ index d2ac868bd18f9f4c20608f5dc90d5652844afcc6..1c455a8a940e4608379eab5cd39d2fb3
      bool_t rep_enlarge = numDouble || (enlarge && combinationFonts != 0);                //JM ENLARGE
      uint32_t yNewMaxDx = (rep_enlarge ? 2 : 1) * (((glyph->rowsAboveGlyph + glyph->rowsGlyph + glyph->rowsBelowGlyph) >> miniC) - (rep_enlarge ? 4 : 0));
 -    if(!noShow && !noPreClear) {
-+    /* pretty-print package: the same wrapped x reaches this write as
-+     * reaches setPixel below, and lcd_fill_rect does not screen it. */
++    /* pretty-print package: the wrapped x coordinate reaches this write
++     * and setPixel below. lcd_fill_rect does not clip this value. */
 +    if(!noShow && !noPreClear && x < SCREEN_WIDTH) {
        lcd_fill_rect(x, max(0, yy), (uint32_t)(doubling * ((xGlyph + glyph->colsGlyph + endingCols) >> miniC)) >> 3, max(0, (int32_t)(yNewMaxDx) + (yy<0 ? yy : 0)), (videoMode == vmNormal ? LCD_SET_VALUE : LCD_EMPTY_VALUE));  //JMmini
      }
@@ -17,11 +17,11 @@ index d2ac868bd18f9f4c20608f5dc90d5652844afcc6..1c455a8a940e4608379eab5cd39d2fb3
            if(x2 > 0) {
              x2--;
            }
-+          /* pretty-print package: y is recovered from its wrap and
-+           * clamped, x is not. Each write is screened by its own
-+           * column, because x2 differs from x1. The enclosed upstream
-+           * lines keep their own indentation so the patch carries no
-+           * whitespace-only hunks. */
++          /* pretty-print package: the code clamps the wrapped y value,
++           * but does not clamp x. The code clips each write to its own
++           * column because x2 differs from x1. The enclosed upstream lines
++           * keep their original indentation to prevent whitespace changes
++           * in the patch. */
 +          if(x1 < SCREEN_WIDTH) {
            setPixel(x1, y1);
 -          if(boldString == 1) {
@@ -46,24 +46,23 @@ index d2ac868bd18f9f4c20608f5dc90d5652844afcc6..1c455a8a940e4608379eab5cd39d2fb3
  
  
  
-+        /* pretty-print package: natural (textbook) rendering of the value.
-+         * A false return paints nothing and every upstream arm below runs
-+         * unchanged. On success lineWidth carries the painted width. */
++        /* pretty-print package: draw the value in textbook notation.
++         * If drawing fails, the function paints nothing. Upstream code
++         * then runs. On success, *lineWidth holds the painted width. */
 +        else if(prettyTryRegisterLine(regist, baseY, &lineWidth)) {
 +        }
 +
  /*Main type dtReal34 FLAG_FRACT*/
          else if(getSystemFlag(FLAG_FRACT)
                      && (    getRegisterDataType(regist) == dtReal34
-@@ -5861,6 +5878,16 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
+@@ -5861,6 +5878,15 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
          }
  
          if(calcMode == CM_NORMAL && screenUpdatingMode != SCRUPD_AUTO && temporaryInformation == TI_SHOWNOTHING) {
-+          /* pretty-print package: this return skips the menu and
-+           * status bar as well as the stack. Repaint them only for a
-+           * caller that took the stack alone. The test reads the
-+           * chrome bits, because popSoftmenu clears MANUAL_MENU as
-+           * routine bookkeeping. */
++          /* pretty-print package: this return skips the menu and status bar,
++           * plus the stack. Repaint the menu and status bar only when the caller
++           * requested the stack alone. The test reads the chrome bits because
++           * popSoftmenu clears MANUAL_MENU during routine updates. */
 +          if((screenUpdatingMode
 +              & (SCRUPD_MANUAL_MENU | SCRUPD_MANUAL_SHIFT_STATUS)) == 0) {
 +            showSoftmenuCurrentPart();

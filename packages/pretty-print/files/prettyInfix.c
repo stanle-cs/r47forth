@@ -3,23 +3,27 @@
 
 /**
  * \file prettyInfix.c
- * The shared 2D infix builders: the layout for one operator from
- * already-built child layouts and their precedences, the bracket
- * rules, and the display-time name decodes. Every producer of a 2D
- * form calls through here — the equation renderer and the program
- * walker in this package, and the capture viewer in
- * pretty-print-extra — so precedence is decided in one place.
+ * The shared two-dimensional infix builders.
+ *
+ * Builds the layout for one operator from child layouts.
+ * It manages bracket rules and decodes display-time names.
+ * Every producer of a 2D form calls these functions. Callers
+ * include the equation renderer and program walker, plus the
+ * capture viewer. This design centralizes precedence rules.
  */
 
 #include "c47.h"
 #include "prettyInternal.h"
 
 /* ==== infix construction ================================================
- * Precedence: ADD/SUB 1, MULT 2, FRAC/SUP/RAD/atoms 3 (visually
- * scoped). ppfBuildOp* build the layout for one operator from
- * already-built child layouts and their precedences, shared by the tree
- * walker and the token decoder so both paths typeset identically. */
+ * Precedence levels: ADD/SUB = 1, MULT = 2, FRAC/SUP/RAD/atoms = 3.
+ * ppfBuildOp* functions assemble the layout for an operator from
+ * child layouts and precedence levels. The tree walker and token
+ * decoder share these functions for uniform typesetting. */
 
+/* Create a scalable parentheses container around an inner node.
+ * The layout engine scales the parentheses to match the height of the inner box.
+ * Returns PP_NONE if node allocation fails or if the inner node is invalid. */
 static uint8_t ppfParen(uint8_t inner, uint8_t fontId) {
   uint8_t p = ppNewBox(PP_PAREN, fontId);
   if(p == PP_NONE || inner == PP_NONE) {
@@ -29,6 +33,11 @@ static uint8_t ppfParen(uint8_t inner, uint8_t fontId) {
   return p;
 }
 
+/* Add parentheses around an expression when required by math precedence.
+ * Weaker operations (such as addition) need parentheses inside stronger ones
+ * (such as multiplication) to keep the correct calculation order.
+ * If the inner precedence is less than minPrec, wraps the node in parentheses.
+ * Returns the node unchanged when its binding strength is already sufficient. */
 uint8_t ppfWrapIf(uint8_t node, int prec, int minPrec, uint8_t fontId) {
   if(node == PP_NONE) {
     return PP_NONE;
@@ -36,20 +45,30 @@ uint8_t ppfWrapIf(uint8_t node, int prec, int minPrec, uint8_t fontId) {
   return (prec < minPrec) ? ppfParen(node, fontId) : node;
 }
 
+/* Convert a plain text string into a printable 2D layout node.
+ * The layout engine cannot place raw C strings directly on the screen.
+ * It requires measured graphic nodes to calculate screen positions and sizes.
+ * This helper calculates string length and allocates a text node (PP_RUN).
+ * Returns the node index, or PP_NONE if node memory is full. */
 uint8_t ppfRun(const char *s, uint8_t fontId) {
   return ppNewRun(s, (uint16_t)strlen(s), fontId);
 }
 
-/* Is this run text a visual atom: something a raised exponent or a
- * neighboring operator can sit against without brackets? Only digits —
- * including the uppercase hex digits A..F and the wide-spelling binary
- * glyphs — the radix mark, the digit-group spaces and a base subscript
- * are. A based integer is one numeral in every base and every spelling
- * (ruled, PP18RR8-6; domain completed, PP18RR9-2). Anything else reads
- * as a term, so the leaf reports PPF_PREC_ADD and the bracket rules
- * handle it. Lowercase letters stay rejected: the integer builder
- * emits uppercase only, and a typed exponent's 'e' must read as a
- * term. */
+/* Determine if text is an indivisible visual atom.
+ * An atom requires no parentheses when placed next to an exponent or operator.
+ *
+ * The scanner parses single-byte ASCII and two-byte font glyphs.
+ * - Tests ASCII digits 0 through 9 and hex letters A through F.
+ * - Tests decimal points, commas, plus ASCII spaces.
+ * - Tests two-byte font codes packed into big-endian 16-bit integers.
+ *
+ * The 16-bit code format enables contiguous range tests for C47 font encodings:
+ * - Digit-group spaces (0xa000 through 0xa00f).
+ * - Base subscripts for bases 2 through 16 (0xa461 through 0xa46f).
+ * - Wide binary glyphs 0 and 1 (0xa20e and 0xa027).
+ *
+ * Any character outside these sets causes the function to return false.
+ * The layout engine then assigns additive precedence and adds parentheses. */
 bool_t ppfTextIsAtom(const char *s, uint16_t len) {
   if(s == NULL) {
     return true;
@@ -79,9 +98,11 @@ bool_t ppfTextIsAtom(const char *s, uint16_t len) {
   return true;
 }
 
-/* The precedence of a built run, for producers that do not know what
- * they formatted. Only a run that spells a number is judged: a name is
- * an atom whatever its glyphs. */
+/* Determine the binding strength of a text node for parenthesis rules.
+ * Variable names and simple positive numbers are atomic and need no parentheses.
+ * Numbers with negative signs or scientific notation behave like additions.
+ * If such numbers sit inside stronger operations, they require parentheses.
+ * Returns PPF_PREC_ATOM for atomic values, or PPF_PREC_ADD for signed numbers. */
 int ppfRunPrec(uint8_t n) {
   const ppNode_t *nd = (n != PP_NONE) ? ppNodeAt(n) : NULL;
   if(nd == NULL || nd->kind != PP_RUN) {
@@ -95,9 +116,9 @@ int ppfRunPrec(uint8_t n) {
   return ppfTextIsAtom(t, (uint16_t)strlen(t)) ? PPF_PREC_ATOM : PPF_PREC_ADD;
 }
 
-/* Brackets a power's base. A base that is itself a PP_SUP needs parens,
- * and ppfWrapIf cannot see that (both report ATOM). Every producer of
- * a PP_SUP must call this. */
+/* Apply parentheses to the base of an exponent when required.
+ * Superscript nodes self-scope but require parentheses to prevent ambiguous nests.
+ * Base expressions with precedence below atomic receive parentheses. */
 uint8_t ppfPowBase(uint8_t a, int aPrec, uint8_t fontId) {
   const ppNode_t *nd = (a != PP_NONE) ? ppNodeAt(a) : NULL;
   return (nd != NULL && nd->kind == PP_SUP)
@@ -105,8 +126,14 @@ uint8_t ppfPowBase(uint8_t a, int aPrec, uint8_t fontId) {
            : ppfWrapIf(a, aPrec, PPF_PREC_ATOM, fontId);
 }
 
+/* Build a 2D layout box for operations that take TWO inputs.
+ * This handles two-input operations, distinct from single-input ppfBuildOp1.
+ * Examples include addition (a + b), division (a over b), plus powers (a ^ b).
+ * It constructs stacked fractions and powers.
+ * It also formats roots alongside horizontal rows.
+ * Adds parentheses around child expressions based on math precedence rules. */
 uint8_t ppfBuildOp2(uint16_t item, uint8_t a, int aPrec, uint8_t b, int bPrec,
-                           uint8_t ctxFont, uint8_t childFont, int *outPrec) {
+                    uint8_t ctxFont, uint8_t childFont, int *outPrec) {
   *outPrec = PPF_PREC_ATOM;
   switch(item) {
     case ITM_DIV: {
@@ -148,8 +175,8 @@ uint8_t ppfBuildOp2(uint16_t item, uint8_t a, int aPrec, uint8_t b, int bPrec,
           || a == PP_NONE || b == PP_NONE) {
         return PP_NONE;
       }
-      // ppfParen can fail, and ppMeasure has no arity check for the
-      // variadic PP_HBOX, so test it here.
+      // ppfParen can fail, and ppMeasure has no arity test for the
+      // variadic PP_HBOX. Test the node here.
       uint8_t par = ppfParen(a, ctxFont);
       if(par == PP_NONE) {
         return PP_NONE;
@@ -202,8 +229,13 @@ uint8_t ppfBuildOp2(uint16_t item, uint8_t a, int aPrec, uint8_t b, int bPrec,
   }
 }
 
+/* Build a 2D layout box for operations that take ONE input.
+ * This handles single-input operations, distinct from two-input ppfBuildOp2.
+ * Examples include square root, absolute value, reciprocal 1/x, plus square x^2.
+ * It builds root vinculums and vertical bars alongside powers and fractions.
+ * Formats unknown single-input items with standard parenthesized call syntax. */
 uint8_t ppfBuildOp1(uint16_t item, uint8_t a, int aPrec,
-                           uint8_t ctxFont, uint8_t childFont, int *outPrec) {
+                    uint8_t ctxFont, uint8_t childFont, int *outPrec) {
   *outPrec = PPF_PREC_ATOM;
   switch(item) {
     case ITM_SQUAREROOTX: {
@@ -287,6 +319,10 @@ uint8_t ppfBuildOp1(uint16_t item, uint8_t a, int aPrec,
  * lookup is display-time best-effort: a program edit between capture
  * and display falls back to the numeric form. */
 
+/* Resolve a named variable identifier into its display string.
+ * Reads the variable name from catalog memory into the output buffer.
+ * Maps uppercase variable X to lowercase x to follow mathematical convention.
+ * Falls back to lowercase x if the identifier is invalid. */
 void ppfVariableName(uint16_t varId, char *out) {
   strcpy(out, "x");
   if(varId >= FIRST_NAMED_VARIABLE
@@ -305,6 +341,10 @@ void ppfVariableName(uint16_t varId, char *out) {
   }
 }
 
+/* Resolve a program label parameter into its display string.
+ * Searches label catalog memory for string or local label declarations.
+ * Copies up to 15 characters of the label name into the output buffer.
+ * Falls back to numeric format LBL n when no named label exists. */
 void ppfLabelName(uint16_t param, char *out) {
   if(param >= FIRST_LABEL && (uint32_t)(param - FIRST_LABEL) < numberOfLabels) {
     const uint8_t *p = labelList[param - FIRST_LABEL].labelPointer;

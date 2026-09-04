@@ -3,20 +3,25 @@
 
 /**
  * \file prettyEquation.c
- * EQN strip 2D rendering: a strict recursive-descent parser over
- * showEquation's display string. It stacks '/' terms as fractions and
- * puts vinculums over √, inside the 23 px softmenu-strip row. Anything
- * the grammar does not fully recognize declines, and upstream's linear
- * rendering runs unchanged. Never active while the equation is edited.
+ * Two-dimensional equation strip rendering.
  *
- * Grammar over glyph classes:
+ * A recursive-descent parser reads the display string from showEquation.
+ * It renders '/' as stacked fractions and adds vinculums over roots
+ * within the 23-pixel softmenu strip.
+ *
+ * If the parser encounters unsupported syntax, it declines.
+ * When it declines, upstream code draws the linear string.
+ * This renderer remains inactive during equation editing.
+ *
+ * Grammar by glyph class:
  *   equation := expr ('=' expr)?
  *   expr     := ['+'|'-'] term (('+'|'-') term)*
  *   term     := factor (('×'|'·'|'/') factor)*    '/' -> stacked FRAC
  *   factor   := primary [sup-digit run]
  *   primary  := number | name | '(' expr ')' | '√' primary
- * Parenthesized factors unwrap under a fraction bar or a vinculum: the
- * bar scopes, textbook style.
+ *
+ * A fraction bar or vinculum scopes enclosed terms, so the parser
+ * removes redundant parentheses.
  */
 
 #include "c47.h"
@@ -39,6 +44,10 @@ typedef struct {
 #define PPQ_SUB10 0xa47d
 #define PPQ_RAD   0xa21a
 
+/* Read the character at current position without advancing parser offset.
+ * Returns single-byte ASCII directly and advances the next pointer by one.
+ * Packs two-byte font glyphs into big-endian 16-bit integers and advances by two.
+ * Sets the failure flag when a two-byte glyph is truncated. */
 static uint16_t ppqPeek(ppqCtx_t *c, int16_t *next) {
   if(c->pos >= c->len) {
     *next = c->pos;
@@ -60,6 +69,9 @@ static uint16_t ppqPeek(ppqCtx_t *c, int16_t *next) {
   return code;
 }
 
+/* Advance parser position past spaces.
+ * Skips standard ASCII spaces and C47 special spacing glyphs (0xa000 to 0xa00f).
+ * Stops when the parser reaches a non-space character or string end. */
 static void ppqSkipSpace(ppqCtx_t *c) {
   int16_t next;
   while(c->pos < c->len && PPQ_IS_SPACE(ppqPeek(c, &next))) {
@@ -69,8 +81,11 @@ static void ppqSkipSpace(ppqCtx_t *c) {
 
 static uint8_t ppqExpr(ppqCtx_t *c, uint8_t font, uint8_t tinyF);
 
-// number: digits/'.'/group separators, optionally ·₁₀ + sup exponent,
-// copied verbatim
+/* Parse a numeric literal token.
+ * Reads decimal digits, radix marks, plus scientific notation components.
+ * Consumes optional base-10 product markers and superscript exponents verbatim.
+ * Creates a text run (PP_RUN) from the consumed characters.
+ * Returns PP_NONE when no digits match, or fails when memory is full. */
 static uint8_t ppqNumber(ppqCtx_t *c, uint8_t font) {
   int16_t start = c->pos, next;
   bool_t any = false;
@@ -113,8 +128,11 @@ static uint8_t ppqNumber(ppqCtx_t *c, uint8_t font) {
   }
 }
 
-// name: ASCII letters plus subscript digits (X₁ etc.). The canonical
-// variable X typesets as lowercase x. Other names keep their letters.
+/* Parse a variable identifier token.
+ * Reads initial letters followed by optional subscript digits.
+ * Maps single uppercase variable X to lowercase x to follow mathematical style.
+ * Retains original letters for all other variable names.
+ * Returns a text run (PP_RUN), or PP_NONE when no letters match. */
 static uint8_t ppqName(ppqCtx_t *c, uint8_t font) {
   int16_t start = c->pos, next;
   bool_t any = false;
@@ -138,9 +156,11 @@ static uint8_t ppqName(ppqCtx_t *c, uint8_t font) {
   return ppNewRun(c->s + start, (uint16_t)(c->pos - start), font);
 }
 
-/* A big operator used as an operand needs brackets: its body extends
- * right of the stroke, so a neighbor binds into it. This parser has no
- * precedence values, so the node kind decides. */
+/* Wrap a big operator node in parentheses when used as an operand.
+ * Big operators (such as sums or integrals) extend horizontally to the right.
+ * Placing them next to other operators without parentheses creates visual ambiguity.
+ * If the node is a big operator (PP_BIGOP), wraps it in parentheses.
+ * Returns the node unmodified for other node types. */
 static uint8_t ppqScopeOperand(ppqCtx_t *c, uint8_t n, uint8_t font) {
   const ppNode_t *nd = ppNodeAt(n);
   if(n == PP_NONE || nd == NULL || nd->kind != PP_BIGOP) {
@@ -155,6 +175,10 @@ static uint8_t ppqScopeOperand(ppqCtx_t *c, uint8_t n, uint8_t font) {
   return p;
 }
 
+/* Remove outer parentheses from a node when an enclosing bar scopes the expression.
+ * Horizontal fraction bars and root vinculums visually group their contents.
+ * Strips the outer PP_PAREN container and returns its inner child node.
+ * Returns the original node unchanged when no outer parentheses exist. */
 uint8_t ppqUnwrapParen(uint8_t n) {
   const ppNode_t *nd = ppNodeAt(n);
   if(nd != NULL && nd->kind == PP_PAREN) {
@@ -163,12 +187,20 @@ uint8_t ppqUnwrapParen(uint8_t n) {
   return n;
 }
 
+/* Convert a fixed symbol string into a 2D layout text node.
+ * The layout engine cannot place raw C text strings directly into boxes.
+ * It must convert symbols into measured graphic nodes (PP_RUN).
+ * This helper calculates string length and creates the node in the requested font.
+ * Returns the node index, or PP_NONE when node memory is full. */
 static uint8_t ppqRun(const char *s, uint8_t fontId) {
   return ppNewRun(s, (uint16_t)strlen(s), fontId);
 }
 
-// An additive body under a big operator needs parens (PROD 1+x reads
-// as (PROD 1)+x): wrap when the top level carries a +/- joiner.
+/* Wrap a big operator body in parentheses when it contains additions or subtractions.
+ * In mathematical notation, big operators bind tightly to their immediate term.
+ * An expression like PROD 1+x reads as (PROD 1)+x without parentheses.
+ * Inspects child runs for plus or minus signs.
+ * Wraps the body in parentheses if any addition or subtraction exists. */
 static uint8_t ppqScopeBody(ppqCtx_t *c, uint8_t body, uint8_t font) {
   const ppNode_t *b = ppNodeAt(body);
   if(b == NULL || b->kind != PP_HBOX) {
@@ -192,17 +224,13 @@ static uint8_t ppqScopeBody(ppqCtx_t *c, uint8_t body, uint8_t font) {
   return body;
 }
 
-/* The node-assembly half of a construct, shared with the program
- * walker. Takes already-built children and touches no parser state.
- *
- * Test every allocation before any append: ppAppendChild silently
- * no-ops on PP_NONE, and ppMeasure cannot arity-check the variadic
- * PP_HBOX.
- *
- * `body` arrives already scoped by the caller.
- *
- * varTiny / varCtx: SUM and PROD use only the tiny run, INTEG only the
- * context-font one, DERIV both. Pass PP_NONE for the unused one. */
+/* Assemble a 2D layout structure for a big operator.
+ * Builds notation for summations, products, integrals, plus derivatives.
+ * For summations and products, index limits use the small font (varTiny).
+ * For integrals, the differential variable uses the context font (varCtx).
+ * For derivatives, the denominator uses varCtx while the evaluation subscript uses varTiny.
+ * Pass PP_NONE for unused variable nodes.
+ * Shared with the program walker to keep uniform mathematical typography. */
 uint8_t ppqBuildBigop(uint8_t kind, uint16_t tag, uint8_t body,
                       uint8_t varTiny, uint8_t varCtx,
                       uint8_t fromN, uint8_t toN, uint8_t stepN,
@@ -303,9 +331,11 @@ uint8_t ppqBuildBigop(uint8_t kind, uint16_t tag, uint8_t body,
   }
 }
 
-// The equation-language big operators render as their 2D shapes. A
-// probe that does not match consumes nothing. A matched construct that
-// is malformed fails the whole parse.
+/* Probe whether input text matches a big operator keyword.
+ * Checks for construct names such as SUM, PROD, INTEG, or DERIV.
+ * Uses ppEqConstructIs to match the exact keywords accepted by the evaluator.
+ * If matched, calculates the character position after the opening parenthesis.
+ * Returns true when matched, or false without consuming input characters. */
 static bool_t ppqMatchName(ppqCtx_t *c, const char *name, int16_t *after) {
   int16_t l = (int16_t)strlen(name);
   if(c->pos + l >= c->len) {
@@ -320,7 +350,10 @@ static bool_t ppqMatchName(ppqCtx_t *c, const char *name, int16_t *after) {
   return true;
 }
 
-// the raw-slice twin of ppqName's X-to-x rule, for the d<var> runs
+/* Create a text node for an integration or derivative variable.
+ * Reads the variable slice between start and end offsets.
+ * Maps uppercase variable X to lowercase x to follow mathematical style.
+ * Returns the allocated text node (PP_RUN) in the requested font. */
 static uint8_t ppqVarRun(ppqCtx_t *c, int16_t start, int16_t end, uint8_t font) {
   if(end - start == 1 && c->s[start] == 'X') {
     char lc = 'x';
@@ -329,6 +362,10 @@ static uint8_t ppqVarRun(ppqCtx_t *c, int16_t start, int16_t end, uint8_t font) 
   return ppNewRun(c->s + start, (uint16_t)(end - start), font);
 }
 
+/* Consume an expected delimiter character from the parser stream.
+ * Skips leading whitespace before it tests the next character.
+ * Advances the parser position when the character matches the expectation.
+ * Sets the failure flag and returns false when the character does not match. */
 static bool_t ppqEat(ppqCtx_t *c, char ch) {
   int16_t next;
   ppqSkipSpace(c);
@@ -340,6 +377,11 @@ static bool_t ppqEat(ppqCtx_t *c, char ch) {
   return true;
 }
 
+/* Parse a big operator construct from the input stream.
+ * Matches keywords SUM, PROD, DERIV, or INTEG.
+ * Reads semicolon-separated arguments for the expression body and index variable.
+ * Marks fracSeen to activate 2D rendering.
+ * Calls ppqBuildBigop to assemble the complete 2D mathematical structure. */
 static uint8_t ppqBigopConstruct(ppqCtx_t *c, uint8_t font, uint8_t tinyF) {
   int16_t after;
   uint16_t tag;
@@ -434,9 +476,11 @@ static uint8_t ppqBigopConstruct(ppqCtx_t *c, uint8_t font, uint8_t tinyF) {
   }
 }
 
-/* The node half of a function application, shared with the walker. The
- * name is not re-checked here: both callers gate on ppEqFunctionItem
- * first. */
+/* Build a 2D layout box for a single-argument function call.
+ * Constructs the layout shape name(arg) with scalable parentheses.
+ * Allocates a horizontal box containing the function name and argument container.
+ * Shared with the program walker for uniform function formatting.
+ * Returns the box index, or PP_NONE when memory is exhausted. */
 uint8_t ppqBuildCall(const char *name, uint16_t len, uint8_t arg, uint8_t font) {
   uint8_t hb  = ppNewBox(PP_HBOX, font);
   uint8_t run = ppNewRun(name, len, font);
@@ -450,9 +494,11 @@ uint8_t ppqBuildCall(const char *name, uint16_t len, uint8_t arg, uint8_t font) 
   return hb;
 }
 
-/* A function application: sin(x), ln(x). Does not set fracSeen: a
- * drawn sin(x) is the same shape as a linear one. A probe: it consumes
- * nothing unless the name resolves through ppEqFunctionItem. */
+/* Parse a named function call such as sin(x) or ln(x).
+ * Reads letters and verifies an opening parenthesis follows immediately.
+ * Validates the identifier against the catalog function table using ppEqFunctionItem.
+ * Parses the enclosed argument expression and closing parenthesis.
+ * Returns PP_NONE without advancing input if the identifier is not a known function. */
 static uint8_t ppqFunctionCall(ppqCtx_t *c, uint8_t font, uint8_t tinyF) {
   int16_t save = c->pos, start = c->pos, next;
   while(c->pos < c->len) {
@@ -491,6 +537,11 @@ static uint8_t ppqFunctionCall(ppqCtx_t *c, uint8_t font, uint8_t tinyF) {
   return hb;
 }
 
+/* Parse a primary expression term.
+ * Primaries include numbers and variable names alongside parenthesized groups and square roots.
+ * Also probes for big operator constructs and known function calls.
+ * For square roots, strips redundant parentheses under the vinculum and marks fracSeen.
+ * Sets the failure flag and returns PP_NONE when no valid primary matches. */
 static uint8_t ppqPrimary(ppqCtx_t *c, uint8_t font, uint8_t tinyF) {
   int16_t next;
   ppqSkipSpace(c);
@@ -560,6 +611,12 @@ static uint8_t ppqPrimary(ppqCtx_t *c, uint8_t font, uint8_t tinyF) {
   return PP_NONE;
 }
 
+/* Parse a factor expression with optional exponentiation.
+ * Reads a primary base followed by caret powers (x^y) or superscript glyphs.
+ * For caret powers, scopes the base.
+ * It also creates a 2D superscript box (PP_SUP).
+ * Recursively parses the exponent to support right-associative power chains.
+ * Marks fracSeen when a 2D superscript is created. */
 static uint8_t ppqFactor(ppqCtx_t *c, uint8_t font, uint8_t tinyF) {
   uint8_t n = ppqPrimary(c, font, tinyF);
   if(c->failed || n == PP_NONE) {
@@ -616,6 +673,11 @@ static uint8_t ppqFactor(ppqCtx_t *c, uint8_t font, uint8_t tinyF) {
   return n;
 }
 
+/* Parse a term expression joined by multiplication or division.
+ * Loops through factors separated by division slashes or multiplication dots.
+ * Converts division slashes into stacked vertical fraction boxes (PP_FRAC).
+ * Unwraps redundant parentheses under the fraction bar and re-fonts children to tiny.
+ * Formats multiplication symbols with standard raised dots and marks fracSeen. */
 static uint8_t ppqTerm(ppqCtx_t *c, uint8_t font, uint8_t tinyF) {
   uint8_t n = ppqFactor(c, font, tinyF);
   while(!c->failed && n != PP_NONE) {
@@ -679,6 +741,11 @@ static uint8_t ppqTerm(ppqCtx_t *c, uint8_t font, uint8_t tinyF) {
   return n;
 }
 
+/* Parse a complete algebraic expression joined by addition and subtraction.
+ * Consumes optional leading plus or minus signs before the initial term.
+ * Loops through terms separated by plus and minus operators.
+ * Combines terms and operators horizontally into layout boxes.
+ * Returns the expression root node, or PP_NONE when parsing fails. */
 static uint8_t ppqExpr(ppqCtx_t *c, uint8_t font, uint8_t tinyF) {
   ppqSkipSpace(c);
   uint8_t box = PP_NONE;
@@ -734,6 +801,13 @@ static uint8_t ppqExpr(ppqCtx_t *c, uint8_t font, uint8_t tinyF) {
   return n;
 }
 
+/* Parse an equation string into a 2D layout tree.
+ * Strips optional equation name prefixes such as NAME: before parsing.
+ * Parses the left-hand expression.
+ * It also parses an optional equal sign with a right-hand expression.
+ * Declines and returns false if unparsed trailing text remains.
+ * Declines and returns false if no 2D structures were gained (fracSeen is false).
+ * Returns true and writes the root node when 2D formatting succeeds. */
 bool_t ppqParse(const char *src, uint8_t ctxFont, uint8_t childFont, uint8_t *rootOut) {
   ppqCtx_t c;
   c.s = src;
@@ -792,8 +866,12 @@ bool_t ppqParse(const char *src, uint8_t ctxFont, uint8_t childFont, uint8_t *ro
   return true;
 }
 
-/* The hook (solver/equation.c paint site): try the 2D form in the
- * equation's own strip row. False -> upstream's showString runs. */
+/* Attempt to render an equation as a 2D layout in the softmenu strip.
+ * Checks if pretty-printing is enabled before resetting node memory.
+ * Parses the text and measures total pixel width alongside vertical height.
+ * Declines and returns false if dimensions exceed the 23-pixel softmenu band.
+ * Centers the equation vertically and paints it directly into the screen buffer.
+ * Returns true on success, or false to let upstream draw linear text. */
 bool_t prettyTryEquation(const char *src, int16_t xLeft) {
   if(!prettyEnabled()) {
     return false;
@@ -822,12 +900,11 @@ bool_t prettyTryEquation(const char *src, int16_t xLeft) {
  * interactive integrate solver the equation is the integrand, framed by
  * a stroke-drawn big ∫ (PP_INT). */
 
-/* The interactive solver's numbers frame the equation: the integral
- * shows its real limits (RESERVED_VARIABLE_ULIM/LLIM) and the
- * d-variable, and the derivative modes get the d/dx (d²/dx²) prefix.
- * Solve framing (f(x)=0) is skipped: SOLVER_STATUS_EQUATION_SOLVER is
- * the zero value, indistinguishable from no session at all. */
-
+/* Frame an equation with integral notation for the interactive solver.
+ * Reads lower and upper limits from solver registers when interactive mode is active.
+ * Combines the equation with a differential variable to form the integrand.
+ * Attaches formatted limit values to the integral sign (PP_BIGOP).
+ * Falls back to a bare integral symbol (PP_INT) when limits are inactive. */
 uint8_t ppqFrameIntegral(uint8_t eq) {
   if(eq == PP_NONE) {
     return PP_NONE;
@@ -867,6 +944,11 @@ uint8_t ppqFrameIntegral(uint8_t eq) {
   return eq;
 }
 
+/* Frame an equation with derivative prefix notation.
+ * Retrieves the active solver variable name.
+ * Builds a differential fraction (d/dx or d2/dx2) based on derivative order.
+ * Wraps the equation in parentheses adjacent to the differential fraction.
+ * Returns the assembled horizontal container, or the original node on failure. */
 uint8_t ppqFrameDerivative(uint8_t eq, bool_t second) {
   if(eq == PP_NONE) {
     return PP_NONE;
@@ -893,8 +975,11 @@ uint8_t ppqFrameDerivative(uint8_t eq, bool_t second) {
   return hb;
 }
 
-/* Pack glyph by glyph until the next does not fit, then append the
- * ellipsis (upstream's own shape for this problem). */
+/* Truncate a text string to fit screen width and append an ellipsis.
+ * Calculates available pixel width budget based on screen width and ellipsis size.
+ * Copies characters until the next character exceeds the budget.
+ * Appends an ellipsis glyph when the string must be truncated.
+ * Handles both single-byte ASCII characters and two-byte font glyphs. */
 void ppqFitWithEllipsis(const char *src, char *out, uint16_t cap) {
   const int16_t budget = (int16_t)(SCREEN_WIDTH - 4
                                    - stringWidth(STD_ELLIPSIS, &standardFont, false, true));
@@ -927,6 +1012,12 @@ void ppqFitWithEllipsis(const char *src, char *out, uint16_t cap) {
   }
 }
 
+/* Render a full-screen equation view inside the display area.
+ * Clears the screen and draws horizontal boundary lines at rows 20 and 168.
+ * Attempts 2D rendering with solver framing for integrals or derivatives.
+ * Centers the 2D layout vertically and horizontally when it fits the display band.
+ * Falls back to centered linear text or ellipsized truncation when 2D layout fails.
+ * Configures manual screen update modes to allow clean view dismissal. */
 bool_t ppqShowRender(const char *src) {
   lcd_fill_rect(0, 16, SCREEN_WIDTH, SCREEN_HEIGHT - 16, LCD_SET_VALUE);
   drawSinglePixelFullWidthLine(20);
@@ -962,8 +1053,8 @@ bool_t ppqShowRender(const char *src) {
                  94 - 8, vmNormal, false, true);
     }
     else {
-      /* An unclipped paint drops every glyph past the edge with
-       * nothing marking the cut, so mark it. */
+      // An unclipped drawing omits glyphs past the screen boundary.
+      // Add an ellipsis to show the truncation.
       char cut[256];
       ppqFitWithEllipsis(src, cut, sizeof(cut));
       showString(cut, &standardFont, 2, 94 - 8, vmNormal, false, true);
@@ -977,6 +1068,11 @@ bool_t ppqShowRender(const char *src) {
   return pretty;
 }
 
+/* Execute the full-screen equation view command (EQSHW).
+ * Verifies that formulas exist in catalog memory and checks error state.
+ * Retrieves stored formula text for the active equation index.
+ * Invokes ppqShowRender to display the complete formula on the LCD.
+ * Reads stored data directly to bypass menu strip display truncation. */
 void fnPrettyEqShow(uint16_t unusedButMandatoryParameter) {
   (void)unusedButMandatoryParameter;
   if(lastErrorCode != ERROR_NONE) {

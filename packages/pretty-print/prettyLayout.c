@@ -3,15 +3,15 @@
 
 /**
  * \file prettyLayout.c
- * The pretty-print box-model engine: fixed pools, a measure pass and a
- * paint pass. Glyph rendering stays on the upstream pipeline
- * (showString). The only pixels this file paints itself are rules and
- * strokes (bars, vinculums, big-operator signs), so the pretty output
- * inherits every font behavior upstream has.
+ * Pretty-print box-model engine with fixed memory pools.
  *
- * All metrics come from the live font data at first use: the box
- * ascent comes from the digit '0' glyph, and the fraction bar covers
- * the top rows of the minus sign's ink, per font.
+ * Layout uses a measure pass followed by a paint pass. The engine uses
+ * showString from upstream to render glyphs. This file draws only rules
+ * and strokes (fraction bars, vinculums, big operators).
+ *
+ * Font metrics initialize on first use from active font data.
+ * The box ascent derives from the '0' digit glyph. The fraction bar
+ * position matches the top rows of the minus sign glyph for each font.
  */
 
 #include "c47.h"
@@ -44,6 +44,9 @@ static ppMetrics_t ppMet[3];
 static bool_t ppMetReady = false;
 static bool_t ppMetOk    = false;
 
+/* Find a glyph in a font table with exact character code matching.
+ * Uses findGlyphExact to prevent fallback substitutions on missing glyphs.
+ * Returns a pointer to the glyph structure, or NULL if not found. */
 static const glyph_t *ppGlyphOf(const font_t *font, uint16_t charCode) {
   // exact probe: findGlyph's id-based fallback reports a tinyFont miss
   // as valid glyph index 0 (audit PP18RR8-1)
@@ -51,6 +54,10 @@ static const glyph_t *ppGlyphOf(const font_t *font, uint16_t charCode) {
   return gi < 0 ? NULL : &font->glyphs[gi];
 }
 
+/* Initialize layout metrics for all three calculator fonts.
+ * Derives box ascent from digit zero and bar position from the minus sign.
+ * Configures fraction gaps and overhangs alongside radical offsets and parentheses dimensions.
+ * Sets ppMetReady to true on completion. */
 static void ppMetricsInit(void) {
   const font_t *f[3];
   f[PP_FONT_NUMERIC]  = &numericFont;
@@ -97,6 +104,9 @@ static void ppMetricsInit(void) {
 static void ppBigopBox(const ppNode_t *body, const ppMetrics_t *m,
                        int16_t *ga, int16_t *gd, int16_t *gw);
 
+/* Test whether font layout metrics are initialized and valid.
+ * Runs ppMetricsInit on first call to populate metric tables.
+ * Returns true when all required font glyphs were located. */
 static bool_t ppMetricsOk(void) {
   if(!ppMetReady) {
     ppMetricsInit();
@@ -105,11 +115,17 @@ static bool_t ppMetricsOk(void) {
 }
 
 
+/* Reset the 2D layout arena for a new layout.
+ * Clears allocated node counts and resets the string pool length to zero.
+ * Existing node memory is discarded for subsequent reuse. */
 void ppReset(void) {
   ppNodeCount = 0;
   ppTextLen   = 0;
 }
 
+/* Allocate a new 2D layout box in the node pool.
+ * Initializes child and sibling pointers to PP_NONE with the specified font ID.
+ * Returns the allocated node index, or PP_NONE if pool memory is full. */
 uint8_t ppNewBox(uint8_t kind, uint8_t fontId) {
   if(ppNodeCount >= PP_POOL_NODES) {
     return PP_NONE;
@@ -123,6 +139,9 @@ uint8_t ppNewBox(uint8_t kind, uint8_t fontId) {
   return ppNodeCount++;
 }
 
+/* Allocate a text leaf node and copy its character string into pool memory.
+ * Allocates a PP_RUN node and appends the null-terminated string to ppText.
+ * Returns the node index, or PP_NONE if string or node memory is full. */
 uint8_t ppNewRun(const char *bytes, uint16_t len, uint8_t fontId) {
   if(ppTextLen + len + 1 > PP_TEXT_BYTES) {
     return PP_NONE;
@@ -138,6 +157,9 @@ uint8_t ppNewRun(const char *bytes, uint16_t len, uint8_t fontId) {
   return n;
 }
 
+/* Append a child node to a parent container.
+ * Inserts the child at the head of the list or walks sibling pointers to the end.
+ * Ignores invocations where the parent or child is PP_NONE. */
 void ppAppendChild(uint8_t parent, uint8_t child) {
   if(parent == PP_NONE || child == PP_NONE) {
     return;
@@ -153,28 +175,41 @@ void ppAppendChild(uint8_t parent, uint8_t child) {
   ppPool[c].nextSibling = child;
 }
 
+/* Store an auxiliary catalog item ID or tag in a node.
+ * Writes the tag into the textOff field of the target node.
+ * Ignores node indexes that exceed the active node count. */
 void ppSetBoxTag(uint8_t n, uint16_t tag) {
   if(n < ppNodeCount) {
     ppPool[n].textOff = tag;
   }
 }
 
+/* Look up a node structure pointer by index.
+ * Verifies that the index is within the active node count.
+ * Returns a pointer to the node structure in ppPool, or NULL. */
 const ppNode_t *ppNodeAt(uint8_t n) {
   return (n < ppNodeCount) ? &ppPool[n] : NULL;
 }
 
+/* Look up a string pointer in the text pool by offset.
+ * Verifies that the byte offset is within the active pool bounds.
+ * Returns a pointer into ppText, or an empty string if out of range. */
 const char *ppTextAt(uint16_t off) {
   return (off < ppTextLen) ? ppText + off : "";
 }
 
+/* Calculate the baseline coordinate from a top Y coordinate.
+ * Adds the numeric font ascent to the top coordinate.
+ * Returns the baseline coordinate for equation placement. */
 int16_t ppPreferredBase(int16_t baseY) {
   return baseY + (ppMetricsOk() ? ppMet[PP_FONT_NUMERIC].boxAscent : 0);
 }
 
 
-/* Tight ink extents of a glyph run relative to the run font's baseline.
- * Space-class glyphs (no ink rows) contribute nothing. An unknown glyph
- * fails the run: its metrics were never audited. */
+/* Calculate the tight ink bounds of a text run.
+ * Measures ascent above and descent below the baseline for all glyphs.
+ * Ignores space glyphs that contain no visible ink pixels.
+ * Returns true on success, or false if an unknown glyph is found. */
 static bool_t ppRunInk(const char *s, const ppMetrics_t *m, int16_t *asc, int16_t *desc) {
   int16_t pos = 0;
   *asc  = 0;
@@ -213,7 +248,11 @@ static bool_t ppRunInk(const char *s, const ppMetrics_t *m, int16_t *asc, int16_
   return true;
 }
 
-
+/* Measure pixel dimensions and relative child positions for a layout tree.
+ * Traverses box nodes recursively up to PP_MAX_DEPTH to calculate bounds.
+ * Handles text runs and groups.
+ * It measures fractions and roots alongside superscripts and big operators.
+ * Returns true if measurement succeeds, or false on depth or memory errors. */
 bool_t ppMeasure(uint8_t n, uint8_t depth) {
   if(n == PP_NONE || n >= ppNodeCount || depth > PP_MAX_DEPTH || !ppMetricsOk()) {
     return false;
@@ -294,8 +333,8 @@ bool_t ppMeasure(uint8_t n, uint8_t depth) {
         if(idxAsc > nd->ascent) {
           nd->ascent = idxAsc;
         }
-        /* The index's ink bottom can fall below the box, and the band
-         * checks downstream trust both edges. */
+        // The bottom of index ink can extend below the box.
+        // Downstream band tests depend on both edges.
         int16_t idxDesc = (int16_t)(ppPool[index].relBase + ppPool[index].descent);
         if(idxDesc > nd->descent) {
           nd->descent = idxDesc;
@@ -500,10 +539,9 @@ bool_t ppMeasure(uint8_t n, uint8_t depth) {
 }
 
 
-/* All straight rules go through lcd_fill_rect, which takes uint32_t
- * coordinates. The browser's pan paints from a negative origin, so
- * clip here once. Diagonal strokes go through ppDrawLine, which
- * screens negatives per pixel already. */
+/* Fill a rectangular area on the LCD with screen boundary clipping.
+ * Clips negative coordinates and trims dimensions that extend beyond screen edges.
+ * Invokes lcd_fill_rect with clipped coordinates and the requested pixel value. */
 static void ppFillVal(int16_t x, int16_t y, int16_t w, int16_t h, int val) {
   if(w <= 0 || h <= 0) {
     return;
@@ -528,18 +566,15 @@ static void ppFillVal(int16_t x, int16_t y, int16_t w, int16_t h, int val) {
   lcd_fill_rect((uint32_t)x, (uint32_t)y, (uint32_t)w, (uint32_t)h, val);
 }
 
-static void ppFill(int16_t x, int16_t y, int16_t w, int16_t h) {    // ink
+/* Fill a rectangular area on the LCD with black ink pixels.
+ * Invokes ppFillVal with LCD_EMPTY_VALUE to draw solid black rules and bars. */
+static void ppFill(int16_t x, int16_t y, int16_t w, int16_t h) {
   ppFillVal(x, y, w, h, LCD_EMPTY_VALUE);
 }
 
-/* showString pre-clears each glyph's whole font box, which can be
- * taller than the measured ink and erase neighbor rows. So: clear the
- * measured box here, then paint the glyphs with noPreClear.
- *
- * slc/sec reproduce _doShowString for the showLeadingCols=false,
- * showEndingCols=true call this replaces. Negative x and y are
- * upstream's own convention: showGlyphCode wraps them back into
- * range. */
+/* Clear a text bounding area and draw character glyphs.
+ * Clears the exact measured ink box to prevent neighbor row erasure.
+ * Draws glyphs sequentially into the screen buffer using showGlyphCode. */
 static void ppShowRun(const char *s, const ppMetrics_t *m, int16_t x, int16_t baseline,
                       int16_t asc, int16_t desc) {
   ppFillVal(x, (int16_t)(baseline - asc), (int16_t)stringWidth(s, m->font, false, true),
@@ -557,7 +592,9 @@ static void ppShowRun(const char *s, const ppMetrics_t *m, int16_t x, int16_t ba
   }
 }
 
-// integer Bresenham over setBlackPixel (synthesized strokes)
+/* Draw a single-pixel line between two points using Bresenham algorithm.
+ * Clips individual pixel coordinates against screen boundaries before drawing.
+ * Sets black pixels directly into the display buffer. */
 static void ppDrawLine(int16_t x0, int16_t y0, int16_t x1, int16_t y1) {
   int16_t dx = (int16_t)(x1 > x0 ? x1 - x0 : x0 - x1);
   int16_t dy = (int16_t)(y1 > y0 ? y1 - y0 : y0 - y1);
@@ -565,9 +602,9 @@ static void ppDrawLine(int16_t x0, int16_t y0, int16_t x1, int16_t y1) {
   int16_t sy = (int16_t)(y0 < y1 ? 1 : -1);
   int16_t err = (int16_t)(dx - dy);
   for(;;) {
-    // setBlackPixel is a thin bitblt24 wrapper with no bounds check of
-    // its own, so a panned or oversized stroke writes past the frame
-    // buffer. Screen both ends of both axes.
+    // setBlackPixel wraps bitblt24 with no internal bounds test.
+    // A panned or oversized stroke can write outside the frame buffer.
+    // Clip coordinates on both axes before drawing.
     if(x0 >= 0 && y0 >= 0 && x0 < SCREEN_WIDTH && y0 < SCREEN_HEIGHT) {
       setBlackPixel((uint32_t)x0, (uint32_t)y0);
     }
@@ -586,10 +623,9 @@ static void ppDrawLine(int16_t x0, int16_t y0, int16_t x1, int16_t y1) {
   }
 }
 
-/* The big-operator glyph box: ga/gd rows above/below the baseline and
- * a width that scales with the height at the font's own Σ proportions
- * (the numeric Σ measures 14x25, w/h ≈ 0.56). Measure and paint call
- * this same function. */
+/* Calculate the bounding box for a big operator glyph.
+ * Derives ascent and descent relative to the operand body baseline.
+ * Scales symbol width proportionally with total vertical height. */
 static void ppBigopBox(const ppNode_t *body, const ppMetrics_t *m,
                        int16_t *ga, int16_t *gd, int16_t *gw) {
   *ga = (int16_t)(body->ascent + 2);
@@ -605,9 +641,9 @@ static void ppBigopBox(const ppNode_t *body, const ppMetrics_t *m,
   if(*gw > 28) *gw = 28;
 }
 
-/* The integral sign, stroke-drawn with curved hooks: a 2 px vertical
- * spine whose top bends right and bottom bends left along a quadratic
- * offset. cx is the spine's left column. Rows span [top, bot]. */
+/* Draw an integral sign with curved hooks using stroke primitives.
+ * Renders a vertical two-pixel spine with quadratic curving hooks at top and bottom.
+ * Adds terminal ink dots to thicken hook tips. */
 static void ppDrawIntegralSign(int16_t cx, int16_t top, int16_t bot) {
   int16_t h = (int16_t)(bot - top + 1);
   int16_t hh = (int16_t)(h / 4);
@@ -630,6 +666,10 @@ static void ppDrawIntegralSign(int16_t cx, int16_t top, int16_t bot) {
   ppFill((int16_t)((cx - 5)), (int16_t)((bot - 1)), (int16_t)(2), (int16_t)(1));
 }
 
+/* Paint a measured 2D layout tree into the LCD buffer.
+ * Traverses nodes recursively at computed relative offsets.
+ * Draws text runs and fraction bars.
+ * It also paints root signs alongside parentheses and big operators. */
 static void ppPaint(uint8_t n, int16_t x, int16_t baseline) {
   const ppNode_t *nd = &ppPool[n];
   const ppMetrics_t *m = &ppMet[nd->fontId];
@@ -785,6 +825,8 @@ static void ppPaint(uint8_t n, int16_t x, int16_t baseline) {
 }
 
 
+/* Set the font identifier recursively on a node and all descendants.
+ * Updates fontId in the target node and iterates through child and sibling links. */
 void ppSetFontDeep(uint8_t n, uint8_t fontId) {
   if(n == PP_NONE || n >= ppNodeCount) {
     return;
@@ -795,10 +837,9 @@ void ppSetFontDeep(uint8_t n, uint8_t fontId) {
   }
 }
 
-/* With FLAG_BOLD set and the font &numericFont, showGlyphCode swaps in
- * bold glyphs while the metrics read the plain table. Suppress the
- * flag during paint so both use one table. Side effect: FLAG_BOLD is in refreshStateFlags[], so
- * each flip runs fnRefreshState and raises doRefreshSoftMenu. */
+/* Temporarily clear the bold flag during 2D equation painting.
+ * Prevents font metric mismatches between plain tables and bold glyph substitutions.
+ * Returns true if FLAG_BOLD was previously set. */
 static bool_t ppSuppressBold(void) {
   bool_t was = getSystemFlag(FLAG_BOLD);
   if(was) {
@@ -807,12 +848,17 @@ static bool_t ppSuppressBold(void) {
   return was;
 }
 
+/* Restore the bold system flag after equation painting completes.
+ * Restores FLAG_BOLD if it was active before painting. */
 static void ppRestoreBold(bool_t was) {
   if(was) {
     setSystemFlag(FLAG_BOLD);
   }
 }
 
+/* Paint a 2D layout tree at specified screen coordinates with bold suppression.
+ * Verifies that metrics and root node index are valid before painting.
+ * Suppresses FLAG_BOLD during drawing and restores it upon completion. */
 void ppPaintAt(uint8_t root, int16_t x, int16_t baseline) {
   if(root < ppNodeCount && ppMetricsOk()) {
     bool_t boldWas = ppSuppressBold();
@@ -821,6 +867,10 @@ void ppPaintAt(uint8_t root, int16_t x, int16_t baseline) {
   }
 }
 
+/* Measure, vertically align, right-align, and paint a layout tree.
+ * Measures total dimensions and clamps baseline position within specified vertical bounds.
+ * Aligns the layout against the right margin and paints it to the LCD.
+ * Returns true on success, or false if the layout exceeds screen width or band height. */
 bool_t ppRenderRightAligned(uint8_t root, int16_t xRight,
                             int16_t bandTop, int16_t bandBottom,
                             int16_t preferredBase) {

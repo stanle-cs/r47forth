@@ -1,62 +1,64 @@
 ;*************************************************************
 ;**  pretty-print package cases                             **
-;**  prettyTestMeasure:  engine measure + parser battery    **
-;**  prettyTestPixels:   inline X-line render, pixel pins   **
+;**  prettyTestMeasure:  engine measure and parser battery  **
+;**  prettyTestPixels:   inline X-line render and pixels    **
 ;**  prettyTestFallback: identity when pretty declines      **
 ;**  Each driver writes its failure count into X.           **
 ;*************************************************************
 In: FL_SPCRES=0 FL_CPXRES=0 SD=0 RMODE=0 IM=2compl SS=4 WS=64
 Func: prettyTestMeasure
 
-; M1/M2 pin the metric derivation (bar where the minus sign sits, gaps,
-; overhang) as exact width/ascent/descent numbers; M3 round-trips the
-; builder's improper-fraction form through the parser; M4 is rejections.
+; M1 and M2 test metric derivations (bar position, gaps, and
+; overhang) as exact numbers. M3 round-trips the builder improper
+; fraction form through the parser. M4 tests rejections.
 In:  FL_ASLIFT=1 RX=LonI:"99"
 Out: EC=0 RX=LonI:"0"
 
 Func: prettyTestPixels
 
-; P1-P3: X = 0.75 rendered on the real X line — bar exactly at rows
-; 149-150 across the fraction span, numerator ink strictly above the gap,
-; denominator ink strictly below. P5: upstream's diagonal form (package
-; off) must differ.
+; P1 through P3: X = 0.75 rendered on the real X line.
+; The bar sits at rows 149-150 across the fraction span.
+; Numerator ink is above the gap. Denominator ink is below.
+; P5 tests that upstream diagonal form (package off) differs.
 In:  FL_ASLIFT=1 RX=LonI:"99"
 Out: EC=0 RX=LonI:"0"
 
 Func: prettyTestFallback
 
-; F1: unsupported type (string) — enabled/disabled bands bit-identical.
-; F2: plain real (FRACT+IRFRAC off) — identity. F3: displayValueX byte
-; parity (the builder-first rule as an executable property).
+; F1: unsupported string type gives bit-identical output.
+; F2: plain real values with FRACT and IRFRAC clear remain unchanged.
+; F3: validates displayValueX byte parity as an executable property.
 In:  FL_ASLIFT=1 RX=LonI:"99"
 Out: EC=0 RX=LonI:"0"
 
 Func: prettyTestShow
 
-; PSHOW: frame lines at rows 20/168, centered stacked 3/4 with the bar at
-; rows 93-94 (numeric/numeric rung), fnPixel manual-paint protocol armed;
-; unsupported type falls back to the ordinary SHOW.
+; PSHOW: frame lines sit at rows 20 and 168. Centered stacked 3/4
+; draws with the bar at rows 93-94. The fnPixel manual-paint protocol
+; is active. Unsupported types fall back to standard SHOW.
 In:  FL_ASLIFT=1 RX=LonI:"99"
 Out: EC=0 RX=LonI:"0"
 
 Func: prettyTestEquation
 
-; EQ1 '/' binds factors; EQ2 parens unwrap under the bar; EQ3 vinculum
-; over a parenthesized radicand; EQ4 strict declines; EQ5 the strip
-; render pins the bar row; EQ6-8 the EQSHW full view: nested fractions
-; at full size, frames + protocol, and the big integral in integrate mode.
+; EQ1: '/' binds factors.
+; EQ2: parentheses unwrap below the fraction bar.
+; EQ3: vinculum draws over parenthesized radicands.
+; EQ4: tests strict declines.
+; EQ5: the strip renderer verifies the bar row.
+; EQ6 through EQ8: EQSHW full view tests nested fractions at full
+; size, frame protocols, plus the integral in integrate mode.
 In:  FL_ASLIFT=1 RX=LonI:"99"
 Out: EC=0 RX=LonI:"0"
 
 Func: prettyTestVisual
 
-; V1-V3: the appnote-22 chain transpiled — a double and a triple integral
-; recovered from PGMINT/INT steps, and a constructed function's own
-; arithmetic. V4-V6: programmed sums, including the invented counter name
-; refusing to shadow a real variable. V7-V15: the decline catalog.
-; V16-V17: precedence and the PGMINT latch. V18 evaluates a transpiled
-; string (4/3) so a picture that cannot compute cannot pass. V19-V20: the
-; surface — a stale solver session must not reframe it, a decline paints
-; nothing.
+; V1 through V3: tests transpilation of the AN0022 chain (double and
+; triple integrals from PGMINT/INT steps, and function arithmetic).
+; V4 through V6: programmed sums and counter shadowing rules.
+; V7 through V15: the decline catalog.
+; V16 and V17: precedence and the PGMINT latch.
+; V18 evaluates the transpiled 4/3 string.
+; V19 and V20: solver surface stability and decline rendering.
 In:  FL_ASLIFT=1 RX=LonI:"99"
 Out: EC=0 RX=LonI:"0"

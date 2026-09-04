@@ -3,20 +3,21 @@
 
 /**
  * \file prettyTest.c
- * Coverage drivers for the pretty-print package test suite:
- * prettyTestMeasure, prettyTestPixels, prettyTestFallback,
- * prettyTestShow, prettyTestEquation, prettyTestVisual and
- * prettyTestReal. testSuite.c registers each driver in
- * funcTestNoParam with coverageDriver = 1.
- * testSuite/tests/pretty_print.txt and pretty_visual_real.txt drive
- * them. This file builds only under PC_BUILD.
- * Each driver writes its failure count into X as a long integer.
- * Some drivers check that pretty-print declines to render an input.
- * A decline returns false and draws nothing. Only the program
- * walker's decline also carries a reason code and a step number.
- * The ppTest* helpers here are shared scaffolding: the
- * pretty-print-extra package's test driver links against them
- * (declarations at the end of prettyInternal.h).
+ * Test drivers for the pretty-print package.
+ *
+ * Drivers include prettyTestMeasure, prettyTestPixels, prettyTestFallback,
+ * prettyTestShow, prettyTestEquation, prettyTestVisual, plus prettyTestReal.
+ * testSuite.c registers each driver with coverageDriver = 1.
+ * Test scripts pretty_print.txt and pretty_visual_real.txt run these tests.
+ * This file compiles only when PC_BUILD is active.
+ *
+ * Each driver writes its failure count to register X as a long integer.
+ * Specific tests make sure that pretty-print declines invalid inputs.
+ * A decline returns false and draws nothing. The program walker decline
+ * also reports an error code and step number.
+ *
+ * Helper functions ppTest* provide shared test scaffolding.
+ * The pretty-print-extra package links against these helpers.
  */
 
 #include "c47.h"
@@ -105,7 +106,7 @@ void prettyTestMeasure(uint16_t unusedButMandatoryParameter) {
   }
   else {
     const ppNode_t *b = ppNodeAt(box);
-    // 26, not 28: stringWidth with showLeadingCols=false drops the '1'
+    // Expected width is 26: stringWidth with showLeadingCols=false drops the '1'
     // glyph's leading empty columns (numericFont '1' measures 14).
     if(b->width   != 26) ppTestFailInt("M2 width",   26, b->width);
     if(b->ascent  != 26) ppTestFailInt("M2 ascent",  26, b->ascent);
@@ -289,20 +290,18 @@ void prettyTestMeasure(uint16_t unusedButMandatoryParameter) {
     ppTestFail("M4 sup after slash accepted");
   }
 
-  /* M8: the substituted-glyph class. The engine derives every metric
-   * from &numericFont, clears exactly the box it measured, and paints
-   * with noPreClear. Upstream's showGlyphCode can substitute a glyph
-   * from another table for the same code. If the substitute's row
-   * metrics differ, ink can land outside the cleared box.
+  /* M8: substituted glyph class.
+   * The engine derives metrics from &numericFont. It clears the measured
+   * box, then paints with noPreClear. showGlyphCode can substitute a glyph
+   * from a different table for the same code. If row metrics differ,
+   * ink can fall outside the cleared area.
    *
-   * For every substitution the fonts can undergo, the package must
-   * either decline, or the measured box must contain the substitute's
-   * ink. FLAG_BOLD keeps displaying, so the paint entries suppress the
-   * substitution and use the plain face.
+   * The package must decline or expand the box to contain substitute ink.
+   * Because bold mode remains active, paint routines suppress glyph
+   * substitution and use the standard font face.
    *
-   * Part 1 checks the live font tables for the substitution the
-   * suppression exists for. Part 2 checks that drawn output is
-   * identical with FLAG_BOLD set or clear. */
+   * Part 1 tests active font tables for glyph substitutions.
+   * Part 2 makes sure that output is identical whether FLAG_BOLD is set or clear. */
   {
     // The same probes showGlyphCode uses: findGlyph for the measured
     // font, findGlyphExact for the bold substitution. A miss returns
@@ -316,7 +315,7 @@ void prettyTestMeasure(uint16_t unusedButMandatoryParameter) {
     }
     else if(plain->rowsAboveGlyph == bold->rowsAboveGlyph
             && plain->rowsGlyph == bold->rowsGlyph) {
-      ppTestFail("M8 bold and plain row metrics now agree — the FLAG_BOLD suppression is obsolete, re-derive the class");
+      ppTestFail("M8 bold and plain row metrics now agree: the FLAG_BOLD suppression is obsolete, re-derive the class");
     }
 
     /* Pretty-print output does not depend on FLAG_BOLD. Paint
@@ -363,13 +362,13 @@ void prettyTestMeasure(uint16_t unusedButMandatoryParameter) {
     }
 
     if(!drewPlain) {
-      ppTestFail("M8 setup: the inline surface declines with BOLD off — pin cannot reach its state");
+      ppTestFail("M8 setup: the inline surface declines with BOLD off, pin cannot reach its state");
     }
     else if(!drewBold) {
       ppTestFail("M8 the inline surface declined under FLAG_BOLD; the 2026-08-29 ruling is that BOLD must still display");
     }
     else if(litPlain == 0) {
-      ppTestFail("M8 setup: nothing was painted with BOLD off — pin proves nothing");
+      ppTestFail("M8 setup: nothing was painted with BOLD off, pin proves nothing");
     }
     else if(litBold != litPlain || sumBold != sumPlain) {
       ppTestFailInt("M8 BOLD changed the pretty output (lit pixels)", (int32_t)litPlain, (int32_t)litBold);
@@ -793,12 +792,11 @@ bool_t ppTreeHasRun(uint8_t n, const char *text) {
   return false;
 }
 
-/* One check over a whole tree, so one function serves every surface.
- * A PP_SUP whose base already carries an exponent draws both
- * exponents at the same height and reads as one number. Every
- * producer of a PP_SUP must bracket such a base. A base carries an
- * exponent when it is a PP_SUP or a run whose text ends in
- * superscript glyphs. */
+/* Single validation pass for the complete tree.
+ * A PP_SUP node whose base already contains an exponent renders both
+ * exponents at the same height. Every PP_SUP generator must enclose
+ * such a base in parentheses. A base contains an exponent if it is
+ * a PP_SUP node or if its text ends with superscript glyphs. */
 bool_t ppfTestRunEndsSup(uint8_t n) {
   const ppNode_t *nd = ppNodeAt(n);
   if(nd == NULL || nd->kind != PP_RUN) {
@@ -1030,7 +1028,7 @@ void prettyTestEquation(uint16_t unusedButMandatoryParameter) {
   ppTestFailures = 0;
   uint8_t root;
 
-  // EQ1: '/' binds factors, not the whole expression
+  // EQ1: '/' binds individual factors before outer terms
   ppReset();
   if(!ppqParse("1/X+2", PP_FONT_STANDARD, PP_FONT_TINY, &root)) {
     ppTestFail("EQ1 parse");
@@ -1067,13 +1065,13 @@ void prettyTestEquation(uint16_t unusedButMandatoryParameter) {
   ppReset();
   if(ppqParse("\x83\xc0" "/2", PP_FONT_STANDARD, PP_FONT_TINY, &root))  ppTestFail("EQ4 unknown glyph accepted");
 
-  /* EQ36 (PP18RR7-3, hardened per PP18RR8-8): a numeral whose run does
-   * not fit the text pool must fail the parse, not vanish from the
-   * drawing. The fixture arithmetic derives from PP_TEXT_BYTES and a
-   * fit-exactly control must PARSE, so a drift in the pool size or the
-   * preamble cost breaks this block loudly instead of silencing the
-   * overflow rows. Costs: the "1+" preamble is ten runs at two pool
-   * bytes each (20), the numeral run is N+1, the denominator run is 2. */
+  /* EQ36: a numeral that exceeds the text pool must fail parse.
+   * The numeral must not be omitted silently from the drawing.
+   * Buffer calculations use PP_TEXT_BYTES.
+   * A control string that fits must parse successfully.
+   * Costs: ten runs for '1+' take 20 bytes.
+   * The numeral run uses N+1 bytes.
+   * The denominator run uses 2 bytes. */
   {
     static char big[PP_TEXT_BYTES + 24];
     const int fit  = PP_TEXT_BYTES - 23;   // 20 + (fit+1) + 2 == PP_TEXT_BYTES
@@ -1219,7 +1217,7 @@ void prettyTestEquation(uint16_t unusedButMandatoryParameter) {
     static const char wide[] = "AREA=LENGTH+WIDTH+CORRECTION+OFFSET+FACTOR+MARGIN";
     char cut[256];
     if(stringWidth(wide, &standardFont, false, true) <= SCREEN_WIDTH - 4) {
-      ppTestFail("EQ9b setup: the fixture is not wider than the screen — pin proves nothing");
+      ppTestFail("EQ9b setup: the fixture is not wider than the screen, pin proves nothing");
     }
     ppqFitWithEllipsis(wide, cut, sizeof(cut));
     if(stringWidth(cut, &standardFont, false, true) > SCREEN_WIDTH - 4) {
@@ -1229,7 +1227,7 @@ void prettyTestEquation(uint16_t unusedButMandatoryParameter) {
       ppTestFail("EQ9b the fitted line was not shortened");
     }
     if(strstr(cut, STD_ELLIPSIS) == NULL) {
-      ppTestFail("EQ9b the truncation carries no marker — a lie by truncation");
+      ppTestFail("EQ9b the truncation carries no marker: a lie by truncation");
     }
     /* A line that already fits must be returned whole and unmarked. */
     char keep[256];
@@ -1417,22 +1415,19 @@ void prettyTestEquation(uint16_t unusedButMandatoryParameter) {
 
 
 /* ==== VISUAL, the RPN-program walker ====================================
- * Most pins here assert the transpiled string. That string is not the
- * product: the product is a node tree, and the text back end exists
- * only under PC_BUILD as a test seam. The string is asserted because
- * it is readable and because it is derived from the same AST as the
- * drawing. It cannot catch a fault in the layout pass. The node-shape
- * pins V46-V51, V56, V57, V68, V69, V73, and V74 are for that.
+ * Most pins here test the transpiled string. That string is a test artifact.
+ * The real product is a node tree. The text back end compiles only under
+ * PC_BUILD as a test interface. The tests read this string because it is
+ * readable and derives from the same AST as the drawing.
+ * Node-shape pins (such as V46-V51, V56, V57, V68-V69, plus V73-V74)
+ * validate node layout directly.
  *
- * V18 and V65 close the loop from the other side: they evaluate the
- * walker's own output and require it to agree with what the program
- * actually computes. They live in prettyTestEqLang
- * (pretty-print-extra), because the evaluator they need is that
- * package's equation language.
+ * Tests V18 and V65 evaluate walker output. Their outputs match program
+ * execution. These tests reside in prettyTestEqLang in
+ * pretty-print-extra because they use that package's equation language.
  *
- * Fixtures are the appnote-22 chain (docs/appnotes/sources/AN0022),
- * with package-local label names so no other driver's labels
- * collide. V58 loads the real file. */
+ * Fixtures come from docs/appnotes/sources/AN0022. They use package-local
+ * labels to prevent label collisions. Test V58 loads the real file. */
 
 #define PPV2(itm) (uint8_t)(((itm) >> 8) | 0x80), (uint8_t)((itm) & 0xff)
 
@@ -1722,15 +1717,12 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
     }
   }
 
-  /* V-XEQ: a callee's trailing ENTER must survive the return.
-   * ITM_XEQ's arm walks the whole subroutine and returns, so an
-   * epilogue that clears the lift latch after the arm erases what
-   * the callee armed, and the caller's next literal pushes where the
-   * machine overwrites.
-   *   LBL VZA: 1 2 XEQ VZB 5 + +      LBL VZB: 4 ENTER
-   * The armed latch makes the 5 overwrite the dup, so the machine
-   * holds [1,2,4,5], adds to 9, adds to 11, and the picture is
-   * 2+(4+5). */
+  /* V-XEQ: a callee's trailing ENTER must persist after return.
+   * ITM_XEQ executes the full subroutine. If the epilogue clears the
+   * lift latch after the call, it erases the state set by the callee.
+   * Without the latch, the caller pushes the next literal to a new stack level.
+   * The lift latch causes the 5 to overwrite the duplicate value.
+   * The stack holds [1,2,4,5]. It adds these values to 11 and renders as 2+(4+5). */
   {
     static const uint8_t pgmXB[] = {
       ITM_LBL, STRING_LABEL_VARIABLE, 3, 'V','Z','B',
@@ -1771,15 +1763,14 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
     }
   }
 
-  /* V-DECL: a declaration item between ENTER and the lifting read
-   * must leave the latch alone. MVAR stands for the group. The walk
-   * never holds more than four entries, so the stack size cannot
-   * change the picture.
-   *   1 2 ENTER MVAR z 5 + +  ->  the 5 overwrites the dup:
-   *   1+(2+5).
-   * With the item dropped from the list, the epilogue clears the
-   * latch, the 5 lifts, and the walker draws 2+(2+5) for a program
-   * returning 8. */
+  /* V-DECL: a declaration item between ENTER and read retains the latch.
+   * MVAR represents this declaration group.
+   * The walk contains at most four entries, so stack size does not change
+   * the output.
+   *   1 2 ENTER MVAR z 5 + +  ->  the 5 overwrites the duplicate: 1+(2+5).
+   * If the item is missing from the list, the epilogue clears the latch.
+   * The 5 then lifts, and the walker outputs 2+(2+5) for a program that
+   * returns 8. */
   {
     static const uint8_t pgmDC[] = {
       ITM_LBL, STRING_LABEL_VARIABLE, 3, 'V','D','C',
@@ -1801,12 +1792,10 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
     }
   }
 
-  /* V-FILL: FILL is the only arm that fills the stack without
-   * ppvPush, so it has to arm the saturation latch itself. Without
-   * that, T never replicates, and the walk declines a program the
-   * machine runs. Eight adds outlive either stack depth, and the
-   * replicated T keeps the same right-nested picture at both, so the
-   * assertion is one string and the stack size is the axis. */
+  /* V-FILL: FILL fills the stack without ppvPush, so it sets the
+   * saturation latch directly. Without the latch, register T never
+   * replicates and the walk declines. Eight additions exceed both stack
+   * sizes, and replicated register T produces the same nested structure. */
   {
     static const uint8_t pgmFL[] = {
       ITM_LBL, STRING_LABEL_VARIABLE, 3, 'V','F','L',
@@ -2196,7 +2185,7 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
       ITM_SUB,
       PPV2(ITM_END),
     };
-    // DROPY removes the SECOND level, not the top
+    // DROPY removes register Y at level 2. Register X remains unchanged.
     static const uint8_t pgmDRY[] = {
       ITM_LBL, STRING_LABEL_VARIABLE, 4, 'V','D','R','Y',
       ITM_RCL, STRING_LABEL_VARIABLE, 1, 'a',
@@ -2595,7 +2584,7 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
    * inherits the ambient mode tests whatever ran before it. V38 under
    * eRPN legitimately DRAWS (the push is real), so without this pin
    * the decline assertion is order-dependent (found at PP19, when the
-   * capture driver — whose eRPN trace used to restore the flag first —
+   * capture driver, whose eRPN trace used to restore the flag first,
    * moved behind these pins). */
   {
     bool_t erpnWasLatch = getSystemFlag(FLAG_ERPN);
@@ -2616,9 +2605,9 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
   // V40: a function with a name the evaluator resolves is emitted, and
   // the name comes from the item's own catalog spelling
   ppvTestExpect("V40 a named function", "VSIN", "SIN(x)");
-  // V41: this pins that the fraction survives a function inside it.
-  // Without the f(x) arm, the strict parser fails on the trailing
-  // '(', and the whole formula loses its 2D form, fraction and all.
+  // V41: this test verifies that the fraction remains intact with an internal function.
+  // Without the f(x) branch, the strict parser rejects the trailing '('.
+  // The complete formula then loses 2D layout.
   {
     uint8_t root;
     ppReset();
@@ -2659,8 +2648,8 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
     // CONTROL: parameter matches the declaration
     sprintf(want, "DERIV(x%sx;x;3)", STD_CROSS);
     ppvTestExpect("V59 matching MVAR", "VD1", want);
-    // no match -> upstream falls back to the FIRST declared, x. The
-    // subscript must say x, not the parameter v.
+    // If no match occurs, upstream code selects the first declared variable 'x'.
+    // The subscript displays 'x' and not parameter 'v'.
     sprintf(want, "DERIV(x%sx;x;3)", STD_CROSS);
     ppvTestExpect("V60 parameter differs, body declares one", "VD2", want);
     // CONTROL: the body RCLs y explicitly while upstream varies x, so
@@ -2669,9 +2658,9 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
     // follow the body breaks it.
     sprintf(want, "DERIV(y%sy;x;3)", STD_CROSS);
     ppvTestExpect("V61 body that does not read the sampled variable", "VD3", want);
-    // None match, and the body consumes the stack. Seeding must
-    // follow upstream's choice, so both the body and the subscript
-    // become y.
+    // No items match, and the body reads from the stack.
+    // Initialization follows upstream selection: the body and the subscript
+    // each resolve to y.
     sprintf(want, "DERIV(y%sy;y;3)", STD_CROSS);
     ppvTestExpect("V62 first when none match, stack-consuming body", "VD4", want);
     // A body declaring no MVAR is still differentiated. fnFillStack
@@ -2688,15 +2677,12 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
     }
   }
 
-  // V66: ENTER shares its operand node, so the tree is a DAG, and the
-  // layout pass visits a shared child once per path: 2^(k+1)-1 visits
-  // for k dups, measured. Exhausting the 72-node layout pool DID not
-  // stop it: a PP_NONE return was a per-call value, not a latch, so
-  // the walk kept doubling through failures that cost nothing. 20
-  // dups is 2,097,151 visits unlatched. On an 80 MHz DM42n the
-  // reachable cases did not return at all. layoutFull is the latch.
+  // V66: ENTER duplicates operand nodes to create a directed acyclic graph.
+  // The layout traversal visits shared children multiple times.
+  // When the 72-node pool filled up, traversals previously continued.
+  // The layoutFull flag halts the traversal after pool exhaustion.
   //
-  // The pin asserts the visit count.
+  // This test validates the traversal visit count.
   {
     calcRegister_t id = findNamedLabel("VXP", GLOBAL_LABELS);
     uint8_t root;
@@ -2760,13 +2746,10 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
                   "VCOL", want);
   }
 
-  // V72: the epilogue that clears the ENTER lift latch must run
-  // before XEQ, PGMINT, and PGMDRV return, or the callee's first
-  // lifting read overwrites the dup. At top level
-  // that produces a false underflow decline for a program that never
-  // underflows. Inside a construct body, where the seeded frame
-  // supplies a phantom operand, it produces a silent wrong drawing
-  // instead.
+  // V72: the epilogue clears the ENTER lift latch before dispatch returns
+  // from XEQ, PGMINT, or PGMDRV. Otherwise, the callee's first lifting read
+  // overwrites the duplicate. At top level, that defect causes an underflow
+  // decline. Inside a construct body, it causes an incorrect drawing.
   {
     char want[64];
     sprintf(want, "a%s(a+b)", STD_CROSS);
@@ -2776,12 +2759,11 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
     ppvTestExpect("V76 nor PGMDRV", "VXD", want);
   }
 
-  // V73: the node signature prints every PP_BIGOP as "B(...)" and
-  // drops the operator tag. V46, V50, and V68 pass unchanged even if
-  // an integral is drawn as a sum. The tag is what the paint pass
-  // picks the stroke glyph from, so it is the operator. It lives in
-  // the box's textOff (prettyInternal.h). Assert it directly rather
-  // than reformat every signature in the file.
+  // V73: the node signature prints PP_BIGOP as "B(...)" and omits the
+  // operator tag. Existing tests (such as V46, V50, or V68) pass if an
+  // integral draws with a sum glyph. The tag selects the glyph during
+  // paint operations. It is stored in textOff in the box structure.
+  // This test validates the tag directly and avoids signature reformatting.
   {
     struct { const char *label; uint16_t tag; const char *what; } tags[3] = {
       { "VDBL", ITM_INTEGRAL_YX, "V73 an integral draws the integral stroke" },
@@ -3050,15 +3032,15 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
     screenUpdatingMode &= ~SCRUPD_MANUAL_STACK;
   }
 
-  /* V-FULL: the other paint arm. A drawing too tall for the Z/T
-   * window takes the whole band, frames it top and bottom, and claims
-   * all three chrome bits. The stack-window arm claims one and clears
-   * the other two, so the chrome mask is what tells the two arms
-   * apart.
+  /* V-FULL: full-screen drawing branch.
+   * If a drawing exceeds the Z and T registers, it uses the full display
+   * band. It adds borders and sets all three chrome control bits.
+   * The stack branch sets only one chrome bit.
    *
-   * V67 pins that both arms can fail. A quadruple integral is 98 px
-   * standard and 91 tiny against a 72-row band, so both stack rungs
-   * decline it and the full band (147 rows) takes it at the first. */
+   * V67 validates that both drawing branches handle tall drawings.
+   * A quadruple integral measures 98 pixels in standard font and 91 pixels
+   * in small font. Both sizes exceed the 72-row stack window, so the
+   * routine uses the 147-row band. */
   {
     calcRegister_t id = findNamedLabel("VQDL", GLOBAL_LABELS);
     calcMode = CM_NORMAL;
@@ -3135,7 +3117,7 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
     }
     // and the two claims those numbers are here to hold
     if(!(38 > Y_POSITION_OF_REGISTER_Z_LINE - Y_POSITION_OF_REGISTER_T_LINE)) {
-      ppTestFail("V28 a single line would now hold a full-size integral");
+      ppTestFail("V28 a single line now holds a full-size integral");
     }
     if(!(58 <= (Y_POSITION_OF_REGISTER_Z_LINE + 31) - (Y_POSITION_OF_REGISTER_T_LINE - 4) + 1)) {
       ppTestFail("V28 the Z/T pair no longer holds the double integral");
@@ -3366,25 +3348,22 @@ void prettyTestVisual(uint16_t unusedButMandatoryParameter) {
 
 
 
-/* ==== the real appnote-22 file (its own driver, anchored late) =========
- * Every fixture in prettyTestVisual is hand-encoded. This loads
- * docs/appnotes/sources/AN0022/func.p47, Jaymos's actual file, the
- * one his forum message pointed at, through the official loader, and
- * transpiles the labels he named.
+/* ==== appnote-22 test driver ===========================================
+ * Tests in prettyTestVisual use hand-coded fixtures.
+ * This driver loads docs/appnotes/sources/AN0022/func.p47 with the standard loader.
+ * It transpiles the labels from that file.
  *
- * It lives in its own driver because it clears program memory.
- * Clearing is unavoidable here: our own fixtures have nearly filled
- * program memory, and func.p47's labels (DBLINT, HT, IT, ...) collide
- * with upstream's own nested_cov programs.
+ * This test uses a separate driver because it clears program memory.
+ * Clearing program memory is necessary because fixtures fill program storage.
+ * Labels in func.p47 also conflict with programs in nested_cov.
  *
- * It is anchored in testSuiteList.txt before graphs_cov. forth-core
- * appends at the tail, and two packages appending at EOF
- * produce the same hunk and a hard conflict. It runs after
- * programs.txt, which the ordering needs, but graphs_cov, nested_cov,
- * config_cov, and stack_cov still run after it. None of those depend
- * on preloaded programs.
+ * This test is placed before graphs_cov in testSuiteList.txt.
+ * Do not anchor at the end of the file, because multiple packages at
+ * the tail cause merge conflicts.
+ * The test runs after programs.txt. Later tests like graphs_cov, nested_cov,
+ * config_cov, plus stack_cov do not require preloaded programs.
  *
- * A missing file fails the driver. */
+ * If the file is missing, the driver reports a failure. */
 void prettyTestReal(uint16_t unusedButMandatoryParameter) {
   (void)unusedButMandatoryParameter;
   ppTestFailures = 0;

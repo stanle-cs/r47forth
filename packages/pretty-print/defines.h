@@ -1018,7 +1018,7 @@
 #define FLAG_PSHADE                           0x806E //47
 #define FLAG_SBadm                            0x806F //48
 
-#define NUMBER_OF_SYSTEM_FLAGS                 64+51 // We can have a maximum of 128 system flags; 51 = two reserved for pretty-print's FLAG_PRETTYP and FLAG_PTLINE (claims registry) — both packages' defines.h carry the IDENTICAL count edit so the 3-way merge unifies
+#define NUMBER_OF_SYSTEM_FLAGS                 64+51 // The system supports at most 128 system flags. Value 51 reserves two flags for pretty-print: FLAG_PRETTYP and FLAG_PTLINE (claims registry). Both packages define the same count, and the three-way merge combines them.
 
                                                      // only used as bit count for setting change detection
 #define SETTING_AMODE                         0x0080 // current angle mode

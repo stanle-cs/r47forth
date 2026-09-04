@@ -1,27 +1,27 @@
 {
   "base_commit": "70f8b7db7425422ec80e0342e627ed3e2cfd71a6",
   "files": {
-    "prettyEquation.c": "f78c0765ed6f9d9f4ea8a3acfddf9add56a4c3ea7e2fb9bdaa2dae2dcf6937eb",
-    "prettyInfix.c": "ae1e98dafd94b210fde1e80164191588778bb41c17a54363d385e7ff8ddbb5fa",
-    "prettyInternal.h": "d8d3392235e347ce0dcfdad0d3626683482a56c57242f713ddba334e834740b8",
-    "prettyLayout.c": "bd30790ae8bd5f272c9439fde087928fe8bfa908e1822eb359c94a225426529d",
-    "prettyPrint.h": "8d96c7045c7e924b882d66e65193f62cfc7ba46802ddf6c5ada8acbfc18f92d3",
-    "prettyTest.c": "d4c30526103d593b19085369c45f4f12612aabcab46e82678248218f7f043081",
-    "prettyValue.c": "4498ca2c7f6756c33534098ec9ffbafe6af176be184e4c4d57b32054227c2b5a",
-    "prettyVisual.c": "bb7f113e2e0c9c06e113df2afd56ddd517497323919ad4dbd46df2a3ea7c8324",
-    "testSuite/tests/pretty_print.txt": "c4998a5e6107a1607d9c5c57c24b167af35cc508b4b54a5f77b009a515fa5c96",
-    "testSuite/tests/pretty_visual_real.txt": "2404156af3f6f9365cce66d9d00fd0b24109eb7d48a7dd800769927d09c115b7"
+    "prettyEquation.c": "268f21cc0496c32a6062092cb6f9ad9e2a0db74c0409e6e8715504d847fed53f",
+    "prettyInfix.c": "9d0ea65e3ce12e4b53d99bb0ad2faf93361baf07c1c81896380b7c8653a41c6d",
+    "prettyInternal.h": "8bed8843800578346fb278300864d85866cd38ea7a926cf08ea3c82be6a9a61e",
+    "prettyLayout.c": "dafda19cca7857eee44d37bc3a8bc59edb3fa593b5ade8de3e048745990f2eca",
+    "prettyPrint.h": "3ddcf6eaac65bce407acee8995628aad04ae769e9b13a7715c309787d2d29a1b",
+    "prettyTest.c": "f4bfac3761e9ea59710238e0a5c75f46366bc99a1311a2699aacea3dac65d0fa",
+    "prettyValue.c": "716064690f6351cf2d3219d60efc6f1173e877dc471ba5a610f61edb36d5de8b",
+    "prettyVisual.c": "554519c838e11d381842b4588d9c61ade005db35789ce8fd27ecb382672619cd",
+    "testSuite/tests/pretty_print.txt": "b8517e5823257db29e39c43a5616cb9543c46ffc0d53dcd44bf1923b6ec4d702",
+    "testSuite/tests/pretty_visual_real.txt": "56232d28359e2fb21ef6f0e1ca21e8c15d680856669cccaec0bf050592031ca6"
   },
   "patches": {
-    "010-browsers__flagBrowser.c.patch": "4ce7e2b4f9bf103bd179dac8700a275f1c3aab11ce3fe847c0092d8c8ceb93f0",
+    "010-browsers__flagBrowser.c.patch": "0d9b18788120878c7d0f033121d4b4dbb249441d6614ff3f4938956c404de7a1",
     "010-c47.h.patch": "8adcafd5cd068e00bbc87c9ea635b6ddc88b65eaa6944e82abf6c293a8a77e32",
     "010-config.c.patch": "3a74e8dfe518928beb3fe2eba7177a85bee5e846843edd730c10f8bc354052de",
-    "010-defines.h.patch": "b5fb86b441948c23368b89d29135311257d04bc80eecca03b9b8c1ac2c205c87",
+    "010-defines.h.patch": "b7cf31367eb0d8fbaf7647b1db4c28d302d30a6e98566ebdb81063a8bb41cdfc",
     "010-items.c.patch": "d723e0930e5a20a10af3e63a69b4913dc64358943c6a0a977e565880c3c64c54",
     "010-items.h.patch": "f13d48b0b48d4c3925656c5b60bdef09f70f60edcb48bb33e3480d9364bdd744",
-    "010-screen.c.patch": "86049f3dc62083e5991c1eb6b92fc1df720716e5dbbf0e24c77a19e9b8f1617f",
-    "010-solver__equation.c.patch": "97004f4e01bc75242b557687c82917123af3f67cbbe987375a33191aef8e2263",
-    "010-testSuite__testSuite.c.patch": "b09b10d16fda51ae0d5caf6b6d4dbe0c6da3fac5ed08d4fcf29e2dfb8fbd460d",
-    "010-testSuite__tests__testSuiteList.txt.patch": "0d41bf1505bfbf108e80072aaf1c418fedf89085b83b588981fd07e9cda40272"
+    "010-screen.c.patch": "bb8ea97dd9b907611044850e9624fc2dc7d7f5aae082338dda4cde686c4699e7",
+    "010-solver__equation.c.patch": "a0c801b411fa06d39d0d0c85ca81f117ce9438a092b10cdcc043bcd765562266",
+    "010-testSuite__testSuite.c.patch": "3ce6641c042b917df9b494f9f6f8392c925b096259959f7800b40c3f36786c10",
+    "010-testSuite__tests__testSuiteList.txt.patch": "360257c3fff15aba33011b0c1a0c673e24f9033001656f8b72a5ab564b463fdb"
   }
 }

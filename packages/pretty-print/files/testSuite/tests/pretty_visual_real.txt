@@ -1,7 +1,7 @@
 ;*************************************************************
 ;**  pretty-print: VISUAL against the REAL appnote-22 file   **
 ;**  CLEARS PROGRAM MEMORY, so it is anchored late in the    **
-;**  list (before graphs_cov) — see the driver's comment.     **
+;**  list (before graphs_cov), see the driver's comment.     **
 ;*************************************************************
 In: FL_SPCRES=0 FL_CPXRES=0 SD=0 RMODE=0 IM=2compl SS=4 WS=64
 Func: prettyTestReal

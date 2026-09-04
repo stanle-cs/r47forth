@@ -3,21 +3,23 @@
 
 /**
  * \file prettyPrint.h
- * Pretty-print package: natural (textbook) display of calculations —
- * everything that DRAWS. Register values (inline lines, PSHOW), the
- * 2D equation surfaces (strip, EQSHW, the equation-language big
- * operators), and the VISUAL program walker. Public surface only; the
- * internals are in prettyInternal.h. The capture engine, the formula
- * history and its views live in the separate pretty-print-extra
- * package (prettyExtra.h), which requires this package.
+ * Pretty-print package: natural (textbook) display of calculations.
  *
- * c47.h includes this header near the end of its include block, so
- * every c47 type is already visible. This header must not include c47
- * headers itself.
+ * This package contains all drawing logic. It draws register values for
+ * stack lines and PSHOW. It draws two-dimensional equation surfaces for
+ * strip and EQSHW. It also runs the VISUAL program walker.
  *
- * Binding contract: every pretty entry point is a try-function. It
- * paints the pretty form and returns true, or it paints nothing and
- * returns false. On false the upstream rendering runs unchanged.
+ * This header defines the public interface. Internal definitions are in
+ * prettyInternal.h. The separate pretty-print-extra package (prettyExtra.h)
+ * provides formula capture and formula history views.
+ *
+ * c47.h includes this header near the end of its include list. All C47
+ * types are visible here. Do not include C47 headers in this file.
+ *
+ * Design rule: every pretty entry point is a try-function. The function
+ * paints the pretty form and returns true. If drawing fails, it returns
+ * false without painting. When it returns false, upstream code renders
+ * the display.
  */
 
 #if !defined(PRETTYPRINT_H)
@@ -30,7 +32,7 @@ bool_t prettyEnabled (void);
 
 // PTLIN (ITM_PTLIN, row 462): opt-in live formula on the T register
 // line, persisted in FLAG_PTLINE, default OFF. The command and both
-// flags are this package's; the rendering is pretty-print-extra's,
+// flags are this package's. The rendering is pretty-print-extra's,
 // through ppTlineExtension below.
 void fnPrettyTlineToggle(uint16_t unusedButMandatoryParameter);
 
@@ -50,44 +52,47 @@ bool_t prettyTryEquation(const char *src, int16_t xLeft);
 // interactive integrate solver the integrand is framed by a big ∫.
 void fnPrettyEqShow(uint16_t unusedButMandatoryParameter);
 
-// VISUAL (ITM_VISUAL, row 984): draws a stored RPN program as the
-// mathematics it computes, without running it. Takes a global program
-// label, builds the expression tree, and paints it in the Z/T window,
-// or in the full band when the drawing is too tall. Declines (raises
-// an error, paints nothing) on anything a static walk cannot express.
+// VISUAL (ITM_VISUAL, row 984): draws a stored RPN program as
+// mathematical notation without program execution.
+// The function accepts a global program label and creates an expression
+// tree. It draws the tree in the Z and T registers. If the drawing is
+// too tall, it draws in the full-screen band.
+// The function declines if a static walk cannot represent an instruction.
+// On decline, it raises an error without painting.
 void fnPrettyVisual(uint16_t label);
 
-// the generated menu_SYSFL row count, from the softmenu table; the
-// flag-browser override bounds its walk with this
+// the generated menu_SYSFL row count, from the softmenu table. The
+// flag-browser override bounds its walk with this.
 int16_t prettySysflRows(void);
 
-// Factory reset (doFnReset only — the lazy first-use paths must NOT
+// Factory reset (doFnReset only: the lazy first-use paths must NOT
 // restore flag defaults, PP15): restores FLAG_PRETTYP/FLAG_PTLINE
 // defaults and runs the extra package's re-arm through
 // ppResetExtension below.
 void prettyReset(void);
 
-/* Extension points the pretty-print-extra package fills in at its own
- * lazy init (ppcInit). Both stay NULL when that package is absent or
- * has not run yet, and a NULL extension is simply skipped:
- * - ppTlineExtension: called by prettyTryRegisterLine for REGISTER_T
- *   before the value rendering; draws the live formula and returns
- *   true, or returns false to fall through. Registration timing is
- *   sound because no formula can exist before the first capture hook
- *   runs, and that hook registers first.
- * - ppResetExtension: called by prettyReset before the flag defaults;
- *   re-arms the capture engine. NULL means the engine never ran, so
- *   there is nothing to re-arm. */
+/* Extension callbacks for the pretty-print-extra package (set in ppcInit).
+ * Both pointers remain NULL when that package is not installed.
+ * If a pointer is NULL, the caller skips the callback.
+ * - ppTlineExtension: prettyTryRegisterLine calls this callback for
+ *   REGISTER_T before value rendering. It draws the live formula and
+ *   returns true. If it cannot draw the formula, it returns false.
+ * - ppResetExtension: prettyReset calls this callback before it restores
+ *   flag defaults. It re-arms the capture engine. A NULL pointer means
+ *   the engine has not run yet. */
 extern bool_t (*ppTlineExtension)(int16_t baseY, int16_t bandTop,
                                   int16_t bandBottom, int16_t *lineWidth);
 extern void   (*ppResetExtension)(void);
 
-// Function-name resolution, shared by the renderer, the walker and
-// the evaluator so all three agree on what a function name is. Takes
-// a bare NUL-terminated name, no '(' check. Defined in
-// solver/equation.c beside the alias table it mirrors.
+// Resolve a function name. The renderer and evaluator share this logic
+// with the program walker. Components agree on function names.
+// Accepts a NUL-terminated string without an opening parenthesis.
+// Defined in solver/equation.c near the function alias table.
 int16_t ppEqFunctionItem(const char *name);
 
+/* Test whether a string matches a construct name prefix followed by an open parenthesis.
+ * Supports case-insensitive matching for lowercase and uppercase construct names.
+ * Returns true if the prefix matches and s[len] is '(', or false otherwise. */
 static inline bool_t ppEqConstructIs(const char *s, const char *name, uint8_t len) {
   if(s[len] != '(') {
     return false;

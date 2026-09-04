@@ -3,23 +3,16 @@
 
 /**
  * \file prettyVisual.c
- * VISUAL (ITM_VISUAL, item row 984): shows a stored RPN program as the
- * mathematics it computes, without running it.
+ * VISUAL (ITM_VISUAL, item row 984): renders a stored RPN program
+ * as mathematical notation without program execution.
  *
- * A symbolic RPN interpreter over stored program steps builds a small
- * expression tree. The tree is laid out through the same node builders
- * the capture engine uses (ppfBuildOp1/ppfBuildOp2) and the same
- * construct assembly the equation parser uses (ppqBuildBigop).
+ * The function accepts a global program label.
+ * It builds an expression tree through static analysis of program bytecode.
+ * The function paints the result in the Z and T display window.
+ * If the drawing is too tall, it falls back to the full-screen band.
  *
- * A construct body walks with the symbolic stack seeded to the
- * variable name on every level. This reproduces both channels upstream
- * uses to feed a body program: the named variable and the filled
- * stack.
- *
- * Everything else declines: an opcode this file does not name, an
- * indirect parameter, a local label, flow control, a numbered-register
- * read. The walk fails, an error is raised, and nothing is painted.
- * DESIGN.md carries the reasoning for each decline code.
+ * The walk declines on unsupported opcodes or unmodeled registers.
+ * On decline, the function raises an error and paints nothing.
  */
 
 #include "c47.h"
@@ -40,7 +33,7 @@ enum { PPA_FREE = 0, PPA_LIT, PPA_VAR, PPA_OP1, PPA_OP2, PPA_CONSTRUCT };
 
 #define PPV_F_OPAQUE 0x01   ///< a string literal: carryable, never printable
 #define PPV_F_SECOND 0x02   ///< CONSTRUCT: a second-order derivative
-#define PPV_F_BOUND  0x04   ///< VAR: a seeded construct variable, not a free one
+#define PPV_F_BOUND  0x04   ///< VAR: bound construct variable flag
 
 // decline reasons. The number reaches the user through moreInfoOnError.
 enum { PPV_D_OPCODE = 1, PPV_D_INDIRECT, PPV_D_LOCALLABEL, PPV_D_UNRESOLVED,
@@ -92,6 +85,9 @@ typedef struct {
   uint32_t layoutVisits;
 } ppvCtx_t;
 
+/* Record a decline reason during bytecode analysis.
+ * If no previous failure exists, sets the failure flag.
+ * It also records the step index. */
 static void ppvDecline(ppvCtx_t *ctx, uint8_t reason) {
   if(!ctx->failed) {
     ctx->failed        = true;
@@ -100,12 +96,9 @@ static void ppvDecline(ppvCtx_t *ctx, uint8_t reason) {
   }
 }
 
-
-/* ==== the AST =========================================================
- * The walk builds a small expression tree. ctx->pool holds only leaf
- * text (a literal as the program spells it, a variable's name).
- * Bump-allocated and thrown away per walk. */
-
+/* Allocate an expression tree node from the context pool.
+ * If the pool is full, records an arena decline.
+ * Initializes child links and metadata fields before returning the node index. */
 static uint8_t ppvAlloc(ppvCtx_t *ctx, uint8_t kind) {
   if(ctx->astUsed >= PPV_AST_NODES) {
     ppvDecline(ctx, PPV_D_ARENA);
@@ -126,7 +119,9 @@ static uint8_t ppvAlloc(ppvCtx_t *ctx, uint8_t kind) {
   return n;
 }
 
-// leaf text goes in the pool. The node keeps an offset and a length.
+/* Store literal text bytes in the context pool.
+ * If the pool lacks memory, records an arena decline.
+ * Writes the byte offset to offOut and advances the pool pointer. */
 static bool_t ppvIntern(ppvCtx_t *ctx, const char *bytes, uint16_t len,
                         uint16_t *offOut) {
   if((uint32_t)ctx->poolUsed + len > PPV_POOL_BYTES) {
@@ -139,6 +134,9 @@ static bool_t ppvIntern(ppvCtx_t *ctx, const char *bytes, uint16_t len,
   return true;
 }
 
+/* Create a leaf node with interned text in the expression tree.
+ * Copies text into the pool and initializes a node with the specified kind and flags.
+ * Returns the node index, or PPV_NIL if memory allocation fails. */
 static uint8_t ppvLeaf(ppvCtx_t *ctx, uint8_t kind, const char *text, uint16_t len,
                        uint8_t flags) {
   uint16_t off = 0;
@@ -154,8 +152,8 @@ static uint8_t ppvLeaf(ppvCtx_t *ctx, uint8_t kind, const char *text, uint16_t l
   return n;
 }
 
-/* How many stack levels the machine currently has: four under SSIZE4,
- * eight otherwise. */
+/* Get the number of active stack levels on the calculator.
+ * Returns four levels under four-stack mode, or eight levels under normal mode. */
 static uint8_t ppvLiveStackSlots(void) {
   int16_t n = (int16_t)(getStackTop() - REGISTER_X + 1);
   if(n < 1) {
@@ -164,6 +162,9 @@ static uint8_t ppvLiveStackSlots(void) {
   return (n > PPV_STACK_SLOTS) ? (uint8_t)PPV_STACK_SLOTS : (uint8_t)n;
 }
 
+/* Push an expression node onto the simulated stack.
+ * If the stack is full, drops the bottom element to mimic hardware behavior.
+ * Returns true on success, or false if the node is invalid. */
 static bool_t ppvPush(ppvCtx_t *ctx, ppvStack_t *stk, uint8_t node) {
   if(node == PPV_NIL) {
     ppvDecline(ctx, PPV_D_ARENA);
@@ -184,8 +185,10 @@ static bool_t ppvPush(ppvCtx_t *ctx, ppvStack_t *stk, uint8_t node) {
   return true;
 }
 
-// A lifting read (literal or recall) after ENTER overwrites X instead
-// of pushing, as FLAG_ASLIFT does upstream. The latch is one-shot.
+/* Push an expression node onto the stack respecting stack-lift rules.
+ * If stack lift is disabled, overwrites the top register.
+ * Otherwise, pushes the node onto the stack.
+ * Returns true on success, or false if node allocation fails. */
 static bool_t ppvPushLifting(ppvCtx_t *ctx, ppvStack_t *stk, uint8_t node) {
   if(node == PPV_NIL) {
     ppvDecline(ctx, PPV_D_ARENA);
@@ -200,6 +203,9 @@ static bool_t ppvPushLifting(ppvCtx_t *ctx, ppvStack_t *stk, uint8_t node) {
   return ppvPush(ctx, stk, node);
 }
 
+/* Pop the top expression node from the simulated stack.
+ * If the stack is empty, records an underflow decline.
+ * Writes the node index to out and decrements stack depth. */
 static bool_t ppvPop(ppvCtx_t *ctx, ppvStack_t *stk, uint8_t *out) {
   if(stk->depth == 0) {
     // the program reads state its caller never provided: decline
@@ -210,10 +216,16 @@ static bool_t ppvPop(ppvCtx_t *ctx, ppvStack_t *stk, uint8_t *out) {
   return true;
 }
 
+/* Test whether an expression node contains opaque unprintable data.
+ * Returns true if the node index is valid and PPV_F_OPAQUE is set. */
 static bool_t ppvIsOpaque(const ppvCtx_t *ctx, uint8_t n) {
   return n != PPV_NIL && (ctx->ast[n].flags & PPV_F_OPAQUE) != 0;
 }
 
+/* Apply a binary operator to the top two stack operands.
+ * Pops right operand b from X and left operand a from Y.
+ * Creates an operator node and pushes it onto the stack.
+ * Returns true on success, or false if operands underflow or are opaque. */
 static bool_t ppvOp2(ppvCtx_t *ctx, ppvStack_t *stk, uint16_t item) {
   uint8_t b, a;
   if(!ppvPop(ctx, stk, &b) || !ppvPop(ctx, stk, &a)) {   // X is the RIGHT operand
@@ -233,6 +245,10 @@ static bool_t ppvOp2(ppvCtx_t *ctx, ppvStack_t *stk, uint16_t item) {
   return ppvPush(ctx, stk, n);
 }
 
+/* Apply a unary operator to the top stack operand.
+ * Pops operand a from X and allocates a unary operator node.
+ * Pushes the operator node back onto the stack.
+ * Returns true on success, or false on underflow or opaque input. */
 static bool_t ppvOp1(ppvCtx_t *ctx, ppvStack_t *stk, uint16_t item) {
   uint8_t a;
   if(!ppvPop(ctx, stk, &a)) {
@@ -251,11 +267,9 @@ static bool_t ppvOp1(ppvCtx_t *ctx, ppvStack_t *stk, uint16_t item) {
   return ppvPush(ctx, stk, n);
 }
 
-
-/* ==== step and parameter decoding ======================================
- * Mirrors decodeOp's parameter grammar (programming/decode.c). The
- * step advance is upstream's findNextStep. */
-
+/* Decode an operation code from program bytecode.
+ * Reads one or two bytes for the opcode and sets paramOut to the following argument.
+ * Returns the decoded operation identifier. */
 static uint16_t ppvOpAt(const uint8_t *step, const uint8_t **paramOut) {
   uint16_t op = *step++;
   if(op & 0x80) {
@@ -265,8 +279,9 @@ static uint16_t ppvOpAt(const uint8_t *step, const uint8_t **paramOut) {
   return op;
 }
 
-// A name must survive the renderer's ppqName (letters, and subscript
-// digits after the first). This check is stricter: ASCII letters only.
+/* Test whether a variable name consists of printable ASCII letters.
+ * Verifies that the string contains only letters and fits within length limits.
+ * Returns true if valid, or false otherwise. */
 static bool_t ppvNameIsDrawable(const char *s) {
   if(s[0] == 0) {
     return false;
@@ -282,8 +297,9 @@ static bool_t ppvNameIsDrawable(const char *s) {
   return true;
 }
 
-// PARAM_LABEL byte -> labelList index. Global names only: a local
-// label number means nothing without a running program's context.
+/* Resolve a global program label parameter to its catalog index.
+ * Declines local labels and indirect registers.
+ * Writes the label list index to idxOut and returns true on success. */
 static bool_t ppvLabelIndex(ppvCtx_t *ctx, const uint8_t *pa, uint16_t *idxOut) {
   uint8_t p = pa[0];
   if(p == STRING_LABEL_VARIABLE) {
@@ -301,9 +317,9 @@ static bool_t ppvLabelIndex(ppvCtx_t *ctx, const uint8_t *pa, uint16_t *idxOut) 
   return false;
 }
 
-// PARAM_REGISTER byte -> a named variable's name. Numbered, lettered
-// and local registers decline: the equation language has no spelling
-// for them.
+/* Extract a named variable parameter from bytecode.
+ * Declines indirect and numbered registers alongside unprintable names.
+ * Copies the valid variable name into out and returns true. */
 static bool_t ppvVarName(ppvCtx_t *ctx, const uint8_t *pa, char *out) {
   uint8_t p = pa[0];
   if(p == INDIRECT_REGISTER || p == INDIRECT_VARIABLE) {
@@ -323,6 +339,9 @@ static bool_t ppvVarName(ppvCtx_t *ctx, const uint8_t *pa, char *out) {
   return true;
 }
 
+/* Test whether a name string matches any entry in a list.
+ * Compares name against each entry up to count n.
+ * Returns true if found, or false otherwise. */
 static bool_t ppvNameInList(const char list[][PPV_NAME_MAX], uint8_t n, const char *name) {
   for(uint8_t i = 0; i < n; i++) {
     if(strcmp(list[i], name) == 0) {
@@ -332,13 +351,10 @@ static bool_t ppvNameInList(const char list[][PPV_NAME_MAX], uint8_t n, const ch
   return false;
 }
 
-
-/* ==== literals =========================================================
- * The two plain-numeral forms carry their ASCII as typed. Every other
- * literal becomes an OPAQUE placeholder: the program can carry, store
- * or drop it. An OPAQUE value can never reach the printed
- * mathematics. */
-
+/* Decode a literal number parameter and push it onto the stack.
+ * Extracts integer or real numeral strings from bytecode.
+ * Pushes opaque placeholders for non-numeric literal types.
+ * Returns true on success, or false if parsing fails. */
 static bool_t ppvLiteral(ppvCtx_t *ctx, ppvStack_t *stk, const uint8_t *pa) {
   uint8_t type = pa[0];
   if(type != STRING_LONG_INTEGER && type != STRING_REAL34) {
@@ -373,10 +389,9 @@ static bool_t ppvLiteral(ppvCtx_t *ctx, ppvStack_t *stk, const uint8_t *pa) {
 
 static void ppvWalk(ppvCtx_t *ctx, uint16_t labelIdx, ppvStack_t *stk);
 
-/* Seed a fresh frame with the construct's variable on every level and
- * walk the body. This covers both channels upstream uses: the named
- * variable and the filled stack. Returns the body's one result as an
- * AST index. */
+/* Analyze the body of a mathematical construct with a bound variable.
+ * Seeds all stack levels with the variable node and walks the target program.
+ * Writes the evaluated result node to out and returns true on success. */
 static bool_t ppvBody(ppvCtx_t *ctx, uint16_t bodyIdx, const char *var,
                       bool_t synthetic, uint8_t *out) {
   if(ctx->bindingCount >= PPV_MAX_DEPTH) {
@@ -413,7 +428,9 @@ static bool_t ppvBody(ppvCtx_t *ctx, uint16_t bodyIdx, const char *var,
   return true;
 }
 
-// Build the construct node once its parts are known.
+/* Build a construct node for multi-part mathematical operators.
+ * Interns the variable name and links body alongside limit child nodes.
+ * Pushes the construct node onto the stack and returns true on success. */
 static bool_t ppvConstruct(ppvCtx_t *ctx, ppvStack_t *stk, uint16_t item,
                            const char *var, uint8_t body, uint8_t from,
                            uint8_t to, uint8_t step, bool_t second) {
@@ -437,9 +454,10 @@ static bool_t ppvConstruct(ppvCtx_t *ctx, ppvStack_t *stk, uint16_t item,
   return ppvPush(ctx, stk, n);
 }
 
-// INTEG: X = upper limit, Y = lower (fnIntegrateYX). The integrand is
-// what the last PGMINT named. Only a latch set during this walk
-// counts.
+/* Process an integral instruction during bytecode analysis.
+ * Extracts the variable name and pops integration bounds from the stack.
+ * Analyzes the integrand routine and pushes an integral construct node.
+ * Returns true on success, or false on parsing errors. */
 static bool_t ppvIntegral(ppvCtx_t *ctx, ppvStack_t *stk, const uint8_t *pa) {
   char v[PPV_NAME_MAX];
   if(!ppvVarName(ctx, pa, v)) {
@@ -470,9 +488,9 @@ static bool_t ppvIntegral(ppvCtx_t *ctx, ppvStack_t *stk, const uint8_t *pa) {
                       PPV_NIL, false);
 }
 
-/* Is this name already a free variable in the tree built so far? An
- * invented counter must not collide with a name the program uses.
- * Enclosing constructs are checked separately, through ctx->binding. */
+/* Test whether a variable name appears as a free variable in the tree.
+ * Scans allocated nodes to prevent collisions with invented variable names.
+ * Returns true if the name matches an unbound variable, or false otherwise. */
 static bool_t ppvNameUsedInAst(const ppvCtx_t *ctx, const char *name) {
   uint16_t len = (uint16_t)strlen(name);
   for(uint8_t i = 0; i < ctx->astUsed; i++) {
@@ -487,9 +505,9 @@ static bool_t ppvNameUsedInAst(const ppvCtx_t *ctx, const char *name) {
   return false;
 }
 
-/* Does this name occur inside one subtree, free or as another
- * construct's bound variable? The limit operands are drawn inside the
- * new operator's visual scope, so they are tested too. */
+/* Test whether a variable name occurs within a specific expression subtree.
+ * Traverses child nodes recursively to locate matching variable references.
+ * Returns true if the name is found, or false otherwise. */
 static bool_t ppvNameInSubtree(const ppvCtx_t *ctx, uint8_t n, const char *name) {
   if(n == PPV_NIL || n >= PPV_AST_NODES) {
     return false;
@@ -512,8 +530,9 @@ static bool_t ppvNameInSubtree(const ppvCtx_t *ctx, uint8_t n, const char *name)
   return false;
 }
 
-/* Invent a counter name for a construct whose variable has no name in
- * the program. NULL if all four candidates are taken. */
+/* Invent a unique dummy variable name for a construct without a formal name.
+ * Tests candidate letters to prevent collisions with existing variables in scope.
+ * Returns a pointer to an unused candidate name, or NULL if all choices collide. */
 static const char *ppvInventName(const ppvCtx_t *ctx,
                                  uint8_t r1, uint8_t r2, uint8_t r3) {
   static const char *const cands[] = { "n", "m", "k", "j" };
@@ -530,12 +549,9 @@ static const char *ppvInventName(const ppvCtx_t *ctx,
   return NULL;
 }
 
-/* Which variable does the derivative vary? Not the f' parameter:
- * upstream's deriv_pgm_variable walks the body's leading MVAR
- * declarations and returns the one matching the parameter, else the
- * first declared, else none. This mirrors that walk, with REM
- * transparency. With no MVAR declared it returns "" and the caller
- * invents a name. */
+/* Determine the differentiation variable from leading MVAR declarations.
+ * Scans MVAR steps in the target program to match parameter names.
+ * Copies the resolved variable name to out and returns true on success. */
 static bool_t ppvDerivVariable(ppvCtx_t *ctx, uint16_t bodyIdx,
                                const char *param, char *out) {
   if(bodyIdx >= numberOfLabels) {
@@ -584,11 +600,10 @@ static bool_t ppvDerivVariable(ppvCtx_t *ctx, uint16_t bodyIdx,
   return true;
 }
 
-/* DERIV: the point comes off the stack, the program from PGMDRV. The
- * seeded name comes from ppvDerivVariable, the variable upstream
- * varies. The f' parameter can name a different one. PGMDRV is a slot
- * of its own upstream, so a derivative does not repoint what INT runs
- * next. */
+/* Process a derivative instruction during bytecode analysis.
+ * Extracts differentiation target and pops the evaluation point from the stack.
+ * Analyzes the derivative body and pushes a derivative construct node.
+ * Returns true on success, or false on parsing or collision errors. */
 static bool_t ppvDerivative(ppvCtx_t *ctx, ppvStack_t *stk, const uint8_t *pa,
                             bool_t second) {
   char v[PPV_NAME_MAX];
@@ -639,8 +654,10 @@ static bool_t ppvDerivative(ppvCtx_t *ctx, ppvStack_t *stk, const uint8_t *pa,
   return ppvConstruct(ctx, stk, ITM_F1DRV, sampled, body, at, PPV_NIL, PPV_NIL, second);
 }
 
-// SUM/PROD: X = step, Y = to, Z = from (_programmableSumProd). The
-// counter has no name in RPN, so the tree invents one.
+/* Process a summation or product instruction during bytecode analysis.
+ * Pops step and range limit nodes from the stack.
+ * Invents an unused loop variable and analyzes the repeated expression body.
+ * Builds and pushes a summation or product construct node. */
 static bool_t ppvSumProd(ppvCtx_t *ctx, ppvStack_t *stk, const uint8_t *pa, bool_t isSum) {
   uint16_t bodyIdx;
   if(!ppvLabelIndex(ctx, pa, &bodyIdx)) {
@@ -671,10 +688,9 @@ static bool_t ppvSumProd(ppvCtx_t *ctx, ppvStack_t *stk, const uint8_t *pa, bool
                       fromN, toN, unitStep ? PPV_NIL : stepN, false);
 }
 
-
-/* A monadic with no 2D spelling but a name the evaluator resolves. The
- * catalog name must resolve back through ppEqFunctionItem to this same
- * item, so a name the evaluator cannot parse is never emitted. */
+/* Resolve a monadic function opcode to its textual function name.
+ * Verifies that the catalog name resolves back to the original opcode.
+ * Copies the valid function name to out and returns true. */
 static bool_t ppvMonadicName(uint16_t op, char *out) {
   switch(op) {
     case ITM_LN:     case ITM_LOG10:  case ITM_EXP:    case ITM_10x:
@@ -693,22 +709,13 @@ static bool_t ppvMonadicName(uint16_t op, char *out) {
   return true;
 }
 
-
-/* ==== step dispatch =====================================================
- * Fail-closed: an opcode not named here declines. */
-
-/* The declaration and display items: no stack, no picture, and no
- * effect on a pending lift. One list, used by the dispatch arm and by
- * the exception test below. */
 #define PPV_DECLARATION_ITEMS \
   case ITM_NULL: case ITM_LBL: case ITM_MVAR: case ITM_REM: \
   case ITM_PAUSE: case ITM_SNAP
 
-/* Items the epilogue's lift clear must not run after: the declaration
- * items change no stack, ENTER arms the latch, and XEQ starts its
- * callee clean (its arm clears the latch before the nested walk).
- * XEQ is lift-neutral so the latch the callee leaves survives for the
- * caller. */
+/* Test whether an opcode preserves the stack-lift disabled state.
+ * Identifies declaration items alongside ENTER and subroutine calls.
+ * Returns true if the operation preserves lift state, or false otherwise. */
 static bool_t ppvLiftNeutral(uint16_t op) {
   switch(op) {
     PPV_DECLARATION_ITEMS:
@@ -722,10 +729,8 @@ static bool_t ppvLiftNeutral(uint16_t op) {
 
 static void ppvStepArm(ppvCtx_t *ctx, ppvStack_t *stk, uint16_t op, const uint8_t *pa);
 
-/* T replication: when an operation consumes operands, T duplicates
- * itself into the vacated slot. Applies only after the model has held
- * a full stack. Before that, the deeper registers hold state a static
- * walk cannot know, and the underflow decline answers. */
+/* Replicate the top T register when operands drop down the stack.
+ * If the stack was previously saturated, fills vacated top slots with copies of T. */
 static void ppvRefillFromT(ppvStack_t *stk) {
   if(!stk->saturated) {
     return;
@@ -739,6 +744,9 @@ static void ppvRefillFromT(ppvStack_t *stk) {
   }
 }
 
+/* Execute a single program instruction step during static analysis.
+ * Dispatches the opcode arm and clears the lift latch if the operation is not lift-neutral.
+ * Refills empty stack levels from the top T register on success. */
 static void ppvStep(ppvCtx_t *ctx, ppvStack_t *stk, uint16_t op, const uint8_t *pa) {
   ppvStepArm(ctx, stk, op, pa);
   if(!ppvLiftNeutral(op)) {
@@ -749,6 +757,9 @@ static void ppvStep(ppvCtx_t *ctx, ppvStack_t *stk, uint16_t op, const uint8_t *
   }
 }
 
+/* Dispatch an operation code to its simulated stack execution handler.
+ * Handles arithmetic operators and stack changes alongside subroutine calls.
+ * Updates simulated register state or records decline reasons on unmodeled operations. */
 static void ppvStepArm(ppvCtx_t *ctx, ppvStack_t *stk, uint16_t op, const uint8_t *pa) {
   switch(op) {
     PPV_DECLARATION_ITEMS:
@@ -919,6 +930,9 @@ static void ppvStepArm(ppvCtx_t *ctx, ppvStack_t *stk, uint16_t op, const uint8_
   }
 }
 
+/* Traverse program instructions starting from a global label.
+ * Decodes steps sequentially up to return statements or step budget limits.
+ * Advances simulated stack state for each instruction. */
 static void ppvWalk(ppvCtx_t *ctx, uint16_t labelIdx, ppvStack_t *stk) {
   if(ctx->failed) {
     return;
@@ -958,10 +972,9 @@ static void ppvWalk(ppvCtx_t *ctx, uint16_t labelIdx, ppvStack_t *stk) {
   ctx->callDepth--;
 }
 
-/* ==== the layout back end ==============================================
- * AST -> 2D nodes. Bracketing is decided here once, by the same
- * ppfBuildOp1/ppfBuildOp2 the capture engine uses. */
-
+/* Convert an abstract syntax tree into a 2D layout node hierarchy.
+ * Translates AST nodes into text runs alongside mathematical operator boxes.
+ * Sets outPrec to the expression precedence and returns the root layout index. */
 static uint8_t ppvAstToNodes(ppvCtx_t *ctx, uint8_t n,
                              uint8_t ctxFont, uint8_t childFont, int *outPrec) {
   *outPrec = PPF_PREC_ATOM;
@@ -1006,7 +1019,7 @@ static uint8_t ppvAstToNodes(ppvCtx_t *ctx, uint8_t n,
       int pa, pb;
       uint8_t x = ppvAstToNodes(ctx, a->child[0], ctxFont, childFont, &pa);
       if(x == PP_NONE) {
-        ctx->layoutFull = true;   // check before the second recursion
+        ctx->layoutFull = true;   // test memory capacity before the second recursion
         return PP_NONE;
       }
       uint8_t y = ppvAstToNodes(ctx, a->child[1], ctxFont, childFont, &pb);
@@ -1028,7 +1041,7 @@ static uint8_t ppvAstToNodes(ppvCtx_t *ctx, uint8_t n,
       if(body == PP_NONE || from == PP_NONE
           || (to == PP_NONE && a->item != ITM_F1DRV)
           || (a->child[3] != PPV_NIL && step == PP_NONE)) {
-        ctx->layoutFull = true;   // every operand is checked, `step` included
+        ctx->layoutFull = true;   // validate all operands, including `step`
         return PP_NONE;
       }
       // a nested construct body needs no bracket: the outer " d<var>"
@@ -1066,9 +1079,9 @@ static uint8_t ppvAstToNodes(ppvCtx_t *ctx, uint8_t n,
 }
 
 
-/* Walk a program and hand back the root of the tree it built, or
- * PPV_NIL with ctx->declineReason set. The product entry point: both the
- * drawing path and the test seam start here. */
+/* Execute static program analysis to construct an expression tree.
+ * Initializes analysis context and walks the instruction stream from a label.
+ * Returns the root AST node index, or PPV_NIL if analysis fails. */
 static uint8_t ppvRun(ppvCtx_t *ctx, uint16_t labelIdx) {
   ctx->poolUsed      = 0;
   ctx->astUsed       = 0;
@@ -1105,10 +1118,6 @@ static uint8_t ppvRun(ppvCtx_t *ctx, uint16_t labelIdx) {
   return root;
 }
 
-/* ==== the text back end (PC_BUILD only) ================================
- * Serializes the same tree to equation-language text, for tests only.
- * Not in the device build. Precedence appears here because text must
- * carry it in brackets. */
 #if defined(PC_BUILD) || defined(TESTSUITE_BUILD)
 
 enum { PPV_PREC_ADD = 0, PPV_PREC_MUL = 1, PPV_PREC_POW = 2, PPV_PREC_ATOM = 3 };
@@ -1119,6 +1128,9 @@ typedef struct {
   bool_t   ovf;
 } ppvOut_t;
 
+/* Append a raw byte sequence to a serialization buffer.
+ * If the buffer capacity is exceeded, sets the overflow flag.
+ * Copies bytes and null-terminates the buffer on success. */
 static void ppvOutRaw(ppvOut_t *o, const char *b, uint16_t n) {
   if((uint32_t)o->len + n + 1 > o->cap) {
     o->ovf = true;
@@ -1129,10 +1141,15 @@ static void ppvOutRaw(ppvOut_t *o, const char *b, uint16_t n) {
   o->buf[o->len] = 0;
 }
 
+/* Append a null-terminated string to a serialization buffer.
+ * Calls ppvOutRaw with the measured string length. */
 static void ppvOutStr(ppvOut_t *o, const char *s) {
   ppvOutRaw(o, s, (uint16_t)strlen(s));
 }
 
+/* Determine the mathematical operator precedence of an AST node.
+ * Evaluates node kind and operation type to assign relative binding power.
+ * Returns the precedence level constant. */
 static uint8_t ppvAstPrec(const ppvCtx_t *ctx, uint8_t n) {
   const ppvAst_t *a = &ctx->ast[n];
   switch(a->kind) {
@@ -1158,6 +1175,9 @@ static uint8_t ppvAstPrec(const ppvCtx_t *ctx, uint8_t n) {
 
 static void ppvSerialize(const ppvCtx_t *ctx, uint8_t n, ppvOut_t *o);
 
+/* Serialize an operand node with parentheses if precedence requires grouping.
+ * Evaluates relative precedence against the parent operator level.
+ * Wraps lower-precedence expressions in parentheses. */
 static void ppvOperand(const ppvCtx_t *ctx, uint8_t n, ppvOut_t *o,
                        uint8_t level, bool_t rightSide) {
   uint8_t p = ppvAstPrec(ctx, n);
@@ -1171,6 +1191,9 @@ static void ppvOperand(const ppvCtx_t *ctx, uint8_t n, ppvOut_t *o,
   }
 }
 
+/* Serialize an expression AST node into mathematical formula text.
+ * Traverses operator trees and literals recursively into a text buffer.
+ * Sets the overflow flag if the output exceeds buffer capacity. */
 static void ppvSerialize(const ppvCtx_t *ctx, uint8_t n, ppvOut_t *o) {
   if(n == PPV_NIL) {
     o->ovf = true;
@@ -1247,8 +1270,8 @@ static void ppvSerialize(const ppvCtx_t *ctx, uint8_t n, ppvOut_t *o) {
       ppvOutStr(o, ";");
       ppvSerialize(ctx, a->child[1], o);
       if(a->item == ITM_F1DRV) {
-        // DERIV(body;var;at[;order]): no upper limit, and the order is
-        // a literal 1 or 2
+        // DERIV syntax accepts body, variable, eval point, plus optional order.
+        // There is no upper limit parameter. The order is 1 or 2.
         if((a->flags & PPV_F_SECOND) != 0) {
           ppvOutStr(o, ";2");
         }
@@ -1270,8 +1293,9 @@ static void ppvSerialize(const ppvCtx_t *ctx, uint8_t n, ppvOut_t *o) {
   }
 }
 
-/* Walk a program and lay it out, so a test can read the node tree the
- * product paints. Resets the layout pool itself. */
+/* Build and measure 2D layout nodes for a program label for testing.
+ * Runs static analysis and converts the resulting AST into layout boxes.
+ * Returns true on success, or false if analysis or layout fails. */
 bool_t ppvTestBuildNodes(uint16_t labelIdx, uint8_t ctxFont, uint8_t childFont,
                          uint8_t *rootOut, uint32_t *visitsOut) {
   ppvCtx_t ctx;
@@ -1295,6 +1319,9 @@ bool_t ppvTestBuildNodes(uint16_t labelIdx, uint8_t ctxFont, uint8_t childFont,
   return true;
 }
 
+/* Transpile an RPN program into mathematical equation text for testing.
+ * Analyzes bytecode from a label and serializes the AST into out.
+ * Returns true on success, or false if the program cannot be analyzed. */
 bool_t ppvTranspile(uint16_t labelIdx, char *out, uint16_t cap,
                     uint8_t *reasonOut, uint16_t *stepOut) {
   ppvCtx_t ctx;
@@ -1322,20 +1349,20 @@ bool_t ppvTranspile(uint16_t labelIdx, char *out, uint16_t cap,
 
 #endif // PC_BUILD || TESTSUITE_BUILD
 
-
-/* ==== the Z/T window ====================================================
- * The formula paints across the T and Z rows (rows 20..91, DESIGN.md
- * §4 VISUAL), so the answer stays visible in X underneath. Anything
- * taller falls through to the full-screen view. */
-
 #define PPV_BAND_TOP    (Y_POSITION_OF_REGISTER_T_LINE - 4)
 #define PPV_BAND_BOTTOM (Y_POSITION_OF_REGISTER_Z_LINE + 31)
 #define PPV_BAND_ROWS   (PPV_BAND_BOTTOM - PPV_BAND_TOP + 1)
 
+/* Clear the display rows spanning the Z and T register lines.
+ * Fills the stack window rectangle with blank background pixels. */
 static void ppvClearBand(void) {
   lcd_fill_rect(0, PPV_BAND_TOP, SCREEN_WIDTH, PPV_BAND_ROWS, LCD_SET_VALUE);
 }
 
+/* Attempt to paint an equation into the Z and T stack line window.
+ * Tests multiple font scale levels to fit within the two-line display band.
+ * Clears the band and paints right-aligned if the equation fits.
+ * Returns true if painted, or false if the equation is too large. */
 static bool_t ppvPaintStackWindow(ppvCtx_t *ctx, uint8_t root) {
   // the T-line ladder: full size first, then a whole-tree shrink
   for(int rung = 0; rung < 2; rung++) {
@@ -1367,9 +1394,10 @@ static bool_t ppvPaintStackWindow(ppvCtx_t *ctx, uint8_t root) {
   return false;
 }
 
-
-/* Taller than the two stack rows: the full band, 21..167. No fallback
- * beneath this: a tree that fails here failed on size. */
+/* Paint an equation across the full screen display band.
+ * Centers the equation between horizontal frame lines across rows 21 to 167.
+ * Sets manual screen update flags so pixels persist until dismissed.
+ * Returns true if painted, or false if the equation exceeds screen bounds. */
 static bool_t ppvPaintFullScreen(ppvCtx_t *ctx, uint8_t root) {
   for(int rung = 0; rung < 2; rung++) {
     int prec;
@@ -1405,9 +1433,10 @@ static bool_t ppvPaintFullScreen(ppvCtx_t *ctx, uint8_t root) {
   return false;
 }
 
-
-/* ==== the command ======================================================= */
-
+/* Display an RPN program as formatted mathematical notation without execution.
+ * Resolves the program label and performs static analysis to build an equation.
+ * Paints into the stack window or falls back to full-screen display.
+ * Displays an error message if analysis declines or fails. */
 void fnPrettyVisual(uint16_t label) {
   if(lastErrorCode != ERROR_NONE) {
     return;

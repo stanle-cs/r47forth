@@ -1,5 +1,5 @@
 diff --git a/src/testSuite/tests/testSuiteList.txt b/src/testSuite/tests/testSuiteList.txt
-index 6bb764d1b588d13b2767c07e61837d86e4b5a0c0..a35b856487725244b61be98f76e0ecaaea37ce88 100644
+index 6bb764d1b588d13b2767c07e61837d86e4b5a0c0..9c65320bbdb2b3d502ebceda5cc54a1394d3d7b2 100644
 --- a/src/testSuite/tests/testSuiteList.txt
 +++ b/src/testSuite/tests/testSuiteList.txt
 @@ -267,6 +267,7 @@ dot
@@ -14,11 +14,11 @@ index 6bb764d1b588d13b2767c07e61837d86e4b5a0c0..a35b856487725244b61be98f76e0ecaa
  
  serialize_cov
  
-+; pretty-print: VISUAL against the real appnote-22 program file. It
-+; CLEARS PROGRAM MEMORY, so it must come after every case that expects
-+; preloaded programs (programs.txt) — and it is anchored HERE, not at the
-+; end of the list, because the tail is forth-core's and two packages
-+; appending at EOF conflict.
++; pretty-print: VISUAL against the real appnote-22 program file.
++; This test CLEARS PROGRAM MEMORY. Place it after tests that require
++; preloaded programs (such as programs.txt). It anchors here before
++; graphs_cov. Do not anchor at the end of the file, because multiple
++; packages at the tail cause merge conflicts.
 +pretty_visual_real
 +
  graphs_cov

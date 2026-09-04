@@ -214,11 +214,11 @@ void fnEqCalc(uint16_t unusedButMandatoryParameter) {
 
 
 
-/* pretty-print package: the one function-name test the renderer, the
- * evaluator and the program walker all call. It mirrors _parseWord's
- * PARSER_HINT_FUNCTION resolution: the alias table first, then catalog
- * and softmenu names gated on EIM_ENABLED and a parameterless item.
- * Returns the item id, or -1. */
+/* pretty-print package: common function-name lookup.
+ * The renderer and evaluator call this function. The program walker
+ * also calls it. It mirrors the PARSER_HINT_FUNCTION logic in _parseWord.
+ * It tests the alias table first. It then tests catalog and softmenu
+ * names with EIM_ENABLED and no parameters. Returns the item id, or -1. */
 int16_t ppEqFunctionItem(const char *name) {
   for(uint32_t i = 0; functionAlias[i].name[0] != 0; ++i) {
     if(compareString(functionAlias[i].name, name, CMP_NAME) == 0) {
@@ -684,10 +684,10 @@ void showEquation(uint16_t equationId, uint16_t startAt, uint16_t cursorAt, bool
     }
 
     if((!dryRun) && (*cursorShown || cursorAt == EQUATION_NO_CURSOR)) {
-      /* pretty-print package: 2D strip rendering when not editing. A
-       * false return paints nothing and the linear line runs unchanged.
-       * The enclosed upstream line keeps its own indentation so the
-       * patch carries no whitespace-only hunk. */
+      /* pretty-print package: draw the 2D strip when not in edit mode.
+       * If drawing fails, it paints nothing. The linear display then runs.
+       * The enclosed line keeps its original indentation to prevent
+       * whitespace changes in the patch. */
       if(cursorAt != EQUATION_NO_CURSOR || !prettyTryEquation(tmpString, (int16_t)(1 + X_OFF))) {
       showString(tmpString, &standardFont, 1 + X_OFF, SCREEN_HEIGHT - SOFTMENU_HEIGHT * 3 + 2 , vmNormal, true, true);
       }

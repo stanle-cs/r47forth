@@ -3,16 +3,17 @@
 
 /**
  * \file prettyInternal.h
- * Pretty-print engine internals, shared between the package's own
- * translation units (prettyLayout.c, prettyValue.c, prettyTest.c).
- * The pretty-print-extra package's sources include this header too:
- * the layout model below is the contract its builders target.
- * Include after c47.h. Not part of the public surface.
+ * Pretty-print engine internal declarations.
  *
- * Layout model: a node tree measured then painted. For a node whose
- * baseline is screen row B, ink occupies rows [B - ascent, B + descent - 1];
- * a plain digit has descent 0. Child positions are relative: relX from the
- * parent's left edge, relBase from the parent's baseline.
+ * Shared among package source files (prettyLayout.c, prettyValue.c,
+ * and prettyTest.c). The pretty-print-extra package also includes
+ * this header for layout definitions. Include after c47.h.
+ *
+ * Layout model: the engine measures the node tree, then paints it.
+ * For a node with baseline at screen row B, ink occupies rows
+ * [B - ascent, B + descent - 1]. A standard digit has descent 0.
+ * Child positions are relative to the parent: relX is the offset
+ * from the left edge, and relBase is the baseline offset.
  */
 
 #if !defined(PRETTYINTERNAL_H)
@@ -20,14 +21,14 @@
 
 enum { PP_RUN = 0, PP_HBOX = 1, PP_FRAC = 2, PP_RAD = 3, PP_SUP = 4, PP_PAREN = 5,
        PP_SUB = 6, PP_BARS = 7, PP_INT = 8, PP_BIGOP = 9 };
-// PP_BIGOP children: body, under-limit, over-limit (chain of 3).
-// textOff stores the operator ITM id (no other free field on box
-// nodes), and the paint pass picks the stroke glyph (Σ/∏/∫) from it.
-// PP_RAD children: radicand, then an optional second child = the index
-// (ⁿ√), above-left of the sign. PP_SUB mirrors PP_SUP downward
-// (log_b). PP_BARS wraps its child in |absolute-value| strokes.
-// Only the extra package's builders produce PP_SUB, PP_BARS, PP_INT
-// and PP_BIGOP; the paint arms for them live here in the engine.
+// PP_BIGOP children: body, lower limit, upper limit.
+// textOff stores the operator item ID. The paint pass uses textOff
+// to select the glyph (Sigma, Pi, or Integral).
+// PP_RAD children: radicand, plus an optional root index (n-th root).
+// PP_SUB places a subscript below the baseline (log_b).
+// PP_BARS encloses its child in vertical absolute-value bars.
+// Only pretty-print-extra creates these special nodes.
+// The drawing routines for these nodes reside in this engine.
 enum { PP_FONT_NUMERIC = 0, PP_FONT_STANDARD = 1, PP_FONT_TINY = 2 };
 
 #define PP_NONE        0xFF
@@ -75,11 +76,11 @@ bool_t ppParseComplex (const char *src, uint8_t ctxFont, uint8_t childFont, uint
 void   prettySetEnabled(bool_t on);
 void   prettySetTline(bool_t on);
 
-/* prettyInfix.c: the shared 2D node builders, used by the equation
- * renderer, the program walker and pretty-print-extra's capture viewer
- * so precedence is decided in one place. Only ADD and MUL need
- * brackets: PP_SUP scopes itself. Call ppfPowBase for every PP_SUP
- * base. */
+/* prettyInfix.c: shared two-dimensional node builders.
+ * The equation renderer and program walker use these builders to
+ * centralize precedence rules. The formula capture viewer also uses
+ * them. Only ADD and MUL require parentheses because PP_SUP scopes itself.
+ * Call ppfPowBase for every PP_SUP base node. */
 #define PPF_PREC_ADD  1
 #define PPF_PREC_MUL  2
 #define PPF_PREC_ATOM 3
@@ -125,9 +126,9 @@ bool_t ppvTestBuildNodes(uint16_t labelIdx, uint8_t ctxFont, uint8_t childFont,
 #endif // PC_BUILD || TESTSUITE_BUILD
 
 #if defined(PC_BUILD)
-/* Shared test scaffolding, defined in prettyTest.c. The extra
- * package's test driver (prettyExtraTest.c) links against these, so
- * they are non-static and declared here rather than per-file. */
+/* Shared test helpers defined in prettyTest.c.
+ * The test driver in pretty-print-extra (prettyExtraTest.c) links to
+ * these functions. They have external linkage and are declared here. */
 // the X-line band ppTestCapture snapshots
 #define PPT_BAND_TOP   (Y_POSITION_OF_REGISTER_X_LINE - 4)
 #define PPT_BAND_ROWS  43
@@ -144,8 +145,8 @@ bool_t ppTestRectAnyLit(uint32_t r0, uint32_t r1, uint32_t x0, uint32_t x1);
 void   ppTestCaptureBand(int which, uint32_t top, uint32_t rows);
 void   ppTestCapture(int which);
 bool_t ppTestSnapsEqual(void);
-// program-fixture loader + layout-signature decoders, shared the same
-// way (the prefixes name their subject, not their home)
+// Fixture loader and layout decoders for test programs.
+// Prefixes identify the target subject.
 void        ppcTestWriteAndLoadPgm(const uint8_t *pgm, size_t n);
 uint32_t    ppvSumRows(int16_t top, int16_t bottom);
 void        ppfTestSigNode(uint8_t n, char *out, size_t cap);
