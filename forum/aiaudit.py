@@ -34,6 +34,9 @@ HARD = {
 CONSTRUCTION = {
  'neg-parallel not-just':   r"\bnot (just|only)\b[^.;]{0,60}\b(but|it\'s|its)\b",
  'neg-parallel not-X-Y':    r"\b(is|are|was|were|it\'s) not\b[^.;]{0,40},\s*(it\'s|its|but|rather)\b",
+ 'neg-parallel appositive': r",\s+(?:not|never)\s+(?:a|an|the|on|by|from|in|at|to|of|just|only|what|where|because|somebody)\b|,\s+(?:not|never)\s+\w+[.:]",
+ 'neg-parallel not-justX':  r"\b, not just\b",
+ 'neg-parallel and-tail':   r"\band\s+(?:does|do|is|are|must|can|will)\s+(?:not|never)\s+\w+[^.;:]{0,30}[.;]",
  'X-rather-than-Y':         r'\brather than\b',
  'instead-of-pivot':        r'\binstead of\b',
  'participial-ender':       r',\s+(highlighting|underscoring|emphasizing|ensuring|reflecting|symbolizing|contributing|fostering|enabling|allowing|making it|which is what|which is why)\b',

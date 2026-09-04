@@ -35,25 +35,25 @@ WHAT IS IN HERE
   packages/.gitignore           keeps generated output tracked, junk out
   COPYING                       GPL-3.0 licence text
 
-Don't delete the test files. meson.build declares the first three as
-tests, and make pkg_build runs make test, so a missing file kills the
-build. If you really don't want them, take the test() blocks out of
-meson.build too.
+Do not delete the test files. meson.build declares the first three as
+tests. make pkg_build runs make test. A missing test file stops the
+build. To remove the tests, also remove the test() blocks from
+meson.build.
 
 
 INSTALL
 -------
 
-Run the tests right here first. They don't need an upstream tree, and if
-all four pass, the tooling survived the download:
+Run the tests here first. They do not need an upstream tree. If all four
+pass, the tooling survived the download:
 
   python3 tools/test_pkg_patch_common.py
   python3 tools/test_pkg_patch_refresh.py
   python3 tools/test_pkg_patch_resolver.py
   python3 tools/test_pkg_patch_integrate.py
 
-Then get upstream, copy these files over it with the directory layout
-kept, and apply the build-system diff:
+Then get upstream. Copy these files over it without changing the
+directory layout. Apply the build-system diff:
 
   git clone https://gitlab.com/rpncalculators/c43.git
   cd c43
@@ -64,22 +64,22 @@ kept, and apply the build-system diff:
 USING IT
 --------
 
-A package is one flat directory laid out the same way as upstream, and
-there's nothing to declare inside it:
+A package is one flat directory with the same layout as upstream. You
+do not declare files inside it:
 
   packages/my-pkg/
       keyboard.c      your edited copy of an existing upstream file
       my_module.c     a new source with no upstream counterpart
 
-Everything goes through the ./package entry point. For an upstream file,
-pull it at the package's base commit first so your patch stays just your
-edits:
+Use the ./package entry point for all package operations. For an upstream
+file, first get its version from the package's base commit. This keeps
+the patch limited to your edits:
 
   ./package materialize my-pkg keyboard.c
 
-Run refresh and it works out which is which. If the path exists upstream
-you get a patch against it, and if it doesn't, the file gets copied in
-whole:
+Run refresh to classify each file. If the path exists upstream, refresh
+writes a patch against it. If the path does not exist upstream, refresh
+copies the complete file:
 
   ./package refresh my-pkg
 
@@ -89,24 +89,24 @@ Then build with the package active:
   make dist_dmcp5r47 CUSTOM_PKG=packages/my-pkg
 
 CUSTOM_PKG takes a comma-separated list. When two packages patch the
-same file, the patches stack in NNN filename order instead of one
-replacing the other. Two packages editing different parts of one
-function is fine. If both touch the same lines, configure fails and
-tells you which patch did it.
+same file, the resolver applies their patches in NNN filename order. It
+does not replace the first patch with the second patch. Two packages can
+edit separate parts of one function. If both patches touch the same
+lines, configure fails and identifies the conflicting patch.
 
-A package can require a second package. The post that ships it names
-the requirement. Put both in the CUSTOM_PKG list, with the required
-package first. The dependent package alone does not build: the
-compile stops with a named error.
+A package can require a second package. The release post names the
+requirement. Put both packages in the CUSTOM_PKG list. Put the required
+package first. The dependent package does not build alone. The compiler
+stops with a named error.
 
 
 REFRESH BEFORE YOU BUILD
 ------------------------
 
-The build compiles from the generated patches/ and files/ directories
-and never looks at your flat working area. Edit a source without
-refreshing and you'll flash a build that doesn't have your change in
-it. Mine runs first thing in the build script.
+The build compiles from the generated patches/ and files/ directories.
+It does not read your flat working area. If you edit a source without
+refreshing, the firmware does not contain your change. My build script
+runs refresh first.
 
 
 A PACKAGE THAT USES IT

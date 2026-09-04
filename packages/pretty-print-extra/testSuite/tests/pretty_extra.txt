@@ -24,23 +24,10 @@ Func: prettyTestCapture
 In:  FL_ASLIFT=1 RX=LonI:"99"
 Out: EC=0 RX=LonI:"0"
 
-Func: prettyTestVisual
-
-; V1-V3: the appnote-22 chain transpiled — a double and a triple integral
-; recovered from PGMINT/INT steps, and a constructed function's own
-; arithmetic. V4-V6: programmed sums, including the invented counter name
-; refusing to shadow a real variable. V7-V15: the decline catalog.
-; V16-V17: precedence and the PGMINT latch. V18 evaluates a transpiled
-; string (4/3) so a picture that cannot compute cannot pass. V19-V20: the
-; surface — a stale solver session must not reframe it, a decline paints
-; nothing.
-In:  FL_ASLIFT=1 RX=LonI:"99"
-Out: EC=0 RX=LonI:"0"
-
 Func: prettyTestEqLang
 
 ; EQ14-EQ29: the invented equation language through the real fnEqCalc
-; path — SUM/PROD/DERIV/INTEG, nesting, the step remedy, the softmenu
+; path: SUM/PROD/DERIV/INTEG, nesting, the step remedy, the softmenu
 ; typing round trip. V65/V18 close the walker loop: the drawing must
 ; compute what the program computes. The walker fixtures load in the
 ; core package's prettyTestVisual, so this file must run after

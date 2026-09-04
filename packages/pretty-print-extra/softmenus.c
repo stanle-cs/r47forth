@@ -3481,10 +3481,10 @@ void showSoftmenuCurrentPart(void) {
           }                                                                      //JM^^
 
           /* pretty-print-extra package: the two toggles in our own menu show
-           * their state the way their DISP neighbours do. The generic
+           * their state the way their DISP neighbors do. The generic
            * checkbox path next door only fires for fnGetSystemFlag items
            * inside -MNU_TAMFLAG, and reads the flag out of the item's
-           * param — we read it explicitly instead, so the toggle items'
+           * param. We read it explicitly instead, so the toggle items'
            * param stays NOPARAM and nothing in dispatch is perturbed. */
           else if(softmenu[m].menuItem == -MNU_PP && (item%10000 == ITM_PPON || item%10000 == ITM_PTLIN)) {
             showSoftkey(indexOfItems[item%10000].itemSoftmenuName,  x, y-currentFirstItem/6, vmNormal, (item/10000)==0 || (item/10000)==2, (item/10000)==0 || (item/10000)==1, getSystemFlag(item%10000 == ITM_PPON ? FLAG_PRETTYP : FLAG_PTLINE) ?  CB_TRUE : CB_FALSE, NOVAL, NOTEXT);

@@ -43,6 +43,7 @@ class TestHelp(unittest.TestCase):
         self.assertIn('audit', r.stdout)
         self.assertIn('integrate', r.stdout)
         self.assertIn('resume', r.stdout)
+        self.assertIn('upstream', r.stdout)
 
     def test_refresh_help(self):
         r = _run(['refresh', '--help'])
@@ -73,6 +74,15 @@ class TestHelp(unittest.TestCase):
         self.assertIn('session', r.stdout)
         self.assertIn('keep', r.stdout)
         self.assertIn('no-build', r.stdout)
+
+    def test_upstream_help(self):
+        r = _run(['upstream', '--help'])
+        self.assertEqual(r.returncode, 0)
+        self.assertIn('packages', r.stdout)
+        self.assertIn('onto', r.stdout)
+        self.assertIn('branch', r.stdout)
+        self.assertIn('push', r.stdout)
+        self.assertIn('mr', r.stdout)
 
     def test_resume_omitted_flags_preserve_stored_values(self):
         import pkg_patch_cli

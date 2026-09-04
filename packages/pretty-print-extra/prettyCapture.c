@@ -83,11 +83,11 @@ static bool_t ppcIsSlotRegister(uint16_t r) {
 
 static void ppxReset(void);
 
-/* Initializes package data only. It must not set the system flags:
- * only the core's prettyReset restores the factory defaults. It also
- * fills the core package's extension slots: every capture entry point
- * runs through here first, and no formula can exist before one does,
- * so the T-line extension is always registered before it can draw. */
+/* Initializes package data only. It must not set the system flags.
+ * Only the core's prettyReset restores the factory defaults. This
+ * function also fills the core package's extension slots. Every capture
+ * entry point calls it first. No formula can exist before that call.
+ * Therefore, the T-line extension is registered before it can draw. */
 static void ppcInit(void) {
   for(uint8_t i = 0; i < PPC_NODES; i++) {
     ppcArena[i].kind = PPN_FREE;
@@ -706,8 +706,8 @@ void prettyNoteFunction(int16_t func, uint16_t param) {
         ppcDisplaced(k, true);
       }
       break;
-    /* FILL overwrites Y..top with X, which is displacement, so those
-     * slots must be filed here while the registers are still pre-op.
+    /* FILL overwrites Y..top with X. This displaces the old values in
+     * those slots. File them here while the registers are still pre-op.
      * Slot 0 is the source and keeps its value. */
     case PPC_FILL:
       for(uint8_t k = 1; k <= ppcTopSlot(); k++) {
@@ -779,7 +779,7 @@ void prettyNoteFunction(int16_t func, uint16_t param) {
         xcopy(ppcStage.stepBytes, &s, 16);
       }
       else {
-        // a step we cannot show truthfully: fall back to the default rule
+        // The display cannot show this step truthfully. Use the default rule.
         ppcStage.cls = PPC_INVALIDATE;
         break;
       }
@@ -957,7 +957,7 @@ void prettyNoteFunctionDone(void) {
         ppcShiftUpForLift();
       }
       else {
-        ppcDisplaced(0, false);   // overwritten; its register is already gone
+        ppcDisplaced(0, false);   // Overwritten. Its register is already gone.
         ppcFreeTree(ppcSlot[0] == PPC_UNKNOWN ? PPC_NIL : ppcSlot[0]);
         ppcSlot[0] = PPC_UNKNOWN;
       }
@@ -1125,7 +1125,7 @@ void prettyNoteNimText(const char *aim) {
   size_t n = strlen(s);
   // Gate on what the leaf can hold: two 15-byte payloads.
   if(n > PPC_LIT_CAPACITY) {
-    ppcNimTextValid = false;   // too long: the leaf will fall back to a value
+    ppcNimTextValid = false;   // Too long. The leaf becomes a value.
     ppcNimText[0] = 0;
     return;
   }

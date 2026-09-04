@@ -18,6 +18,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import pkg_patch_common  # noqa: E402
 import pkg_patch_refresh  # noqa: E402
 import pkg_patch_integrate  # noqa: E402
+import pkg_patch_upstream  # noqa: E402
 
 
 def _resolve_package(name):
@@ -374,27 +375,45 @@ def _cmd_status(args):
         sys.exit(1)
 
 
+def _cmd_upstream(args):
+    pkg_patch_upstream.upstream(
+        packages_arg=args.packages,
+        project_root=_REPO_ROOT,
+        onto_ref=args.onto,
+        branch_name=args.branch,
+        remote=args.remote,
+        push=args.push or args.mr,
+        create_mr=args.mr,
+        title=args.title,
+        message=args.message,
+        no_build=args.no_build,
+        keep=args.keep,
+    )
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(
         prog='package',
-        description='Package management entry point.',
+        description='Manage custom packages for the C47 firmware.',
     )
-    subs = parser.add_subparsers(dest='command')
+    subs = parser.add_subparsers(dest='command', help='Available commands')
 
-    sp = subs.add_parser('refresh', help='Regenerate patches/ and files/')
+    sp = subs.add_parser('refresh', help='Refresh generated patches/ and files/')
     sp.add_argument('package', help='Package name or packages/<name>')
     sp.set_defaults(func=_cmd_refresh)
 
     sp = subs.add_parser(
         'materialize',
-        help='Materialize an upstream file at the package base commit',
+        help='Materialize an upstream file into the package working area at the base commit',
     )
     sp.add_argument('package', help='Package name or packages/<name>')
-    sp.add_argument('rel', help='Relative path under src/c47/ (or a '
-                    'sibling-root path like testSuite/testSuite.c)')
+    sp.add_argument('rel', help='Relative path under src/c47/')
     sp.set_defaults(func=_cmd_materialize)
 
-    sp = subs.add_parser('rebase', help='Rebase package base to a new commit')
+    sp = subs.add_parser(
+        'rebase',
+        help='Rebase package base commit onto target',
+    )
     sp.add_argument('package', help='Package name or packages/<name>')
     sp.add_argument(
         '--onto', default=None, metavar='REF',
@@ -458,6 +477,40 @@ def main(argv=None):
     )
     sp.set_defaults(func=_cmd_status)
 
+    sp = subs.add_parser(
+        'upstream',
+        help='Fold one or more packages into a clean upstream branch for Merge Request',
+    )
+    sp.add_argument(
+        'packages',
+        help='Comma-separated package names or paths (e.g. pretty-print,packages/pretty-print-extra)',
+    )
+    sp.add_argument(
+        '--onto', default=None, metavar='REF',
+        help='Target upstream commit/branch (default: upstream/master)',
+    )
+    sp.add_argument(
+        '--branch', default=None, metavar='BRANCH',
+        help='Local branch name to create (default: mr/<first-package>)',
+    )
+    sp.add_argument(
+        '--remote', default='origin', metavar='REMOTE',
+        help='Remote to push to (default: origin)',
+    )
+    sp.add_argument(
+        '--push', action='store_true', default=False,
+        help='Push the branch to the remote',
+    )
+    sp.add_argument(
+        '--mr', action='store_true', default=False,
+        help='Create a GitLab Merge Request via glab (implies --push)',
+    )
+    sp.add_argument('--title', default=None, help='Commit & MR title')
+    sp.add_argument('--message', default=None, help='Commit & MR description')
+    sp.add_argument('--no-build', action='store_true', default=False, help='Skip build & tests')
+    sp.add_argument('--keep', action='store_true', default=False, help='Retain worktree session on success')
+    sp.set_defaults(func=_cmd_upstream)
+
     args = parser.parse_args(argv)
     if args.command is None:
         parser.print_help()
@@ -467,6 +520,6 @@ def main(argv=None):
         return 0
     except SystemExit as e:
         return e.code if isinstance(e.code, int) else 1
-    except RuntimeError as e:
+    except (RuntimeError, pkg_patch_upstream.UpstreamError) as e:
         print(f'error: {e}', file=sys.stderr)
         return 1

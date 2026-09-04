@@ -269,6 +269,12 @@ cross
 matrix
 
 percent
+
+; pretty-print-extra tests capture, formula views, and the equation language.
+; The core package inserts pretty_print before percent and creates the walker
+; program fixtures. Run this test here before later tests clear those fixtures.
+pretty_extra
+
 percentMRR
 percentT
 percentSigma
@@ -489,11 +495,6 @@ histo_cov
 named_variable_cache_cov
 clearvars_cov
 program_flow_cov
-
-; pretty-print-extra: the capture traces and the formula views. Anchored
-; here, clear of the core package's two list lines and of the sibling
-; packages' tail claims.
-pretty_extra
 
 ; readp_cov appends one program, so it also runs after programs.txt and before
 ; serialize_cov resets the calculator.

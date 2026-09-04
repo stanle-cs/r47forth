@@ -59,11 +59,11 @@ build.sim:
 
 # check-custom-pkg-sim (package-manager surface, PROPOSED_SPEC_CHANGES.md
 # revision 2, New Decision 7): `build.sim` above is a directory-existence-
-# gated Make target — once $(BUILD_PC) exists, its recipe is SKIPPED on
-# every later invocation, so switching CUSTOM_PKG (including to/from empty)
-# between `make sim`/`make test`/etc. calls would otherwise silently keep
-# building against the PREVIOUS package's stale shadow tree: no error, no
-# rebuild, no signal at all. This phony target runs on EVERY invocation
+# gated Make target. Once $(BUILD_PC) exists, its recipe is SKIPPED on
+# every later invocation. Without this check, switching CUSTOM_PKG
+# (including to/from empty) between `make sim`/`make test`/etc. calls
+# silently keeps building against the PREVIOUS package's stale shadow
+# tree: no error, no rebuild, no signal at all. This phony target runs on EVERY invocation
 # (unlike build.sim itself) and forces --reconfigure through directly when
 # the requested CUSTOM_PKG differs from the stamp left by the last
 # successful setup. Set CUSTOM_PKG_RECONFIGURE=1 to force the same
@@ -74,7 +74,7 @@ build.sim:
 # list.
 #
 # Independent of f=1: f=1 only controls whether the GMP subproject is
-# force-rebuilt, in build.dmcp/build.dmcp5's own recipe below — it has no
+# force-rebuilt, in build.dmcp/build.dmcp5's own recipe below. It has no
 # relationship to CUSTOM_PKG or the shadow tree. `make sim f=1
 # CUSTOM_PKG=packages/other-pkg` still gets a forced reconfigure here for
 # the package-overlay reason, independent of whatever f=1 does elsewhere.
@@ -102,7 +102,7 @@ build.sim.t47:
 
 # Optimized headless build for the benchmark suite: mirrors the DMCP hardware
 # flags (-Os, LTO) as closely as a native build can, so that relative timings
-# track the calculator rather than an unoptimized debug build.
+# track the calculator instead of an unoptimized debug build.
 build.sim.t47.bench:
 	meson setup build.sim.t47.bench --buildtype=custom -DRASPBERRY=`tools/onARaspberry` -DDECNUMBER_FASTMUL=true -Db_lto=true -Dc_args="-DT47 -Os"
 
@@ -163,10 +163,10 @@ build.dmcp5:
 	@echo "$(CUSTOM_PKG)" > build.dmcp5/.custom_pkg_stamp
 
 # check-custom-pkg-dmcp / -dmcp5: same New-Decision-7 reasoning as
-# check-custom-pkg-sim above. The primary case these matter for is f=1
-# (build.dmcp/build.dmcp5 above already wipe-and-reconfigure unconditionally
-# WITHOUT f=1 — f=1 is exactly what makes them keep/reuse an existing build
-# dir, which is also when a CUSTOM_PKG change could otherwise go unnoticed).
+# check-custom-pkg-sim above. The primary case these matter for is f=1.
+# Without f=1, build.dmcp/build.dmcp5 above already wipe-and-reconfigure
+# unconditionally. f=1 is exactly what makes them keep/reuse an existing
+# build dir, and that reuse is when a CUSTOM_PKG change can go unnoticed.
 check-custom-pkg-dmcp:
 	@if [ -d "build.dmcp.p$(DMCP_PACKAGE)" ]; then \
 		STAMP="build.dmcp.p$(DMCP_PACKAGE)/.custom_pkg_stamp"; \
@@ -259,28 +259,28 @@ test: clean check-custom-pkg-sim build.sim testPgms
 
 # pkg_build PKG=<dir> (PROPOSED_SPEC_CHANGES.md revision 2, New Decision
 # 5): the sole sanctioned way to produce a distributable package
-# artifact — test-gated (a package that fails its own test suite
+# artifact. It is test-gated (a package that fails its own test suite
 # produces no artifact) and size-limited against the actual assembled
 # zip, not an estimate.
 #
 # NOTE on the PKG variable name: `PKG` is also used elsewhere in this
 # Makefile for the numbered DMCP build-variant pattern targets
-# (build.dmcp.p$(PKG), dmcp_pkg$(PKG), dist_dmcp_pkg$(PKG) — unrelated
-# to CUSTOM_PKG package overlays). Because Make expands $(PKG) in
-# target names at parse time, invoking `make pkg_build dmcp_pkg1
-# PKG=packages/my-pkg` in the SAME command line would corrupt those
-# other targets' names. In practice pkg_build is invoked alone
-# (`make pkg_build PKG=packages/my-pkg`), which is unaffected — flagged
-# here, and in the implementation report, as a known naming collision
-# rather than silently risked.
+# (build.dmcp.p$(PKG), dmcp_pkg$(PKG), dist_dmcp_pkg$(PKG), unrelated
+# to CUSTOM_PKG package overlays). Make expands $(PKG) in target names
+# at parse time. So an invocation of `make pkg_build dmcp_pkg1
+# PKG=packages/my-pkg` in the SAME command line corrupts those other
+# targets' names. In practice pkg_build is invoked alone
+# (`make pkg_build PKG=packages/my-pkg`), and that case is unaffected.
+# The collision is flagged here, and in the implementation report, as a
+# known naming collision, not silently risked.
 # Distributable-artifact tripwire, NOT a firmware budget. The original 200000
-# came from a "DM42-class flash/RAM" rationale; the target is R47 specifically
+# came from a "DM42-class flash/RAM" rationale. The target is R47 specifically
 # (ruled 2026-07-25), so that rationale is void. Zip bytes are not flash bytes
-# either: forth-core's payload is ~75% test_dict_reloc.c, which is the self-test
-# suite and compiles to nothing on device (PC_BUILD && FORTH_DEBUG_SELFTEST) --
-# its real flash cost is measured per stage and reported in the commit.
-# What is left worth catching is a package that has accidentally swallowed a
-# build directory or a binary, which is an order of magnitude away, not 15%.
+# either: forth-core's payload is ~75% test_dict_reloc.c, the self-test suite,
+# and it compiles to nothing on device (PC_BUILD && FORTH_DEBUG_SELFTEST).
+# Its real flash cost is measured per stage and reported in the commit.
+# What is left worth catching is a package that accidentally swallowed a
+# build directory or a binary. That is an order of magnitude away, not 15%.
 PKG_MAX_SIZE = 1000000
 
 # PKG_TEST_WITH (optional): the CUSTOM_PKG list for pkg_build's gating
@@ -289,7 +289,7 @@ PKG_MAX_SIZE = 1000000
 # patches/+files/. Example:
 #   make pkg_build PKG=packages/pretty-print-extra \
 #     PKG_TEST_WITH=packages/pretty-print,packages/pretty-print-extra
-# Unset, the test runs against $(PKG) alone (unchanged behavior).
+# If unset, the test runs against $(PKG) alone (unchanged behavior).
 PKG_TEST_WITH =
 
 pkg_build:

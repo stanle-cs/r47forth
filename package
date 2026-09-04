@@ -10,6 +10,7 @@ Usage:
     ./package status PACKAGE [--onto REF]
     ./package integrate PACKAGE --onto REF [--keep] [--no-build]
     ./package resume SESSION [--keep] [--no-build]
+    ./package upstream PACKAGES [--onto REF] [--branch BRANCH] [--remote REMOTE] [--push] [--mr] [--no-build] [--keep]
 """
 import os
 import sys

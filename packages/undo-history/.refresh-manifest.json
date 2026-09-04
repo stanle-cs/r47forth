@@ -15,7 +15,7 @@
     "010-c47Extensions__keyboardTweak.c.patch": "b2713f5e7dec7ce9c811f0e9fb05b803ab92ce07497bf59f381c5df79f17fe0b",
     "010-config.c.patch": "98b0569ead121afe6771229a78ed5239bcf5dcef393148617f067f39e48efac7",
     "010-debug.c.patch": "51f925121fabc42bede7e0d70e03cd4456700f3f32fc8bdbe2622fa83b0a81a3",
-    "010-defines.h.patch": "8923876f7ed4fd11a3525f1e5911a67ec5e69c9adcf9c1c77f12b9d050a5c88e",
+    "010-defines.h.patch": "bb0ca12acfb4d693f3f43c41ffdf8f27719b814f7f9c072325efca15d6dbc35b",
     "010-items.c.patch": "a73f94b4060b3db774c8965a50ba6770ebd2fff9b1a8e656358b983f29d9093e",
     "010-items.h.patch": "ccc2798fd7798415cabcf835de92dc785c5b03dfa65350490fc89d1b5c21af9f",
     "010-keyboard.c.patch": "bc9207fe9e46b5fda5f23b5b20823e6b71bbfab832e2bcdf586e7280d7296e93",

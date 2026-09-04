@@ -3,14 +3,14 @@
 
 /**
  * \file prettyExtra.h
- * Pretty-print-extra package: the calculation-capture engine and the
- * formula history with its views (pager + browser + T line), on top of
- * the pretty-print core package's drawing engine. Public surface only.
- * The internals are in prettyExtraInternal.h.
- * This package REQUIRES the pretty-print package: it decodes capture
- * trees into layout nodes through the core's builders, and it
- * registers the core's ppTlineExtension/ppResetExtension hooks at its
- * lazy init.
+ * Pretty-print-extra package. It contains the calculation-capture
+ * engine and formula history. Its views are the pager, browser, and
+ * T line. The pretty-print core package supplies the drawing engine.
+ * This file is the public surface. The internals are in
+ * prettyExtraInternal.h.
+ * This package REQUIRES the pretty-print package. It decodes capture
+ * trees with the core builders. Its lazy initialization registers the
+ * core ppTlineExtension and ppResetExtension hooks.
  *
  * c47.h includes this header inside its include block, so every c47
  * type is already visible. This header must not include c47 headers

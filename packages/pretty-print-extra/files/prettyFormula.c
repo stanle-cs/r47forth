@@ -3,15 +3,16 @@
 
 /**
  * \file prettyFormula.c
- * The formula view: turns capture trees / history token streams into 2D
- * infix layouts (DIV becomes a stacked fraction, powers raise, roots get
- * vinculums, precedence inserts parens), and the PHIST pager surface.
+ * The formula view converts capture trees and history token streams to
+ * 2D infix layouts. It stacks division and raises powers. It adds root
+ * vinculums and precedence parens. This file also contains the PHIST
+ * pager surface.
  *
  * PHIST opens the formula browser (calcMode 20). The manual-paint pager
  * in this file stays as the non-browser fallback surface.
  *
- * Value leaves format only here, in display context: staged into
- * TEMP_REGISTER_1 and run through the standard display builders.
+ * Value leaves format only here, in display context. The code stages
+ * them in TEMP_REGISTER_1. The standard display builders format them.
  */
 
 #include "c47.h"
@@ -48,19 +49,19 @@ static bool_t ppfFormatStaged(char *dest, size_t destSize) {
                             buf, &standardFont, 180, 8, LIMITEXP, !FRONTSPACE, NOIRFRAC);
       break;
     case dtComplex34:
-      // the staged tag carries the polar bit; a literal false here redrew
-      // every polar value in rectangular form (audit PP18RR8-5)
+      // The staged tag carries the polar bit. A literal false here redrew
+      // every polar value in rectangular form (audit PP18RR8-5).
       complex34ToDisplayString(REGISTER_COMPLEX34_DATA(TEMP_REGISTER_1), buf, &standardFont,
                                180, 8, LIMITEXP, !FRONTSPACE, NOIRFRAC,
                                getComplexRegisterAngularMode(TEMP_REGISTER_1),
                                getComplexRegisterPolarMode(TEMP_REGISTER_1) == amPolar);
       break;
     case dtShortInteger:
-      /* This builder does not write from the front: it lays digits out
-       * from displayString[ERROR_MESSAGE_LENGTH / 2] upward as scratch,
-       * so its buffer must be at least ERROR_MESSAGE_LENGTH bytes (buf
-       * is too small). tmpString is what every upstream caller passes,
-       * and nothing runs between the call and the copy below. */
+      /* This builder does not start at the buffer front. It writes digits
+       * from displayString[ERROR_MESSAGE_LENGTH / 2] into scratch space.
+       * Its buffer must be at least ERROR_MESSAGE_LENGTH bytes. buf is
+       * too small. Every upstream caller passes tmpString. No code runs
+       * between the call and the copy below. */
       _Static_assert(TMP_STR_LENGTH >= ERROR_MESSAGE_LENGTH,
                      "shortIntegerToDisplayString writes from "
                      "ERROR_MESSAGE_LENGTH/2 upward, so its buffer must be "
@@ -303,8 +304,8 @@ bool_t ppfBuildEntry(const uint8_t *entry, uint8_t ctxFont, uint8_t childFont,
         if(tok == PPT_TKRES) {
           resultRun = ppfRun(ppfValBuf, ctxFont);
           if(resultRun == PP_NONE) {
-            return false;   // a lost "= result" tail must decline, not degrade:
-                            // the recall path still finds the TKRES
+            return false;   // The renderer must decline if the "= result" tail is lost.
+                            // The recall path still finds the TKRES.
           }
         }
         else {

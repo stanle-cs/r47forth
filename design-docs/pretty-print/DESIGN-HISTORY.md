@@ -1692,7 +1692,7 @@ requires the core. The core never references an extra symbol.
 The one code path that crossed the boundary was the T-line live
 formula: `prettyTryRegisterLine` (core) called `ppfBuildCurrent`
 (capture viewer). It now runs through `ppTlineExtension`, a function
-pointer the extra package registers at its lazy init — no formula can
+pointer the extra package registers at its lazy init. No formula can
 exist before the first capture hook runs, and every capture hook runs
 `ppcInit` first, so the registration always precedes the first
 possible draw. `prettyReset` got the same treatment
@@ -1715,7 +1715,7 @@ New anchors so four patch stacks compose: the extra package's c47.h
 include after `statusBar.h` (:124), its five items.c stubs after
 `fn42Prompt` (:1660), its five funcTest rows after `fnSetC47` (:692).
 One relearned lesson, loudly: the trio configure FAILED when the split
-reworded the `NUMBER_OF_SYSTEM_FLAGS` comment — the identical-edit
+reworded the `NUMBER_OF_SYSTEM_FLAGS` comment. The identical-edit
 claim covers the COMMENT TEXT too, byte for byte, because the unifier
 is the 3-way merge, not the preprocessor.
 
@@ -1726,7 +1726,7 @@ core's runs solo + trio + full. All five passes were green at the split
 commit. Combined behavior is byte-identical to the pre-split tree
 except the two renumbered item ids.
 
-Tests: prettyTest.c split at its own section boundary — the shared
+Tests: prettyTest.c split at its own section boundary. The shared
 `ppTest*` scaffolding stays in the core and is exported through
 prettyInternal.h's PC_BUILD block. The Capture/Formula/Equation/
 Visual/Real drivers moved to `prettyExtraTest.c` unchanged.
@@ -1746,7 +1746,7 @@ history ring, and the views of that history).
 
 Moved back to the core: prettyVisual.c, prettyEquation.c, the whole
 solver/equation.c patch, and the native-drawing half of
-prettyFormula.c — carved into a new core file, prettyInfix.c
+prettyFormula.c, carved into a new core file, prettyInfix.c
 (ppfBuildOp1/2, the bracket rules, ppfPowBase, ppfTextIsAtom, the name
 decodes). The PTLIN command moved too: it only flips a core-owned
 flag. The extra package keeps the capture-fed half of prettyFormula.c
@@ -1756,15 +1756,15 @@ browser row builder, ppfTlineTry) and everything it kept before.
 The item map moved again, still under the touching-line rule: the core
 now owns the contiguous runs 459-462 (PSHOW, PPON, EQSHW, PTLIN) and
 984-986 (VISUAL, then both SYSFL rows), and the extra package owns
-215-217 (PCLR, PHIST, MNU_PP) — the same one-untouched-row gap to
+215-217 (PCLR, PHIST, MNU_PP), with the same one-untouched-row gap to
 forth-core's row 213 the pre-split hunk proved. Menus stay whole in
-the extra package: they reference core item ids — legal, because
+the extra package: they reference core item ids. That is legal, because
 the extra package never builds without the core.
 
 **New bug class, found by the reordering and paid for with two red
 pins: a pin that inherits ambient machine state tests whatever ran
 before it.** V38 asserted the classic-mode lift-latch decline while
-the walker's ENTER arm reads the machine's FLAG_ERPN — the capture
+the walker's ENTER arm reads the machine's FLAG_ERPN, and the capture
 driver's eRPN trace used to run first and restore the flag, so the pin
 was green by accident. T31 asserted the DEGREE angle magnitude while
 the staged amNone tag displays in the ambient angular mode. Both pins
@@ -1784,21 +1784,21 @@ core while the capture and formula pins still decode the same shapes.
 ## 2026-08-31 — PP19, third ruling: the invented equation language is extra's
 
 Stan: "the package invented equation language should go into extra."
-The construct EVALUATOR — the parseEquation interception and the
-slice-evaluation machinery, the bulk of the 578 solver/equation.c
-lines — moved to pretty-print-extra. The RENDER arm stays in the
+The construct EVALUATOR moved to pretty-print-extra: the
+parseEquation interception and the slice-evaluation machinery, the
+bulk of the 578 solver/equation.c lines. The RENDER arm stays in the
 core's `ppqParse` (it draws, and drawing is the core's): in a solo
 build it is unreachable, because without the evaluator no construct
 equation can be saved, so the picture-that-will-not-compute hazard
 needs both halves present, and there the shared `ppEqConstructIs`
 test keeps the spellings aligned. solver/equation.c is now a
-two-package file — core's `ppEqFunctionItem` (:213) and paint hook
+two-package file: core's `ppEqFunctionItem` (:213) and paint hook
 (:684) against extra's forward declaration (:736), interception
-(:1370) and tail block — and the pair gate proves the five hunks
+(:1370) and tail block. The pair gate proves the five hunks
 compose.
 
 The construct pins (EQ14-EQ29), the walker's two loop-closing pins
-(V18, V65 — they evaluate the walker's own output) and their solver
+(V18 and V65, which evaluate the walker's own output) and their solver
 state moved to a new extra driver, prettyTestEqLang. Its list line
 carries an ordering contract: after the core's prettyTestVisual
 (whose program fixtures it reads) and before serialize_cov (the
@@ -1806,6 +1806,6 @@ reset).
 
 The ambient-state pin class claimed a third member: V36b asserted
 "the softkey row repaints after a typed VISUAL" while inheriting
-whichever menu an earlier pin had left up — the moved EQ blocks used
+whichever menu an earlier pin had left up. The moved EQ blocks used
 to leave the EQN menu on the stack. The pin now pushes MNU_DISP by
 its own hand and pops it after.

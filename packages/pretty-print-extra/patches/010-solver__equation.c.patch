@@ -1,5 +1,5 @@
 diff --git a/src/c47/solver/equation.c b/src/c47/solver/equation.c
-index ca3da3341ccc17998627221684ba14c7f7559138..3bf415f7bca691662fc503ef0f181dff22e4985c 100644
+index ca3da3341ccc17998627221684ba14c7f7559138..e7574d97d70500f934dca6a1531ba0c0195a404e 100644
 --- a/src/c47/solver/equation.c
 +++ b/src/c47/solver/equation.c
 @@ -701,6 +701,10 @@ static void _menuItem(int16_t item, char *bufPtr) {
@@ -38,7 +38,7 @@ index ca3da3341ccc17998627221684ba14c7f7559138..3bf415f7bca691662fc503ef0f181dff
      #pragma GCC diagnostic push
      #pragma GCC diagnostic ignored "-Wimplicit-fallthrough"
      switch(*strPtr) {
-@@ -1654,3 +1676,526 @@ void parseEquation(uint16_t equationId, uint16_t parseMode, char *buffer, char *
+@@ -1654,3 +1676,527 @@ void parseEquation(uint16_t equationId, uint16_t parseMode, char *buffer, char *
      _processOperator(PARSER_OPERATOR_ITM_END_OF_FORMULA, mvarBuffer);
    }
  }
@@ -181,7 +181,8 @@ index ca3da3341ccc17998627221684ba14c7f7559138..3bf415f7bca691662fc503ef0f181dff
 +
 +/* Evaluate a text slice (not NUL-terminated) via a temp slot. */
 +static bool_t ppEqEvalSlice(const char *src, uint16_t len, real34_t *re) {
-+  // limits, steps and orders are always real: a complex one is refused
++  // Big-operator limits use real values. Steps and derivative orders
++  // also use real values. Refuse a complex value.
 +  char text[PPEQ_WORD_BYTES];
 +  if(len == 0 || len >= sizeof(text)) {
 +    ppEqSyntaxError("bad big-operator argument length");

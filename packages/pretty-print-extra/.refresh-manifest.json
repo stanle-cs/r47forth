@@ -1,14 +1,14 @@
 {
   "base_commit": "80533eac4e12cf493398c4a09f53368e2034da3c",
   "files": {
-    "browsers/prettyBrowser.c": "ced8669da1f14be69a9d915bc87afe6bc010debe091a414486744317c7e1c5f2",
+    "browsers/prettyBrowser.c": "57fdd24a8d72d36bf8876fa52a631668544550327562868827e5e861df0657ae",
     "browsers/prettyBrowser.h": "f1698a71b59f10855eaacf23ed869fff58c3c49e3a3e5228ea94e749073b824f",
-    "prettyCapture.c": "998533ae7a7b2e52718df9844f397e3f5ee268ce3373e8b5910911ce1a94907e",
-    "prettyExtra.h": "e0936567583164beb8c7ed951cc474ad30921d208e8759b1a95abc1588eb9d7e",
-    "prettyExtraInternal.h": "1993b0106b435111d1b9fb5e59a84a7fd0531dd235807d705fcdee7e55fb8b54",
-    "prettyExtraTest.c": "c2f97bfdbfef098d13091edc11b1c2c237781ce05df08f49b7762cc8354e3a7f",
-    "prettyFormula.c": "3382c83bc507456ada6467d7b38b15f3ec0b7f975b1fec4c1f9d8d372eed5df9",
-    "testSuite/tests/pretty_extra.txt": "625750db3f01de05aa67385a2492d5dbfe1b57f6b6424dd1dda7adaaa11ed4d7"
+    "prettyCapture.c": "d3ec458fe41103ace8b2f0d881b479355ba9a48d9e168b26e4fcd40bc1610b46",
+    "prettyExtra.h": "bd1cd9e034b3dcc18da390a73c6eeeaf7b90195d7756b91c8e26e91ced609a88",
+    "prettyExtraInternal.h": "b2feec96886ef57f76a592c03d96612291d333ce2cefe1440dfc4d23c4a4a51d",
+    "prettyExtraTest.c": "02e7d17627eaf09e2fab504822bfc7a7862ec47ecd57ff900764f8ea05a6d342",
+    "prettyFormula.c": "ed5328de2b42b21177328037821242f494efcc74eabd37abf9ecf7342b33c1ce",
+    "testSuite/tests/pretty_extra.txt": "11f0c8f0d0425a5e151545e96102a00c61beba8d04c9ac46164224082820097a"
   },
   "patches": {
     "010-bufferize.c.patch": "4eed3e0e4712ee6838a9484d28eb3891268944906c7872847b8191a2e5b5c14a",
@@ -19,9 +19,9 @@
     "010-items.h.patch": "7c08c8173a6b2cd162e1dd4ff4a5366357c24727275e5804dd1258e30612940d",
     "010-keyboard.c.patch": "02d32bfc314c50946e50ecf22ce0e4d1dee4206df024244fa473f61872796d26",
     "010-screen.c.patch": "82509b5493b67d6ce408f595eddc6be537c7de61181877bb40659f75bc59dced",
-    "010-softmenus.c.patch": "268a37f47d34617b19d48bcb96d9e2caae3125e0cbafa67434d7faa2c0a813be",
-    "010-solver__equation.c.patch": "9bff5077b8485367c9de44013838ce5cb4198bf0569f9e454f3f0e37ceb4068d",
+    "010-softmenus.c.patch": "03f57c64a20e08b59b1f29934ed6bc7db2ad9ca1270762055871090789b21d24",
+    "010-solver__equation.c.patch": "c8d88ff942df56aaa4376356a6eb900ab6961f2a1b51f05540f78e47d2c0148a",
     "010-testSuite__testSuite.c.patch": "e03671e7b55d5415dcf2f8441775b2c98e8dcd6b1453a0ba82ec8b64e7757402",
-    "010-testSuite__tests__testSuiteList.txt.patch": "6cd100fc27c3d3d50c5a46dd083d0ed054a7e07a215a22c5bafccc3ea9a33d3d"
+    "010-testSuite__tests__testSuiteList.txt.patch": "084bd35e3b4e8d3ec442dfd0656481a06b295bd8adc5658ee629bc968d30f1bb"
   }
 }

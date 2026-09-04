@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # pretty-print-extra build + test runner.
-# Canonical build/test invocation — do NOT re-derive meson/ninja flags by hand.
+# Canonical build/test invocation. Do NOT re-derive meson/ninja flags by hand.
 #
 # Usage:
 #   ./packages/pretty-print-extra/build-test.sh          # pair gate, then full gate
@@ -10,12 +10,12 @@
 #
 # This package REQUIRES packages/pretty-print: it calls the core
 # engine's layout API and registers its extension hooks. There is no
-# solo pass — solo cannot link, by design. The minimal configuration
-# is the pair.
+# solo pass, because solo cannot link, by design. The minimal
+# configuration is the pair.
 #
 # Why refresh + --reconfigure every time:
 #   The resolver builds the shadow tree from the package's GENERATED patches/
-#   and files/ — it never reads the flat working area. An edit to
+#   and files/. It never reads the flat working area. An edit to
 #   packages/pretty-print-extra/<file> is INVISIBLE to the compiler until
 #   tools/pkg_patch_refresh.py regenerates patches/+files/. Without the refresh
 #   step this script reports GREEN for code it did not build.
@@ -28,9 +28,8 @@
 # green. This package's keyboard.c, items.c and screen.c hunks sit in
 # the most contended composition surfaces, so the full pass is the
 # load-bearing one.
-# NOTE: the full pass runs the plain testSuite battery only —
-# forth-core's own FORTH_DEBUG_SELFTEST battery is forth-core's gate,
-# not this one.
+# NOTE: the full pass runs the plain testSuite battery only.
+# The FORTH_DEBUG_SELFTEST battery is forth-core's own gate.
 
 set -euo pipefail
 
@@ -90,7 +89,7 @@ run_pass() {
 
 echo "==> repo: ${REPO_ROOT}"
 # Refresh all packages up front: the composed passes compose generated
-# output, and a stale sibling patches/ would test yesterday's sibling.
+# output, and a stale sibling patches/ tests yesterday's sibling.
 echo "==> pkg_patch_refresh packages/pretty-print-extra"
 python3 tools/pkg_patch_refresh.py packages/pretty-print-extra
 echo "==> pkg_patch_refresh packages/pretty-print"

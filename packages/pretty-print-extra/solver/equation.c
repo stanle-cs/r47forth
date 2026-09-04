@@ -1815,7 +1815,8 @@ static bool_t ppEqEvalSlot(uint16_t slot, real34_t *re, real34_t *im) {
 
 /* Evaluate a text slice (not NUL-terminated) via a temp slot. */
 static bool_t ppEqEvalSlice(const char *src, uint16_t len, real34_t *re) {
-  // limits, steps and orders are always real: a complex one is refused
+  // Big-operator limits use real values. Steps and derivative orders
+  // also use real values. Refuse a complex value.
   char text[PPEQ_WORD_BYTES];
   if(len == 0 || len >= sizeof(text)) {
     ppEqSyntaxError("bad big-operator argument length");

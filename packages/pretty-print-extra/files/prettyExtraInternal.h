@@ -5,10 +5,10 @@
  * \file prettyExtraInternal.h
  * Pretty-print-extra internals, shared between the package's own
  * translation units (prettyCapture.c, prettyFormula.c,
- * browsers/prettyBrowser.c, prettyExtraTest.c). Include after c47.h
- * and prettyInternal.h: the viewer here decodes capture trees into
- * layout nodes through the core package's builders, and the core
- * engine measures and paints them. Not part of the public surface.
+ * browsers/prettyBrowser.c, prettyExtraTest.c). Include this file after
+ * c47.h and prettyInternal.h. The viewer decodes capture trees with the
+ * core package builders. The core engine measures and paints the layout
+ * nodes. This file is not part of the public surface.
  */
 
 #if !defined(PRETTYEXTRAINTERNAL_H)
@@ -40,7 +40,7 @@ enum { PPN_FREE = 0, PPN_OP1, PPN_OP2, PPN_LIT, PPN_LIT2, PPN_VAL,
 // Its VALUE is the result the dispatch left in X, so chains continue.
 
 // postfix stream tokens (history entries: 6-byte header {totalBytes u16,
-// seq u16, nTokens u8, flags u8} then tokens; TKRES trails when present)
+// seq u16, nTokens u8, flags u8} then tokens. TKRES trails when present)
 enum { PPT_TKL = 1,    // literal: len u8, text bytes (as typed)
        PPT_TKV,        // value: dataType u8, tag u8, allocParam u16, len u8, payload
        PPT_TKR,        // register/variable leaf: param u16
@@ -48,13 +48,13 @@ enum { PPT_TKL = 1,    // literal: len u8, text bytes (as typed)
        PPT_TKO1,       // monadic op: item u16
        PPT_TKO2,       // dyadic op: item u16
        PPT_TKRES,      // result snapshot: same shape as TKV
-       PPT_TKBIG };    // big operator: item u16, label u16, step real34(16B); pops from,to
+       PPT_TKBIG };    // big operator: item u16, label u16, step real34(16B). Pops from,to.
 
 typedef struct {
   uint8_t  kind;        ///< PPN_*
-  uint8_t  aux;         ///< LIT/LIT2: text length; VAL: dataType; OP: PPA_* flags
-  uint16_t item;        ///< OP/CONST: item id; RCL: param; VAL: allocParam
-  uint8_t  child[2];    ///< arena indices; LIT: child[0] = continuation; free list via child[0]
+  uint8_t  aux;         ///< LIT/LIT2: text length. VAL: dataType. OP: PPA_* flags.
+  uint16_t item;        ///< OP/CONST: item id. RCL: param. VAL: allocParam.
+  uint8_t  child[2];    ///< Arena indices. LIT: child[0] = continuation. Free list via child[0].
   uint8_t  pad[2];      ///< VAL: tag, payloadBytes
   uint8_t  payload[16]; ///< LIT text / VAL raw register payload
 } ppcNode_t;

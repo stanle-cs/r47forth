@@ -3,14 +3,14 @@
 
 /**
  * \file browsers/prettyBrowser.c
- * The formula browser, copy-adapted from historyBrowser.c's state
- * machine: the first call flips calcMode and repaints, and later calls
- * are the refresher. Rows come from ppfBuildRow. The selected row
+ * The formula browser adapts the historyBrowser.c state machine. The
+ * first call changes calcMode and repaints. Later calls refresh the
+ * browser. Rows come from ppfBuildRow. The selected row
  * carries a 3 px marker and pans horizontally when wider than the
  * screen.
  *
- * ENTER stages the selected entry's stored result into X: it runs
- * saveForUndo first and invalidates the shadow expression stack after,
+ * ENTER stages the selected entry's stored result into X. It calls
+ * saveForUndo first. It then invalidates the shadow expression stack
  * because the recall bypasses item dispatch. The live (top) row has no
  * stored result: its value is X already, so ENTER there just leaves.
  */
@@ -43,9 +43,9 @@ static void pbPaint(void) {
     return;
   }
 
-  /* A row that cannot be drawn still exists: both passes reserve a
-   * fixed-height placeholder for it, so every row pages, selects and
-   * marks like any other. */
+  /* A row that cannot be drawn still exists. Both passes reserve a
+   * fixed-height placeholder for it. Thus, every row pages, selects,
+   * and marks like any other row. */
   #define PB_UNSHOWN_H 20
 
   // pass 1: which page holds the selection (variable-height packing)
