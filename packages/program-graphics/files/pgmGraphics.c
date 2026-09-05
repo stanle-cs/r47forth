@@ -47,6 +47,11 @@ void fnPview(uint16_t region) {
   if(calcMode != CM_GRAPHICS_CANVAS) {
     canvas.prevCalcMode = calcMode;
   }
+  if(calcMode == CM_AIM) {   // the prologue of upstream's browsers: no cursor blinks into the canvas
+    hideCursor();
+    cursorEnabled = false;
+  }
+  clearSystemFlag(FLAG_ALPHA);
   pgSetRegion((uint8_t)region);
   calcMode = CM_GRAPHICS_CANVAS;
   temporaryInformation = TI_NO_INFO;
@@ -87,6 +92,9 @@ uint8_t pgEffectiveCalcMode(void) {
 void pgRefreshCanvasView(void) {
   refreshStatusBar();
   if(canvas.region == PG_REGION_REGISTERS) {
+    // The painter clears its band only when it paints; a blank base paints
+    // nothing, so the band is cleared here first.
+    lcd_fill_rect(0, PG_REGISTER_BOTTOM_ROW + 1, SCREEN_WIDTH, SCREEN_HEIGHT - PG_REGISTER_BOTTOM_ROW - 1, LCD_SET_VALUE);
     showSoftmenuCurrentPart();
   }
   if(lastErrorCode != ERROR_NONE) {
@@ -107,6 +115,10 @@ void pgCloseView(void) {
   }
   calcMode = canvas.prevCalcMode;
   canvas.region = 0;
+  if(calcMode == CM_AIM) {   // the view took the cursor at PVIEW; alpha input gets it back
+    setSystemFlag(FLAG_ALPHA);
+    cursorEnabled = true;
+  }
   temporaryInformation = TI_NO_INFO;
   screenUpdatingMode = SCRUPD_AUTO;
   refreshScreen(197);
@@ -515,6 +527,13 @@ static bool_t pgReadAngle(calcRegister_t regist, real_t *angle) {
 
 // Refresh cadence (§8.4).
 static void pgRefreshMaybe(void) {
+  if(calcMode != CM_GRAPHICS_CANVAS) {
+    // Outside the view the drawing lives as a PIXEL drawing does (§4.2):
+    // the manual flags keep the next refresh from repainting the stack
+    // over it, and SNAP dumps the buffer as it is.
+    screenUpdatingMode |= SCRUPD_MANUAL_STACK | SCRUPD_MANUAL_MENU | SCRUPD_MANUAL_SHIFT_STATUS;
+    screenHoldsDrawnPixels = true;
+  }
   if(programRunStop != PGM_RUNNING) {
     pgRefreshNow();
     return;
@@ -621,7 +640,15 @@ void fnGarc(uint16_t unusedButMandatoryParameter) {
     int64_t cross = (int64_t)ax * by - (int64_t)ay * bx;
     int64_t dot   = (int64_t)ax * bx + (int64_t)ay * by;
     if(cross == 0 && dot > 0) {
-      pgPixel(&c, cx + (int32_t)(((int64_t)ax * r) / 65536), PG_ROW_OF(cy + (int32_t)(((int64_t)ay * r) / 65536)));
+      // Same direction at the 65536 scale: a span of almost nothing, or of
+      // almost a full turn. The exact span in degrees tells them apart.
+      int32ToReal(180, &full);
+      if(realCompareGreaterEqual(&d, &full)) {
+        pgCircle(&c, cx, PG_ROW_OF(cy), r, false);
+      }
+      else {
+        pgPixel(&c, cx + (int32_t)(((int64_t)ax * r) / 65536), PG_ROW_OF(cy + (int32_t)(((int64_t)ay * r) / 65536)));
+      }
     }
     else {
       wide = cross < 0;
@@ -629,6 +656,18 @@ void fnGarc(uint16_t unusedButMandatoryParameter) {
     }
   }
   pgRefreshMaybe();
+}
+
+// The largest glyph boundary at or below n, by a walk from the start: a
+// byte at or above 0x80 starts a two-byte glyph, whatever its second byte
+// holds. A lone lead byte at the end is not a glyph and is cut away.
+static size_t pgGlyphBoundary(const char *s, size_t n) {
+  size_t i = 0, last = 0;
+  while(i < n && s[i] != 0) {
+    last = i;
+    i += ((uint8_t)s[i] & 0x80) ? 2 : 1;
+  }
+  return (i == n) ? n : last;
 }
 
 // Copies the string of regist into tmpString, cut to at most width pixels of the standard font.
@@ -643,24 +682,17 @@ static bool_t pgStringCut(calcRegister_t regist, uint32_t width) {
   n = strlen(s);
   if(n >= TMP_STR_LENGTH - 1) {
     n = TMP_STR_LENGTH - 2;
-    if(n > 0 && ((uint8_t)s[n - 1] & 0x80)) {   // do not cut inside a two-byte glyph
-      n--;
-    }
   }
+  n = pgGlyphBoundary(s, n);
   memcpy(tmpString, s, n);
   tmpString[n] = 0;
   while(tmpString[0] != 0 && stringWidth(tmpString, &standardFont, true, true) > width) {
-    // remove the last glyph: a byte at or above 0x80 starts a two-byte glyph
+    // remove the last glyph: a byte at or above 0x80 starts a two-byte
+    // glyph, and the boundary cut above guarantees a whole last glyph
     size_t i = 0, last = 0;
     while(tmpString[i] != 0) {
       last = i;
-      if((uint8_t)tmpString[i] & 0x80) {
-        if(tmpString[i + 1] == 0) break;   // a lone lead byte at the end: the glyph is that byte
-        i += 2;
-      }
-      else {
-        i++;
-      }
+      i += ((uint8_t)tmpString[i] & 0x80) ? 2 : 1;
     }
     tmpString[last] = 0;
   }
@@ -876,6 +908,24 @@ void fnGclip(uint16_t unusedButMandatoryParameter) {
 
     calcMode = CM_NORMAL;
     lastErrorCode = ERROR_NONE;
+    // V9: in region 2 the softmenu band is cleared before the painter runs,
+    // so a menu popped to a blank base leaves no labels (audit G2 round 1,
+    // in-family 5).
+    {
+      bool_t home = getSystemFlag(FLAG_BASE_HOME), mym = getSystemFlag(FLAG_BASE_MYM);
+      clearSystemFlag(FLAG_BASE_HOME); clearSystemFlag(FLAG_BASE_MYM);
+      calcMode = CM_NORMAL;
+      fnPview(2);
+      fnExitAllMenus(NOPARAM);
+      setBlackPixel(100, 200);
+      pgRefreshCanvasView();
+      if(lcd_buffer_pixel_on(100, 200)) pgTestFail("V9 the softmenu band kept its old pixels on a blank base");
+      if(home) setSystemFlag(FLAG_BASE_HOME);
+      if(mym)  setSystemFlag(FLAG_BASE_MYM);
+    }
+    pgCloseView();
+    calcMode = CM_NORMAL;
+
     pgTestWriteLonI(REGISTER_X, pgTestFailures);
   }
 
@@ -966,7 +1016,8 @@ void fnGclip(uint16_t unusedButMandatoryParameter) {
     if(lastErrorCode != ERROR_NONE)      pgTestFail("K7 the EXIT press did not clear the error");
     if(calcMode != CM_GRAPHICS_CANVAS)   pgTestFail("K7 the EXIT press with an error pending closed the view");
     if(!lcd_buffer_pixel_on(80, 80))     pgTestFail("K7 the EXIT press painted the Z line over the canvas");
-    if(lcd_buffer_pixel_on(1, PG_TOP_ROW + 10) && canvas.errorShown) pgTestFail("K7 the error band was not cleared");
+    if(lcd_buffer_pixel_on(1, PG_TOP_ROW + 10)) pgTestFail("K7 the error band was not cleared");
+    if(canvas.errorShown)                     pgTestFail("K7 the error flag was not reset");
 
     // K3: EXIT closes the view. The press does nothing for this mode. The
     // release runs the EXIT item, whose function is fnKeyExit.
@@ -977,6 +1028,61 @@ void fnGclip(uint16_t unusedButMandatoryParameter) {
 
     calcMode = CM_NORMAL;
     lastErrorCode = ERROR_NONE;
+    // K8: the view opened from alpha input mode takes the cursor and clears
+    // FLAG_ALPHA, as upstream's browsers do; EXIT gives them back (audit G2
+    // round 1, in-family 4).
+    pgCloseView();
+    calcMode = CM_NORMAL;
+    calcModeAim(NOPARAM);
+    fnPview(6);
+    if(cursorEnabled)                pgTestFail("K8 the cursor stays enabled in the view");
+    if(getSystemFlag(FLAG_ALPHA))    pgTestFail("K8 FLAG_ALPHA stays set in the view");
+    if(canvas.prevCalcMode != CM_AIM) pgTestFail("K8 the view did not record alpha input mode");
+    pgCloseView();
+    if(calcMode != CM_AIM || !cursorEnabled || !getSystemFlag(FLAG_ALPHA)) pgTestFail("K8 EXIT did not give alpha input its cursor back");
+    calcModeNormal();
+    calcMode = CM_NORMAL;
+    lastErrorCode = ERROR_NONE;
+
+    // K9: a key press in the view paints no function name, and the release
+    // repaints no register line over the canvas (audit G2 round 1, U7). The
+    // two paint sites are driven directly; the item still arms and disarms.
+    fnPview(6);
+    lcd_fill_rect(0, PG_TOP_ROW, SCREEN_WIDTH, 40, LCD_SET_VALUE);
+    setBlackPixel(100, 39);
+    setBlackPixel(100, 25);
+    showFunctionName(ITM_ENTER, 1000, NULL);
+    if(showFunctionNameItem != ITM_ENTER) pgTestFail("K9 the press did not arm the item");
+    {
+      uint32_t lit = 0, x, yy;
+      for(x = 0; x < SCREEN_WIDTH; x++) for(yy = PG_TOP_ROW; yy < PG_TOP_ROW + 40; yy++) if(lcd_buffer_pixel_on(x, yy)) lit++;
+      if(lit != 2) pgTestFail("K9 the press painted a function name over the canvas");
+    }
+    hideFunctionName();
+    if(!lcd_buffer_pixel_on(100, 39) || !lcd_buffer_pixel_on(100, 25)) pgTestFail("K9 the release repainted the register line over the canvas");
+    if(showFunctionNameItem != 0) pgTestFail("K9 the release did not disarm the item");
+
+    // K10: a real softkey press in the view changes nothing. The CANVAS
+    // menu is pushed so that softkey 2 would run ERASE if the gate let it
+    // through (audit G2 round 1, in-family 12).
+    showSoftmenu(-MNU_CANVAS);
+    setBlackPixel(100, 100);
+    {
+      GdkEventButton ev;
+      memset(&ev, 0, sizeof(ev));
+      ev.type = GDK_BUTTON_PRESS;
+      btnFnPressed(NULL, (GdkEvent *)&ev, "2");
+      ev.type = GDK_BUTTON_RELEASE;
+      btnFnReleased(NULL, (GdkEvent *)&ev, "2");
+      btnFnClicked(NULL, "2");   // what the double-tap timer does at its timeout (keyboardTweak.c execFnTimeout)
+    }
+    if(calcMode != CM_GRAPHICS_CANVAS) pgTestFail("K10 a softkey press left the view");
+    if(!lcd_buffer_pixel_on(100, 100)) pgTestFail("K10 a softkey press ran its function in the view");
+    if(lastErrorCode != ERROR_NONE) { pgTestFail("K10 a softkey press raised an error"); lastErrorCode = ERROR_NONE; }
+    pgCloseView();
+    popSoftmenu();
+    calcMode = CM_NORMAL;
+
     pgTestWriteLonI(REGISTER_X, pgTestFailures);
   }
 
@@ -1018,9 +1124,39 @@ void fnGclip(uint16_t unusedButMandatoryParameter) {
     return lcd_buffer_pixel_on((uint32_t)x, (uint32_t)PG_ROW_OF(yUser));
   }
 
+  // One drawing command with the view closed: the drawing must survive a
+  // refresh, as a PIXEL drawing does (audit G2 round 1, in-family 1).
+  static bool_t pgTestAnyLit(int32_t x0, int32_t y0, int32_t x1, int32_t y1) {   // user coordinates, inclusive box
+    int32_t x, y;
+    for(x = x0; x <= x1; x++) for(y = y0; y <= y1; y++) if(pgTestLit(x, y)) return true;
+    return false;
+  }
+
+  static void pgTestClosedView(void (*command)(uint16_t), uint16_t param, int32_t x0, int32_t y0, int32_t x1, int32_t y1, const char *what) {
+    screenUpdatingMode = SCRUPD_AUTO;
+    screenHoldsDrawnPixels = false;
+    lcd_fill_rect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, LCD_SET_VALUE);
+    command(param);
+    if(!screenHoldsDrawnPixels || !(screenUpdatingMode & SCRUPD_MANUAL_STACK)) { printf("program-graphics test FAIL: D20 %s did not set the PIXEL flags outside the view\n", what); pgTestFailures++; }
+    if(!pgTestAnyLit(x0, y0, x1, y1)) { printf("program-graphics test FAIL: D20 %s did not draw outside the view\n", what); pgTestFailures++; }
+    refreshScreen(0);
+    if(!pgTestAnyLit(x0, y0, x1, y1)) { printf("program-graphics test FAIL: D20 the refresh erased the %s drawing outside the view\n", what); pgTestFailures++; }
+    screenUpdatingMode = SCRUPD_AUTO;
+    screenHoldsDrawnPixels = false;
+  }
+
   void pgTestDraw2D(uint16_t unusedButMandatoryParameter) {
     pgTestFailures = 0;
     calcMode = CM_NORMAL;
+    lastErrorCode = ERROR_NONE;
+    pgWindow.set = 0;
+    pgTestPoints(50, 100, 80, 100);
+    pgTestClosedView(fnGline, NOPARAM, 60, 100, 60, 100, "LINE");
+    pgTestClosedView(fnGfbox, NOPARAM, 60, 100, 60, 100, "FBOX");
+    pgTestWriteLonI(REGISTER_X, 200); pgTestWriteLonI(REGISTER_Y, 100); pgTestWriteLonI(REGISTER_Z, 20);
+    pgTestClosedView(fnGfcircle, NOPARAM, 200, 100, 200, 100, "FCIRCL");
+    pgTestSetString(REGISTER_Z, "W"); pgTestWriteLonI(REGISTER_X, 100); pgTestWriteLonI(REGISTER_Y, 150);
+    pgTestClosedView(fnGtextout, NOPARAM, 100, 131, 119, 150, "TEXTOUT");   // the 20-row cell of the glyph
     lastErrorCode = ERROR_NONE;
     fnPview(6);
     fnGmode(0);
@@ -1089,11 +1225,11 @@ void fnGclip(uint16_t unusedButMandatoryParameter) {
     if(lastErrorCode != ERROR_NONE) { pgTestFail("D8 a coordinate of 5000 raised an error"); lastErrorCode = ERROR_NONE; }
     if(!pgTestLit(0, 30) || !pgTestLit(399, 30)) pgTestFail("D8 the line to column 5000 misses an edge pixel");
     if(pgTestLit(399, 29) || pgTestLit(390, 29) || pgTestLit(0, 31)) pgTestFail("D8 the run spilled into a neighbour row");
-    pgTestWriteLonI(REGISTER_Z, 40000);
+    pgTestWriteLonI(REGISTER_Y, 31); pgTestWriteLonI(REGISTER_Z, 40000); pgTestWriteLonI(REGISTER_T, 31);   // a row nothing has lit
     fnGline(NOPARAM);
     if(lastErrorCode != ERROR_OUT_OF_RANGE) pgTestFail("D8 a coordinate of 40000 did not raise ERROR_OUT_OF_RANGE");
     lastErrorCode = ERROR_NONE;
-    if(pgTestLit(200, 31)) pgTestFail("D8 the refused command drew");
+    if(pgTestLit(200, 31) || pgTestLit(0, 31)) pgTestFail("D8 the refused command drew");
     // D8c: a negative start column is clamped at the left edge; nothing
     // spills into the next row's bytes (the mirrored layout puts the
     // right end of the row below right after this row's left end).
@@ -1242,6 +1378,15 @@ void fnGclip(uint16_t unusedButMandatoryParameter) {
       if(left) pgTestFail("D15 DISP wrote left of the clip");
     }
     fnErase(NOPARAM);
+    // D15b: DISP clears its band inside the clip before it writes (audit G2
+    // round 1, in-family 8). A pixel in the band goes, one row above stays.
+    pgTestPoints(100, 170, 100, 170); fnGline(NOPARAM);   // buffer row 69, inside the band of line 3
+    pgTestPoints(100, 180, 100, 180); fnGline(NOPARAM);   // buffer row 59, one row above the band
+    pgTestSetString(REGISTER_X, "X");
+    fnGdisp(3);
+    if(pgTestLit(100, 170))  pgTestFail("D15b DISP did not clear its band");
+    if(!pgTestLit(100, 180)) pgTestFail("D15b DISP cleared the row above its band");
+    fnErase(NOPARAM);
 
     // D16: an arc of 0.05 degrees at radius 5000 keeps its span (audit G2
     // round 1, Sol 4). The center is off screen so that the arc crosses
@@ -1274,13 +1419,55 @@ void fnGclip(uint16_t unusedButMandatoryParameter) {
       if(!pgStringCut(REGISTER_X, 0xFFFFFFFFu)) pgTestFail("D17 the string cut refused a long string");
       if(strlen(tmpString) != TMP_STR_LENGTH - 3 || (uint8_t)tmpString[TMP_STR_LENGTH - 4] != 'A') pgTestFail("D17 the string cap cut inside a two-byte glyph");
       // D17b: a string that ends in a lone lead byte is trimmed to fit a
-      // width of one pixel without a read beyond its NUL. The bytes after
-      // the NUL are set to a non-NUL pattern first. No mutation can red
-      // this pin without a hang, so it documents the guard (DESIGN-HISTORY).
+      // width of one pixel, and the canary bytes after the NUL survive: the
+      // boundary cut removes the lone byte before the walk (audit G2 round
+      // 1, in-family 10). Red under the old cap guard.
       tmpString[10] = 'Y'; tmpString[11] = 'Y'; tmpString[12] = 0;
       pgTestSetString(REGISTER_X, "ABCDEFGH\x80");
       if(!pgStringCut(REGISTER_X, 1)) pgTestFail("D17b the trim refused a short string");
       if(tmpString[0] != 0) pgTestFail("D17b the trim did not empty a string wider than one pixel");
+      if(tmpString[10] != 'Y' || tmpString[11] != 'Y') pgTestFail("D17b the walk wrote beyond the NUL");
+      // D17c: the cap keeps a two-byte glyph whose second byte has bit 7 set
+      // (audit G2 round 1, in-family 7).
+      for(i = 0; i < TMP_STR_LENGTH - 4; i++) longString[i] = 'A';
+      longString[TMP_STR_LENGTH - 4] = (char)0x80; longString[TMP_STR_LENGTH - 3] = (char)0xE9;   // the e acute glyph ends at the cap
+      for(i = TMP_STR_LENGTH - 2; i < TMP_STR_LENGTH + 30; i++) longString[i] = 'B';
+      longString[TMP_STR_LENGTH + 30] = 0;
+      pgTestSetString(REGISTER_X, longString);
+      if(!pgStringCut(REGISTER_X, 0xFFFFFFFFu)) pgTestFail("D17c the string cut refused a long string");
+      if(strlen(tmpString) != TMP_STR_LENGTH - 2 || (uint8_t)tmpString[TMP_STR_LENGTH - 4] != 0x80 || (uint8_t)tmpString[TMP_STR_LENGTH - 3] != 0xE9) pgTestFail("D17c the cap split a glyph whose second byte has bit 7 set");
+      // D17d: a lone lead byte at the end is cut even when the width fits
+      // (audit G2 round 1, in-family 2), and the canary survives.
+      tmpString[10] = 'Y'; tmpString[11] = 'Y'; tmpString[12] = 0;
+      pgTestSetString(REGISTER_X, "ABCDEFGH\x80");
+      if(!pgStringCut(REGISTER_X, 0xFFFFFFFFu)) pgTestFail("D17d the cut refused a short string");
+      if(strcmp(tmpString, "ABCDEFGH") != 0) pgTestFail("D17d a lone lead byte survived a cut that fits the width");
+      if(tmpString[10] != 'Y' || tmpString[11] != 'Y') pgTestFail("D17d the cut wrote beyond the NUL");
+    }
+
+    // D19: an arc of 359.9995 degrees draws almost the full circle, and an
+    // arc of 0.0002 degrees draws a few pixels (audit G2 round 1, in-family 3).
+    {
+      const angularMode_t savedAm = currentAngularMode;
+      uint32_t lit, x, yy;
+      currentAngularMode = amDegree;
+      fnErase(NOPARAM);
+      pgTestSetComplex(REGISTER_T, 200, 100);
+      pgTestWriteLonI(REGISTER_Z, 50);
+      pgTestWriteLonI(REGISTER_Y, 0);
+      reallocateRegister(REGISTER_X, dtReal34, 0, amNone); stringToReal34("359.9995", REGISTER_REAL34_DATA(REGISTER_X));
+      fnGarc(NOPARAM);
+      lit = 0;
+      for(x = 140; x <= 260; x++) for(yy = PG_ROW_OF(160); yy <= PG_ROW_OF(40); yy++) if(lcd_buffer_pixel_on(x, yy)) lit++;
+      if(lit < 250) pgTestFail("D19 the arc just under a full turn collapsed");
+      fnErase(NOPARAM);
+      stringToReal34("0.0002", REGISTER_REAL34_DATA(REGISTER_X));
+      fnGarc(NOPARAM);
+      lit = 0;
+      for(x = 140; x <= 260; x++) for(yy = PG_ROW_OF(160); yy <= PG_ROW_OF(40); yy++) if(lcd_buffer_pixel_on(x, yy)) lit++;
+      if(lit > 3) pgTestFail("D19 the tiny arc drew more than a few pixels");
+      if(lastErrorCode != ERROR_NONE) { pgTestFail("D19 an arc raised an error"); lastErrorCode = ERROR_NONE; }
+      currentAngularMode = savedAm;
     }
 
     // D18: a NaN angle is refused with ERROR_OUT_OF_RANGE and draws nothing.

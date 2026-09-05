@@ -77,6 +77,18 @@ The refresh runs first, because `pkg_build` refreshes after its suite.
 | G3 | W5: two complex points, the first in Y and the second in X, draw the line; a complex with a long integer is the type error. | Swap the real and imaginary parts. |
 | G3 | W6: the window survives `ERASE`. | Clear the window in `pgSetRegion`. |
 | G3 | S1: the showcase count includes the sine curve through the window. | Any change to a primitive. |
+| G2 audit, in-family wave | D20: outside the view, `LINE`, `FBOX`, `FCIRCL`, and `TEXTOUT` set the PIXEL flags and their drawing survives a refresh. | Skip the flag writes. |
+| G2 audit, in-family wave | D8, rewritten: the refused line targets a row nothing has lit, and that row stays clear. | Raise the error and still draw. |
+| G2 audit, in-family wave | D15b: `DISP` clears its band inside the clip before it writes; the row above stays. | Skip the band fill. |
+| G2 audit, in-family wave | D17b, rewritten: the canary bytes after the NUL survive the trim walk. | Remove the lone-lead-byte stop of the walk. |
+| G2 audit, in-family wave | D17c: the cap keeps a glyph whose second byte has bit 7 set. | Test bit 7 of the byte before the cap instead of walking. |
+| G2 audit, in-family wave | D17d: a lone lead byte at the end is cut when the width fits, and the canary survives. | Cut only at the cap. |
+| G2 audit, in-family wave | D19: an arc of 359.9995 degrees draws almost the full circle; an arc of 0.0002 degrees draws a few pixels. | Drop the 180-degree test of the same-direction arm. |
+| G2 audit, in-family wave | K7, split: the band is clear, and separately the flag is reset. | Reset the flag without the clear. |
+| G2 audit, in-family wave | K8: the view opened from alpha input mode takes the cursor and clears `FLAG_ALPHA`; EXIT gives them back. | Skip the prologue. |
+| G2 audit, in-family wave | K9: the function name paint records the item and paints nothing in the view; the hide clears the item and repaints nothing. | Remove either arm in the screen.c mirror. |
+| G2 audit, in-family wave | K10: a real softkey press with the `CANVAS` menu pushed changes nothing in the view. | Remove the range clause of `executeFunction`. |
+| G2 audit, in-family wave | V9: in region 2 the softmenu band is cleared before the painter runs. | Skip the band clear. |
 | G4 | A unit cube from a fixed eye point projects to fixed pixels, recorded once. | Any change in the projection. |
 | G4 | `WIREFRAME` of a plane draws a mesh with a known pixel count. | Skip the row lines. |
 
@@ -97,7 +109,7 @@ one screen that shows every new 3D command, with screenshots.
 
 Two drivers do this in the headless suite. `pgTestShowcase2D` opens
 `PVIEW 6`, draws one example of every 2D command on the same canvas
-(`LINE`, `BOX`, `RECT`, `CIRCLE`, `FCIRCL`, `ARC`, `TEXTOUT`, `DISP`,
+(`LINE`, `BOX`, `FBOX`, `CIRCLE`, `FCIRCL`, `ARC`, `TEXTOUT`, `DISP`,
 `GCLIP`, `GMODE 2` over an earlier shape, and a `XRNG`/`YRNG` curve when
 G3 has landed), then writes the screen to a BMP file with the same path as
 `fnScreenDump`. `pgTestShowcase3D` does the same with `EYEPT`, the view

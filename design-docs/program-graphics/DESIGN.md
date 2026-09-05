@@ -153,6 +153,7 @@ new region. It does not change `prevCalcMode`.
 | R/S, direct key path | The press arm sets `showFunctionNameItem = 0` and marks the key processed. The release path sets `showFunctionNameItem = ITM_RS` for the canvas view, as it does for `CM_NORMAL` but without the register line paint. Upstream then runs `fnRunProgram`. The view stays open. |
 | EXIT, direct key path | `fnKeyExit` has a case for the mode that calls `pgCloseView()`: `calcMode = canvas.prevCalcMode`; `canvas.region = 0`; `temporaryInformation = TI_NO_INFO`; `screenUpdatingMode = SCRUPD_AUTO`; `refreshScreen(197)`. |
 | Any other key, direct key path | Ignored. A guard arm in `processKeyAction` before the SNAP arm marks every key except SNAP as processed. `fnKeyEnter`, `fnKeyBackspace`, `fnKeyUp`, `fnKeyDown`, and `fnKeyDotD` have a no-op case for the mode, because their default arm shows a bug screen. |
+| A key with its own case above the guard arm (ENTER, CC, EXIT) | The press reaches `showFunctionName`. In mode 21 that function records the item and paints nothing. The release reaches `hideFunctionName`, which in mode 21 clears the item and repaints no register line. Both arms live in the package's screen.c mirror. Audit G2 round 1, U7. |
 | Any softkey, softkey path | Ignored. The package carries the range clause `calcMode < 19 /* package browsers 19-23, claims registry */` on the three softkey functions, byte-identical to the other packages. |
 | `VIEW`, `AVIEW` inside the view | The upstream body sets `temporaryInformation` and calls `refreshScreen`. The rule above paints nothing. The program continues. On EXIT, `temporaryInformation` is reset, so nothing shows later. |
 | A program step whose item function switches on `calcMode`: `ENTER`, `CC`, `.d`, `.ms` | The function runs as in `CM_NORMAL` while a program runs. The package helper `pgEffectiveCalcMode()` returns `CM_NORMAL` when `calcMode` is 21 and `programRunStop` is running, else `calcMode`. The four functions switch on it. From the keyboard, the same keys do nothing. Audit G1 round 1, finding G1R1-1 and G1R1-3. |
@@ -162,13 +163,13 @@ new region. It does not change `prevCalcMode`.
 | `PAUSE` inside the view | Upstream flushes the buffer once and waits. The canvas stays. |
 | `CLLCD` inside the view | Upstream clears the whole screen, status bar included. The view stays open. The status bar repaints at the next refresh. |
 | A program step that calls `calcModeNormal()`, such as `CLSTK` or `CLA` | `calcModeNormal` returns at once while the view is open. The view and the drawing stay. The package patches `calcMode.c` for this. |
-| A program step that opens a plot view (`Draw`, `PLTf`, `PLSTAT`, `SCATR`, `HPLOT`) or stores a non-finite plot range | The plot takes the screen and sets its own mode. The canvas is abandoned and the next repaint erases it. By design: the program asked for a plot. `canvas.region` stays set, which is harmless, because every reader of it runs in mode 21 only. |
+| A program step that opens a plot view (`Draw`, `PLTf`, `PLSTAT`, `SCATR`, `HPLOT`) or stores a non-finite plot range | The plot takes the screen and sets its own mode. The canvas is abandoned and the next repaint erases it. By design: the program asked for a plot. `canvas.region` stays set. Its readers outside mode 21 are `fnGclip`, which sizes a clip that `pgClipNow` ignores while the view is closed, and `pgRefreshCanvasView`, which runs in mode 21 only. `fnErase` tests `calcMode`, not the region, so an `ERASE` after a plot step reopens the view over region 2 with `prevCalcMode` set to the plot mode. Audit G2 round 1, in-family 15. |
 | Sleep or power off | Upstream repaints on wake. The canvas is lost. Documented limit. |
 
 ### 3.7 ERASE
 
     fnErase():
-      if canvas.region == 0: fnPview(2); return
+      if calcMode != CM_GRAPHICS_CANVAS: fnPview(2); return
       clear rows 20 to canvas.clipY1 (of the region) to white
       reset the clip rectangle to the region, as in fnPview
       if canvas.region == 2: showSoftmenuCurrentPart()
@@ -216,7 +217,7 @@ after a write (`lcd.c:169`). The kernel does the same.
       pgMark(row)
 
 `ERASE` and `PVIEW` clear the region with one `lcd_fill_rect` call, as
-upstream does. `RECT` in modes 0 and 1 calls `pgRun` per row.
+upstream does. `FBOX` calls `pgRun` per row in every mode.
 
 The hardware assumption of this section is: the DMCP ROM's refresh treats
 byte 0 of a row as the dirty flag, as the simulator does. Evidence:
@@ -248,9 +249,10 @@ once. Vertical lines call `pgPixel` per row. The endpoints are inclusive.
 ### 4.4 Rectangles
 
 `BOX` draws four lines with `pgRun` for the top and bottom rows and
-`pgPixel` for the side columns. `RECT` clamps the rectangle to the clip
-rectangle and calls `lcd_fill_rect` once in modes 0 and 1. In mode 2 it
-calls `pgRun` per row.
+`pgPixel` for the side columns. `FBOX` clamps the rectangle to the clip
+rectangle and calls `pgRun` per row in every mode. `lcd_fill_rect` is not
+used for a drawing command, because it drops the whole call when an edge
+is off the screen.
 
 ### 4.5 Circles and arcs
 
@@ -265,7 +267,12 @@ algorithm and draws the pixels whose direction lies in the span. The span
 test is two integer cross products against the two direction vectors of
 the angles, each scaled by 65536, computed once with the WP34S sine and
 cosine. The resolution of the span is about 0.001 degrees. A span of 360
-degrees or more draws the full circle.
+degrees or more draws the full circle. When the two vectors coincide at
+that scale, the exact span in degrees decides: 180 degrees or more draws
+the full circle, less draws one pixel. The arc stepper `pgArc` is the one
+internal function that takes its center row in the user frame and
+converts at each plot; `pgCircle` takes a screen row. Audit G2 round 1,
+in-family 3 and 17.
 
 ### 4.6 Text
 
@@ -282,15 +289,17 @@ text. `DISP n` draws the string of X the same way at the cell:
     showString(the string of X, cut to clipX1 - col + 1, &standardFont, col, row, vmNormal, true, true)
 
 The cut never splits a two-byte glyph, at the width and at the cap of the
-scratch buffer. A string that ends in a lone lead byte is trimmed at that
-byte.
+scratch buffer. The cut position is found by a walk from the start of the
+string, because a second byte can carry bit 7 as well. A lone lead byte at
+the end is cut away before the width is measured, whatever the width.
 
 Region 2 has lines 1 to 7. Region 6 has lines 1 to 11. `n` outside the
 region draws nothing.
 
 ### 4.7 Draw mode
 
-`GMODE n` with n outside 0 to 2 raises `ERROR_INVALID_DATA_TYPE_FOR_OP`.
+`GMODE n` with n outside 0 to 2 raises `ERROR_OUT_OF_RANGE`, as `PVIEW`
+and `DISP` do for a parameter outside their range.
 
 ## 5. Coordinates
 
@@ -331,7 +340,9 @@ far point is refused and never drawn with a clamped slope. `XRNG` and
 `YRNG` take the minimum in Y and the maximum in X, as long integers or
 reals. Equal ends raise `ERROR_ARG_EXCEEDS_FUNCTION_DOMAIN` and leave the window
 unchanged. A reversed range mirrors the axis. The window survives `ERASE`
-and `PVIEW`; only `XRNG`, `YRNG`, and a reset change it. The window maps
+and `PVIEW`; only `XRNG`, `YRNG`, and a reset change it. The ends are
+stored as real34 values, so two ends that differ only beyond 34 digits
+are equal ends. Audit G3 round 1, Sol 1. The window maps
 onto the full pixel grid, so in `PVIEW 6` the top 20 rows of the y range
 lie under the status bar.
 
@@ -398,7 +409,8 @@ the label mechanism of `PGMSLV`.
 1. Argument conversion uses one path per type (section 5.1). No decimal
    comparison on the fast path.
 2. Every command is `US_UNCHANGED` and `SLS_UNCHANGED`.
-3. Integer math only in the kernel. Horizontal runs use `lcd_fill_rect`.
+3. Integer math only in the kernel. Horizontal runs use `pgRun`, one
+   masked write per byte of the row.
 4. Refresh cadence:
 
        pgRefreshMaybe():
@@ -469,8 +481,14 @@ the same call as `PGMSLV` plus `PLTf` use (`execProgram`).
    and from upstream's hardware code (section 4.1). Untested by the package.
 7. `RESET` inside the view keeps the view open with a blank canvas. EXIT
    closes it. A program that opens a plot view abandons the canvas.
-8. Shifted keys are not reachable from the keyboard in the view.
+8. Shifted keys are not reachable from the keyboard in the solo build. In
+   a build with undo-history, its shift gate line lets f and g engage in
+   the view; the shifted items then reach the guard arm and do nothing.
 9. The error message on canvas line 1 covers rows 20 to 39 of the drawing.
+10. Every error of a drawing command names register X in its message,
+    whichever register held the offending value.
+11. Range ends for `XRNG` and `YRNG` that differ only beyond 34 digits
+    are refused as equal ends.
 
 ## 11. Test policy
 

@@ -333,3 +333,71 @@ data plus BSS for RAM:
 |---|---|---|---|
 | flash | 1,090,512 | 1,095,288 | +464 bytes |
 | ram | 7,564 | 7,648 | +32 bytes (the window struct, less the two real34 limits it replaced) |
+
+## Audit round 1 on G2, the in-family half, and its fix wave, 2026-09-05
+
+The in-family finders ran for the first time on this package after the
+refusal fix of `c9e589b25`: eight finders, three-lens refutation, one
+report, `design-docs/forth-core/AUDIT_program-graphics-stage-G2-...tip-0663b2360_2026-09-05.md`.
+The range was the whole package, `af7ad934a..0663b2360`, with both
+outside replies and five extra claims fed into the refutation pass.
+Eighteen distinct findings survived. Under the one-round ruling this is
+the one fix wave for G2, applied on the G3 branch.
+
+| Finding | Disposition |
+|---|---|
+| G2R1-1 With the view closed, the commands skip the PIXEL flag protocol; a `LINE` from the menu is erased by its own key release. | Fixed: `pgRefreshMaybe` sets the manual flags and `screenHoldsDrawnPixels` outside the view. Pin D20 over four commands. |
+| G2R1-2 A string that ends in a lone lead byte is not trimmed when it fits; `showString` paints stale bytes. | Fixed: the cut lands on a glyph boundary found by a walk, whatever the width. Pin D17d. |
+| G2R1-3 `ARC` collapses a span just under a full turn to one pixel. | Fixed: the same-direction arm consults the exact span, 180 degrees or more draws the circle. Pin D19. |
+| G2R1-4 The view opened from alpha input mode keeps the cursor and `FLAG_ALPHA`. | Fixed: the prologue of upstream's browsers in `fnPview`, and the reverse on EXIT. Pin K8. |
+| G2R1-5 In region 2 a menu popped to a blank base leaves its labels. | Fixed: the band is cleared before the painter runs. Pin V9. |
+| G2R1-6 A mixed long-integer and real pair is accepted, against §5.1. | Ruled at G3: each coordinate is read by its own type. §5.1 amended in the G3 commit. |
+| G2R1-7 The cap guard cannot tell a lead byte from a trail byte with bit 7 set. | Fixed by the same walk. Pin D17c. |
+| G2R1-8 The DISP band clear has no pin. | Pin D15b. |
+| G2R1-9 D8 reads a row the refused command never targets. | D8 rewritten. |
+| G2R1-10 D17b claims a property the code does not have. | D17b rewritten around the canary, and the code now has the property. |
+| G2R1-11 K7's band assertion is a conjunction with the flag. | K7 split. |
+| G2R1-12 K1 checks a constant; no pin presses a softkey. | Pin K10 drives a real softkey press with the `CANVAS` menu pushed. |
+| G2R1-13 §5.1 said 31 bits where the code says 32767. | Amended in the G3 commit. |
+| G2R1-14 The filled rectangle was specified three ways under the dead name `RECT`. | §4.1, §4.4 and §8.3 now give one recipe under `FBOX`. |
+| G2R1-15 Two readers of `canvas.region` disagree with §3.6 and §3.7. | §3.6 names the readers, §3.7 tests `calcMode`, as the code does. |
+| G2R1-16 `fnGarc` carried a second copy of the real reader. | Removed in the G3 commit: `pgReadComplexPoint`. |
+| G2R1-17 `pgArc` works in the user frame against §3.4. | Recorded as the one exception in §4.5. |
+| G2R1-18 `GMODE` out of range raises `ERROR_OUT_OF_RANGE`, §4.7 said the type error. | §4.7 amended to the code, which follows `PVIEW` and `DISP`. |
+| U7 An interactive ENTER paints the T line over the canvas through `showFunctionName` and `hideFunctionName`. | Fixed: both functions carry a mode-21 arm in the screen.c mirror; the item still arms and runs on release. Pin K9. |
+| U8 The long-press SNAP gesture paints the same way. | The same two arms cover it. Not executed: the long-press timer path is not driven by the suite. |
+| U9 In the combined build undo-history's shift gate lets f and g engage. | Recorded in §10 limit 8. G4 carries that line itself. |
+
+Out-of-family round 1 on G3 ran on the same day. Sol (GPT-5) found that
+two range ends that differ only beyond 34 digits are refused as equal
+ends: a documented limit (§5.2, §10 item 11), because the ends are stored
+as real34 values and a range of that magnitude has no use on a 400-pixel
+screen. Gemini 3.1 Pro read `pgArc`'s user-frame center as a defect; the
+packet did not carry `pgArc`, and §4.5 now records the exception. Its
+second note, that every error names register X, is §10 item 10.
+
+Red-first results of the wave on the simulator:
+
+| Mutation | Pins that went red |
+|---|---|
+| No PIXEL flags outside the view | D20 for all four commands, both checks each |
+| The old bit-7 cap guard instead of the glyph walk | D17c, D17d |
+| No 180-degree test in the same-direction arm | D19 |
+| No alpha prologue in `fnPview` | K8, both checks |
+| No band clear in region 2 | V9, on the second form of the pin |
+| No `DISP` band fill | D15b |
+| No `showFunctionName` arm | K9, both checks |
+| No `hideFunctionName` arm | K9 |
+| No range clause in `executeFunction` | K10, on the second form of the pin |
+
+Two pins needed a second form. V9 first ran with the base flags as the
+suite left them, and the mutation stayed green; the pin now clears
+`FLAG_BASE_HOME` and `FLAG_BASE_MYM` itself. K10 first pressed and
+released the softkey and stayed green under the mutation, because the
+release only arms the double-tap timer; the pin now calls the click that
+the timer's timeout calls. The trim walk's lone-lead-byte stop became
+unreachable once the boundary cut runs first, so it was removed rather
+than kept as a guard nothing can test; D17b now pins the cut through
+its canary, red under the old cap guard.
+
+Firmware size: measured at the G4 commit, not per fix wave.

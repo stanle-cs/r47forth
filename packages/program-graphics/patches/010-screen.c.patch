@@ -1,8 +1,31 @@
 diff --git a/src/c47/screen.c b/src/c47/screen.c
-index d2ac868bd18f9f4c20608f5dc90d5652844afcc6..dc0d98ecb6a4fe1ef57bd554bdb941546595aeb9 100644
+index d2ac868bd18f9f4c20608f5dc90d5652844afcc6..5af0230cf15590d3cbbc21d1ebda0f88965ed2bb 100644
 --- a/src/c47/screen.c
 +++ b/src/c47/screen.c
-@@ -5483,6 +5483,9 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
+@@ -2136,6 +2136,10 @@ return res;
+     showFunctionNameItem = item;
+     showFunctionNameCounter = delayInMs;
+ 
++    if(calcMode == CM_GRAPHICS_CANVAS) {   // program-graphics package: nothing paints over the canvas; the item still runs on release
++      return;
++    }
++
+ 
+     if(tam.alpha && ((item == ITM_BACKSPACE) || (item == ITM_T_LEFT_ARROW) || (item == ITM_T_RIGHT_ARROW))) {               // For smooth display in tam.alpha
+       return;
+@@ -2172,6 +2176,11 @@ return res;
+ 
+ 
+   void hideFunctionName(void) {
++    if(calcMode == CM_GRAPHICS_CANVAS) {   // program-graphics package: no register line repaint over the canvas
++      showFunctionNameItem = 0;
++      showFunctionNameCounter = 0;
++      return;
++    }
+     if(tmpString[0] != 0 || calcMode!=CM_AIM) {
+       if(calcMode != CM_PEM) {
+         if(!tam.alpha || (showFunctionNameItem != ITM_BACKSPACE &&               // For smooth display in tam.alpha
+@@ -5483,6 +5492,9 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
    }
  
    void refreshRegisterLine(calcRegister_t regist) {
@@ -12,7 +35,7 @@ index d2ac868bd18f9f4c20608f5dc90d5652844afcc6..dc0d98ecb6a4fe1ef57bd554bdb94154
      _refreshRegisterLine(regist, !RESTORE_T);
    }
  
-@@ -6221,6 +6224,12 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
+@@ -6221,6 +6233,12 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
          _refreshNormalScreen();
          break;
  

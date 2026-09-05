@@ -2136,6 +2136,10 @@ return res;
     showFunctionNameItem = item;
     showFunctionNameCounter = delayInMs;
 
+    if(calcMode == CM_GRAPHICS_CANVAS) {   // program-graphics package: nothing paints over the canvas; the item still runs on release
+      return;
+    }
+
 
     if(tam.alpha && ((item == ITM_BACKSPACE) || (item == ITM_T_LEFT_ARROW) || (item == ITM_T_RIGHT_ARROW))) {               // For smooth display in tam.alpha
       return;
@@ -2172,6 +2176,11 @@ return res;
 
 
   void hideFunctionName(void) {
+    if(calcMode == CM_GRAPHICS_CANVAS) {   // program-graphics package: no register line repaint over the canvas
+      showFunctionNameItem = 0;
+      showFunctionNameCounter = 0;
+      return;
+    }
     if(tmpString[0] != 0 || calcMode!=CM_AIM) {
       if(calcMode != CM_PEM) {
         if(!tam.alpha || (showFunctionNameItem != ITM_BACKSPACE &&               // For smooth display in tam.alpha
