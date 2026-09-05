@@ -63,6 +63,8 @@ void pgTestSmoke(uint16_t unusedButMandatoryParameter);
 void pgTestBaseline(uint16_t unusedButMandatoryParameter);
 void pgTestView(uint16_t unusedButMandatoryParameter);
 void pgTestKeys(uint16_t unusedButMandatoryParameter);
+void pgTestDraw2D(uint16_t unusedButMandatoryParameter);
+void pgTestShowcase2D(uint16_t unusedButMandatoryParameter);
 void covIterationTi(uint16_t which);
 void covNamedVariableFold(uint16_t unusedButMandatoryParameter);
 void covStatsRegister(uint16_t unusedButMandatoryParameter);
@@ -315,6 +317,8 @@ const funcTest_t funcTestNoParam[] = {
   {"pgTestBaseline",         pgTestBaseline,      1},
   {"pgTestView",             pgTestView,          1},
   {"pgTestKeys",             pgTestKeys,          1},
+  {"pgTestDraw2D",           pgTestDraw2D,        1},
+  {"pgTestShowcase2D",       pgTestShowcase2D,    1},
   // Statistics (use FARG=1 with fnSigmaAddRem to accumulate a (Y,X) data point).
   {"fnSigmaAddRem",          fnSigmaAddRem         },
   {"fnMeanX",                fnMeanX               },

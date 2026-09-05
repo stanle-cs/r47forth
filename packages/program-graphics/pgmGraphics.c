@@ -105,6 +105,510 @@ void pgCloseView(void) {
   refreshScreen(197);
 }
 
+
+// ---------------------------------------------------------------------------
+// Stage G2: the drawing kernel (DESIGN.md §4) and the argument reader (§5.1)
+// ---------------------------------------------------------------------------
+
+#define PG_ROW_BYTES 52   // 2 header bytes plus 50 pixel bytes per row
+
+typedef struct {
+  int32_t x0, y0, x1, y1;   // screen coordinates, top-left origin, inclusive
+} pgRect_t;
+
+// The clip rectangle in force: the canvas clip in the view, the whole screen outside it (§4.2).
+static void pgClipNow(pgRect_t *c) {
+  if(calcMode == CM_GRAPHICS_CANVAS) {
+    c->x0 = canvas.clipX0; c->y0 = canvas.clipY0; c->x1 = canvas.clipX1; c->y1 = canvas.clipY1;
+  }
+  else {
+    c->x0 = 0; c->y0 = 0; c->x1 = SCREEN_WIDTH - 1; c->y1 = SCREEN_HEIGHT - 1;
+  }
+}
+
+static inline uint8_t *pgRowPtr(int32_t row) {
+  return lcd_buffer + row * PG_ROW_BYTES;
+}
+
+static inline void pgApply(uint8_t *p, uint8_t mask) {
+  switch(canvas.drawMode) {
+    case 1:  *p &= (uint8_t)~mask; break;
+    case 2:  *p ^= mask;           break;
+    default: *p |= mask;           break;
+  }
+}
+
+// One pixel at screen column col, screen row row (§4.1).
+static void pgPixel(const pgRect_t *c, int32_t col, int32_t row) {
+  uint32_t xm;
+  if(col < c->x0 || col > c->x1 || row < c->y0 || row > c->y1) {
+    return;
+  }
+  xm = (uint32_t)(SCREEN_WIDTH - 1 - col);
+  pgApply(pgRowPtr(row) + 2 + (xm >> 3), (uint8_t)(1u << (xm & 7)));
+  pgRowPtr(row)[0] = 1u;
+}
+
+// A horizontal run from col0 to col1 on one row, whole bytes at a time (§4.1).
+static void pgRun(const pgRect_t *c, int32_t col0, int32_t col1, int32_t row) {
+  uint32_t a, b, byteA, byteB;
+  uint8_t *p;
+  if(row < c->y0 || row > c->y1) {
+    return;
+  }
+  if(col0 > col1) { int32_t t = col0; col0 = col1; col1 = t; }
+  if(col0 < c->x0) col0 = c->x0;
+  if(col1 > c->x1) col1 = c->x1;
+  if(col0 > col1) {
+    return;
+  }
+  a = (uint32_t)(SCREEN_WIDTH - 1 - col1);   // mirrored bit positions, a <= b
+  b = (uint32_t)(SCREEN_WIDTH - 1 - col0);
+  byteA = a >> 3;
+  byteB = b >> 3;
+  p = pgRowPtr(row) + 2;
+  if(byteA == byteB) {
+    pgApply(p + byteA, (uint8_t)((0xFFu << (a & 7)) & (0xFFu >> (7 - (b & 7)))));
+  }
+  else {
+    uint32_t i;
+    pgApply(p + byteA, (uint8_t)(0xFFu << (a & 7)));
+    for(i = byteA + 1; i < byteB; i++) {
+      pgApply(p + i, 0xFFu);
+    }
+    pgApply(p + byteB, (uint8_t)(0xFFu >> (7 - (b & 7))));
+  }
+  pgRowPtr(row)[0] = 1u;
+}
+
+// Integer Bresenham line, endpoints inclusive (§4.3).
+static void pgLine(const pgRect_t *c, int32_t x0, int32_t y0, int32_t x1, int32_t y1) {
+  int32_t dx, dy, sx, sy, err;
+  if(y0 == y1) {
+    pgRun(c, x0, x1, y0);
+    return;
+  }
+  dx = x1 > x0 ? x1 - x0 : x0 - x1;
+  dy = y1 > y0 ? y0 - y1 : y1 - y0;   // negative
+  sx = x0 < x1 ? 1 : -1;
+  sy = y0 < y1 ? 1 : -1;
+  err = dx + dy;
+  for(;;) {
+    int32_t e2;
+    pgPixel(c, x0, y0);
+    if(x0 == x1 && y0 == y1) {
+      break;
+    }
+    e2 = 2 * err;
+    if(e2 >= dy) { err += dy; x0 += sx; }
+    if(e2 <= dx) { err += dx; y0 += sy; }
+  }
+}
+
+static void pgBox(const pgRect_t *c, int32_t x0, int32_t y0, int32_t x1, int32_t y1, bool_t filled) {
+  int32_t row, r0, r1;
+  if(x0 > x1) { int32_t t = x0; x0 = x1; x1 = t; }
+  if(y0 > y1) { int32_t t = y0; y0 = y1; y1 = t; }
+  if(filled) {
+    r0 = y0 < c->y0 ? c->y0 : y0;
+    r1 = y1 > c->y1 ? c->y1 : y1;
+    for(row = r0; row <= r1; row++) {
+      pgRun(c, x0, x1, row);
+    }
+    return;
+  }
+  pgRun(c, x0, x1, y0);
+  if(y1 != y0) {
+    pgRun(c, x0, x1, y1);
+  }
+  r0 = (y0 + 1) < c->y0 ? c->y0 : y0 + 1;
+  r1 = (y1 - 1) > c->y1 ? c->y1 : y1 - 1;
+  for(row = r0; row <= r1; row++) {
+    pgPixel(c, x0, row);
+    if(x1 != x0) {
+      pgPixel(c, x1, row);
+    }
+  }
+}
+
+static int32_t pgIsqrt(int32_t v) {
+  int32_t r = 0, bit;
+  if(v <= 0) return 0;
+  for(bit = 1 << 15; bit > 0; bit >>= 1) {
+    if((r + bit) * (r + bit) <= v) r += bit;
+  }
+  return r;
+}
+
+// Circle outline or fill. (cx, cy) and the radius in screen coordinates (§4.5).
+static void pgCircle(const pgRect_t *c, int32_t cx, int32_t cy, int32_t r, bool_t filled) {
+  int32_t x, y, err;
+  if(r < 0) r = -r;
+  if(filled) {
+    int32_t dy;
+    for(dy = -r; dy <= r; dy++) {
+      int32_t w = (pgIsqrt(4 * (r * r - dy * dy)) + 1) / 2;   // rounded half-width, matches the midpoint outline
+      pgRun(c, cx - w, cx + w, cy + dy);
+    }
+    return;
+  }
+  if(r == 0) {
+    pgPixel(c, cx, cy);
+    return;
+  }
+  x = r; y = 0; err = 1 - r;
+  while(x >= y) {
+    if(y == 0) {
+      pgPixel(c, cx + x, cy); pgPixel(c, cx - x, cy); pgPixel(c, cx, cy + x); pgPixel(c, cx, cy - x);
+    }
+    else if(x == y) {
+      pgPixel(c, cx + x, cy + y); pgPixel(c, cx - x, cy + y); pgPixel(c, cx + x, cy - y); pgPixel(c, cx - x, cy - y);
+    }
+    else {
+      pgPixel(c, cx + x, cy + y); pgPixel(c, cx - x, cy + y); pgPixel(c, cx + x, cy - y); pgPixel(c, cx - x, cy - y);
+      pgPixel(c, cx + y, cy + x); pgPixel(c, cx - y, cy + x); pgPixel(c, cx + y, cy - x); pgPixel(c, cx - y, cy - x);
+    }
+    y++;
+    if(err < 0) {
+      err += 2 * y + 1;
+    }
+    else {
+      x--;
+      err += 2 * (y - x) + 1;
+    }
+  }
+}
+
+// Arc test: is the direction (dx, dy), y upward, inside the counterclockwise
+// span from A to B? A and B are direction vectors scaled by 1024. wide is
+// true when the span exceeds 180 degrees (§4.5).
+static bool_t pgInSpan(int32_t ax, int32_t ay, int32_t bx, int32_t by, bool_t wide, int32_t dx, int32_t dy) {
+  int64_t ca = (int64_t)ax * dy - (int64_t)ay * dx;   // cross(A, P)
+  int64_t cb = (int64_t)dx * by - (int64_t)dy * bx;   // cross(P, B)
+  if(wide) {
+    return !(ca < 0 && cb < 0);
+  }
+  return ca >= 0 && cb >= 0;
+}
+
+// Arc outline: the circle stepper with the span test. Coordinates in user
+// frame (y upward); rowOf converts at the plot.
+#define PG_ROW_OF(yUser) (SCREEN_HEIGHT - 1 - (yUser))
+static void pgArcPoint(const pgRect_t *c, int32_t cx, int32_t cyUser, int32_t dx, int32_t dy,
+                       int32_t ax, int32_t ay, int32_t bx, int32_t by, bool_t wide) {
+  if(pgInSpan(ax, ay, bx, by, wide, dx, dy)) {
+    pgPixel(c, cx + dx, PG_ROW_OF(cyUser + dy));
+  }
+}
+
+static void pgArc(const pgRect_t *c, int32_t cx, int32_t cyUser, int32_t r,
+                  int32_t ax, int32_t ay, int32_t bx, int32_t by, bool_t wide) {
+  int32_t x, y, err;
+  if(r < 0) r = -r;
+  if(r == 0) {
+    pgPixel(c, cx, PG_ROW_OF(cyUser));
+    return;
+  }
+  x = r; y = 0; err = 1 - r;
+  while(x >= y) {
+    if(y == 0) {
+      pgArcPoint(c, cx, cyUser,  x,  0, ax, ay, bx, by, wide); pgArcPoint(c, cx, cyUser, -x,  0, ax, ay, bx, by, wide);
+      pgArcPoint(c, cx, cyUser,  0,  x, ax, ay, bx, by, wide); pgArcPoint(c, cx, cyUser,  0, -x, ax, ay, bx, by, wide);
+    }
+    else if(x == y) {
+      pgArcPoint(c, cx, cyUser,  x,  y, ax, ay, bx, by, wide); pgArcPoint(c, cx, cyUser, -x,  y, ax, ay, bx, by, wide);
+      pgArcPoint(c, cx, cyUser,  x, -y, ax, ay, bx, by, wide); pgArcPoint(c, cx, cyUser, -x, -y, ax, ay, bx, by, wide);
+    }
+    else {
+      pgArcPoint(c, cx, cyUser,  x,  y, ax, ay, bx, by, wide); pgArcPoint(c, cx, cyUser, -x,  y, ax, ay, bx, by, wide);
+      pgArcPoint(c, cx, cyUser,  x, -y, ax, ay, bx, by, wide); pgArcPoint(c, cx, cyUser, -x, -y, ax, ay, bx, by, wide);
+      pgArcPoint(c, cx, cyUser,  y,  x, ax, ay, bx, by, wide); pgArcPoint(c, cx, cyUser, -y,  x, ax, ay, bx, by, wide);
+      pgArcPoint(c, cx, cyUser,  y, -x, ax, ay, bx, by, wide); pgArcPoint(c, cx, cyUser, -y, -x, ax, ay, bx, by, wide);
+    }
+    y++;
+    if(err < 0) {
+      err += 2 * y + 1;
+    }
+    else {
+      x--;
+      err += 2 * (y - x) + 1;
+    }
+  }
+}
+
+// ---- the argument reader (§5.1) ----
+
+static real34_t pgLimitPos, pgLimitNeg;   // +32768 and -32768, built once
+static bool_t   pgLimitsReady;
+
+static void pgError(uint16_t code) {
+  displayCalcErrorMessage(code, ERR_REGISTER_LINE, REGISTER_X);
+}
+
+// Reads a pixel coordinate from regist into *v. Returns false after an error.
+static bool_t pgReadCoord(calcRegister_t regist, int32_t *v) {
+  switch(getRegisterDataType(regist)) {
+    case dtLongInteger: {
+      const uint8_t *p = REGISTER_LONG_INTEGER_DATA(regist);
+      uint32_t bytes = TO_BYTES(getRegisterMaxDataLengthInBlocks(regist));
+      uint32_t low = 0, i;
+      for(i = 0; i < 4 && i < bytes; i++) {
+        low |= (uint32_t)p[i] << (8 * i);
+      }
+      for(i = 4; i < bytes; i++) {
+        if(p[i] != 0) {
+          pgError(ERROR_OUT_OF_RANGE);
+          return false;
+        }
+      }
+      if(low > 32767u) {
+        pgError(ERROR_OUT_OF_RANGE);
+        return false;
+      }
+      switch(getRegisterLongIntegerSign(regist)) {
+        case LI_ZERO:     *v = 0;             break;
+        case LI_NEGATIVE: *v = -(int32_t)low; break;
+        default:          *v = (int32_t)low;  break;
+      }
+      return true;
+    }
+    case dtReal34: {
+      const real34_t *x = REGISTER_REAL34_DATA(regist);
+      if(!pgLimitsReady) {
+        int32ToReal34(32768, &pgLimitPos);
+        int32ToReal34(-32768, &pgLimitNeg);
+        pgLimitsReady = true;
+      }
+      if(real34IsNaN(x) || real34IsInfinite(x) || !real34CompareLessThan(x, &pgLimitPos) || !real34CompareLessThan(&pgLimitNeg, x)) {
+        pgError(ERROR_OUT_OF_RANGE);
+        return false;
+      }
+      *v = real34ToInt32(x);
+      return true;
+    }
+    default:
+      pgError(ERROR_INVALID_DATA_TYPE_FOR_OP);
+      return false;
+  }
+}
+
+// Reads an angle from regist into a real, in the current angular mode.
+static bool_t pgReadAngle(calcRegister_t regist, real_t *angle) {
+  switch(getRegisterDataType(regist)) {
+    case dtLongInteger: convertLongIntegerRegisterToReal(regist, angle, &ctxtReal39); return true;
+    case dtReal34:      real34ToReal(REGISTER_REAL34_DATA(regist), angle);            return true;
+    default:            pgError(ERROR_INVALID_DATA_TYPE_FOR_OP);                      return false;
+  }
+}
+
+// Refresh cadence (§8.4).
+static void pgRefreshMaybe(void) {
+  if(programRunStop != PGM_RUNNING) {
+    pgRefreshNow();
+    return;
+  }
+  if(getUptimeMs() - canvas.lastRefreshMs >= 40) {
+    pgRefreshNow();
+  }
+}
+
+// Reads the two points of a two-point command: (X, Y) and (Z, T), y converted to rows.
+static bool_t pgReadTwoPoints(int32_t *x0, int32_t *r0, int32_t *x1, int32_t *r1) {
+  int32_t y0, y1;
+  if(!pgReadCoord(REGISTER_X, x0) || !pgReadCoord(REGISTER_Y, &y0) || !pgReadCoord(REGISTER_Z, x1) || !pgReadCoord(REGISTER_T, &y1)) {
+    return false;
+  }
+  *r0 = PG_ROW_OF(y0);
+  *r1 = PG_ROW_OF(y1);
+  return true;
+}
+
+void fnGline(uint16_t unusedButMandatoryParameter) {
+  int32_t x0, r0, x1, r1;
+  pgRect_t c;
+  if(!pgReadTwoPoints(&x0, &r0, &x1, &r1)) return;
+  pgClipNow(&c);
+  pgLine(&c, x0, r0, x1, r1);
+  pgRefreshMaybe();
+}
+
+void fnGbox(uint16_t unusedButMandatoryParameter) {
+  int32_t x0, r0, x1, r1;
+  pgRect_t c;
+  if(!pgReadTwoPoints(&x0, &r0, &x1, &r1)) return;
+  pgClipNow(&c);
+  pgBox(&c, x0, r0, x1, r1, false);
+  pgRefreshMaybe();
+}
+
+void fnGfbox(uint16_t unusedButMandatoryParameter) {
+  int32_t x0, r0, x1, r1;
+  pgRect_t c;
+  if(!pgReadTwoPoints(&x0, &r0, &x1, &r1)) return;
+  pgClipNow(&c);
+  pgBox(&c, x0, r0, x1, r1, true);
+  pgRefreshMaybe();
+}
+
+static void pgCircleCommand(bool_t filled) {
+  int32_t cx, cy, r;
+  pgRect_t c;
+  if(!pgReadCoord(REGISTER_X, &cx) || !pgReadCoord(REGISTER_Y, &cy) || !pgReadCoord(REGISTER_Z, &r)) return;
+  pgClipNow(&c);
+  pgCircle(&c, cx, PG_ROW_OF(cy), r, filled);
+  pgRefreshMaybe();
+}
+
+void fnGcircle(uint16_t unusedButMandatoryParameter) {
+  pgCircleCommand(false);
+}
+
+void fnGfcircle(uint16_t unusedButMandatoryParameter) {
+  pgCircleCommand(true);
+}
+
+// ARC: center as a complex number in T, radius in Z, start angle in Y, end angle in X (§2.2).
+void fnGarc(uint16_t unusedButMandatoryParameter) {
+  int32_t cx, cy, r, ax, ay, bx, by;
+  real_t a1, a2, s, co, t, d, full;
+  float f;
+  bool_t wide, fullCircle;
+  pgRect_t c;
+  if(getRegisterDataType(REGISTER_T) != dtComplex34) {
+    pgError(ERROR_INVALID_DATA_TYPE_FOR_OP);
+    return;
+  }
+  {
+    const real34_t *re = REGISTER_REAL34_DATA(REGISTER_T);
+    const real34_t *im = REGISTER_IMAG34_DATA(REGISTER_T);
+    if(!pgLimitsReady) {
+      int32ToReal34(32768, &pgLimitPos);
+      int32ToReal34(-32768, &pgLimitNeg);
+      pgLimitsReady = true;
+    }
+    if(real34IsNaN(re) || real34IsInfinite(re) || !real34CompareLessThan(re, &pgLimitPos) || !real34CompareLessThan(&pgLimitNeg, re) ||
+       real34IsNaN(im) || real34IsInfinite(im) || !real34CompareLessThan(im, &pgLimitPos) || !real34CompareLessThan(&pgLimitNeg, im)) {
+      pgError(ERROR_OUT_OF_RANGE);
+      return;
+    }
+    cx = real34ToInt32(re);
+    cy = real34ToInt32(im);
+  }
+  if(!pgReadCoord(REGISTER_Z, &r) || !pgReadAngle(REGISTER_Y, &a1) || !pgReadAngle(REGISTER_X, &a2)) return;
+  // A span of 360 degrees or more is a full circle (§2.2): compare the span in degrees.
+  realSubtract(&a2, &a1, &d, &ctxtReal39);
+  convertAngleFromTo(&d, currentAngularMode, amDegree, &ctxtReal39);
+  realSetPositiveSign(&d);
+  int32ToReal(360, &full);
+  fullCircle = realCompareGreaterEqual(&d, &full);
+  C47_WP34S_Cvt2RadSinCosTan(&a1, currentAngularMode, &s, &co, &t, &ctxtReal39);
+  realToFloat(&co, &f); ax = (int32_t)(f * 1024.0f);
+  realToFloat(&s,  &f); ay = (int32_t)(f * 1024.0f);
+  C47_WP34S_Cvt2RadSinCosTan(&a2, currentAngularMode, &s, &co, &t, &ctxtReal39);
+  realToFloat(&co, &f); bx = (int32_t)(f * 1024.0f);
+  realToFloat(&s,  &f); by = (int32_t)(f * 1024.0f);
+  pgClipNow(&c);
+  if(fullCircle) {
+    pgCircle(&c, cx, PG_ROW_OF(cy), r, false);
+  }
+  else {
+    int64_t cross = (int64_t)ax * by - (int64_t)ay * bx;
+    int64_t dot   = (int64_t)ax * bx + (int64_t)ay * by;
+    if(cross == 0 && dot > 0) {
+      pgPixel(&c, cx + (int32_t)(((int64_t)ax * r) / 1024), PG_ROW_OF(cy + (int32_t)(((int64_t)ay * r) / 1024)));
+    }
+    else {
+      wide = cross < 0;
+      pgArc(&c, cx, cy, r, ax, ay, bx, by, wide);
+    }
+  }
+  pgRefreshMaybe();
+}
+
+// Copies the string of regist into tmpString, cut to at most width pixels of the standard font.
+static bool_t pgStringCut(calcRegister_t regist, uint32_t width) {
+  const char *s;
+  size_t n;
+  if(getRegisterDataType(regist) != dtString) {
+    pgError(ERROR_INVALID_DATA_TYPE_FOR_OP);
+    return false;
+  }
+  s = REGISTER_STRING_DATA(regist);
+  n = strlen(s);
+  if(n >= TMP_STR_LENGTH - 1) {
+    n = TMP_STR_LENGTH - 2;
+  }
+  memcpy(tmpString, s, n);
+  tmpString[n] = 0;
+  while(tmpString[0] != 0 && stringWidth(tmpString, &standardFont, true, true) > width) {
+    // remove the last glyph: a byte at or above 0x80 starts a two-byte glyph
+    size_t i = 0, last = 0;
+    while(tmpString[i] != 0) {
+      last = i;
+      i += ((uint8_t)tmpString[i] & 0x80) ? 2 : 1;
+    }
+    tmpString[last] = 0;
+  }
+  return true;
+}
+
+// TEXTOUT: x in X, y in Y (the top-left corner of the cell, y upward), a string in Z (§4.6).
+void fnGtextout(uint16_t unusedButMandatoryParameter) {
+  int32_t x, y, row;
+  pgRect_t c;
+  if(!pgReadCoord(REGISTER_X, &x) || !pgReadCoord(REGISTER_Y, &y)) return;
+  pgClipNow(&c);
+  row = PG_ROW_OF(y);
+  if(x < c.x0 || x > c.x1 || row < c.y0 || row + 19 > c.y1) {
+    return;
+  }
+  if(!pgStringCut(REGISTER_Z, (uint32_t)(c.x1 - x + 1))) return;
+  showString(tmpString, &standardFont, (uint32_t)x, (uint32_t)row, vmNormal, true, true);
+  pgRefreshMaybe();
+}
+
+// DISP n: the string of X on canvas line n, from the top (§4.6).
+void fnGdisp(uint16_t line) {
+  int32_t row;
+  pgRect_t c;
+  if(line < 1 || line > 11) {
+    pgError(ERROR_OUT_OF_RANGE);
+    return;
+  }
+  pgClipNow(&c);
+  row = PG_TOP_ROW + ((int32_t)line - 1) * 20;
+  if(row < c.y0 || row + 19 > c.y1) {
+    return;
+  }
+  if(!pgStringCut(REGISTER_X, SCREEN_WIDTH - 1)) return;
+  lcd_fill_rect(0, (uint32_t)row, SCREEN_WIDTH, 20, LCD_SET_VALUE);
+  showString(tmpString, &standardFont, 1, (uint32_t)row, vmNormal, true, true);
+  pgRefreshMaybe();
+}
+
+void fnGmode(uint16_t mode) {
+  if(mode > 2) {
+    pgError(ERROR_OUT_OF_RANGE);
+    return;
+  }
+  canvas.drawMode = (uint8_t)mode;
+}
+
+// GCLIP: the clip rectangle from (X, Y) to (Z, T), kept inside the region (§2.2).
+void fnGclip(uint16_t unusedButMandatoryParameter) {
+  int32_t x0, r0, x1, r1;
+  int32_t regionBottom = (canvas.region == PG_REGION_REGISTERS) ? PG_REGISTER_BOTTOM_ROW : SCREEN_HEIGHT - 1;
+  if(!pgReadTwoPoints(&x0, &r0, &x1, &r1)) return;
+  if(x0 > x1) { int32_t t = x0; x0 = x1; x1 = t; }
+  if(r0 > r1) { int32_t t = r0; r0 = r1; r1 = t; }
+  if(x0 < 0) x0 = 0;
+  if(x1 > SCREEN_WIDTH - 1) x1 = SCREEN_WIDTH - 1;
+  if(r0 < PG_TOP_ROW) r0 = PG_TOP_ROW;
+  if(r1 > regionBottom) r1 = regionBottom;
+  canvas.clipX0 = (int16_t)x0; canvas.clipY0 = (int16_t)r0;
+  canvas.clipX1 = (int16_t)x1; canvas.clipY1 = (int16_t)r1;
+}
+
 #if defined(TESTSUITE_BUILD)
   #include <stdio.h>
 
@@ -161,6 +665,14 @@ void pgCloseView(void) {
     }
     printf("program-graphics baseline: %u steps, NOP %u ms, PIXEL %u ms, PIXEL body %u ms\n",
            count, nopMs, pixelMs, pixelMs > nopMs ? pixelMs - nopMs : 0);
+    {
+      // Stage G2: LINE of 100 pixels, 100,000 times (TESTING.md §5).
+      uint32_t lineMs;
+      pgTestWriteLonI(REGISTER_X, 0);   pgTestWriteLonI(REGISTER_Y, 0);
+      pgTestWriteLonI(REGISTER_Z, 100); pgTestWriteLonI(REGISTER_T, 50);
+      lineMs = pgTestRunSteps(ITM_GLINE, 100000);
+      printf("program-graphics baseline: 100000 LINE steps of 100 pixels, %u ms\n", lineMs);
+    }
     pgTestWriteLonI(REGISTER_X, pgTestFailures);
   }
 
@@ -335,6 +847,252 @@ void pgCloseView(void) {
 
     calcMode = CM_NORMAL;
     lastErrorCode = ERROR_NONE;
+    pgTestWriteLonI(REGISTER_X, pgTestFailures);
+  }
+
+  // ---- Stage G2 pins (TESTING.md §4, D1 to D12) ----
+
+  static void pgTestSetString(calcRegister_t regist, const char *s) {
+    reallocateRegister(regist, dtString, TO_BLOCKS(strlen(s) + 1), amNone);
+    strcpy(REGISTER_STRING_DATA(regist), s);
+  }
+
+  static void pgTestSetComplex(calcRegister_t regist, int32_t re, int32_t im) {
+    reallocateRegister(regist, dtComplex34, 0, amNone);
+    int32ToReal34(re, REGISTER_REAL34_DATA(regist));
+    int32ToReal34(im, REGISTER_IMAG34_DATA(regist));
+  }
+
+  static void pgTestPoints(int32_t x0, int32_t y0, int32_t x1, int32_t y1) {   // user coordinates
+    pgTestWriteLonI(REGISTER_X, (uint32_t)x0);  // the writer takes unsigned; the pins use positive values
+    pgTestWriteLonI(REGISTER_Y, (uint32_t)y0);
+    pgTestWriteLonI(REGISTER_Z, (uint32_t)x1);
+    pgTestWriteLonI(REGISTER_T, (uint32_t)y1);
+  }
+
+  static bool_t pgTestLit(int32_t x, int32_t yUser) {
+    return lcd_buffer_pixel_on((uint32_t)x, (uint32_t)PG_ROW_OF(yUser));
+  }
+
+  void pgTestDraw2D(uint16_t unusedButMandatoryParameter) {
+    pgTestFailures = 0;
+    calcMode = CM_NORMAL;
+    lastErrorCode = ERROR_NONE;
+    fnPview(6);
+    fnGmode(0);
+
+    // D1: a horizontal line, endpoints inclusive, nothing beyond them.
+    pgTestPoints(10, 10, 50, 10);
+    fnGline(NOPARAM);
+    if(!pgTestLit(10, 10) || !pgTestLit(50, 10) || !pgTestLit(30, 10)) pgTestFail("D1 the horizontal line misses a pixel");
+    if(pgTestLit(9, 10) || pgTestLit(51, 10) || pgTestLit(30, 11) || pgTestLit(30, 9)) pgTestFail("D1 the horizontal line has a pixel beyond an endpoint or off its row");
+
+    // D2: a vertical line.
+    pgTestPoints(70, 20, 70, 60);
+    fnGline(NOPARAM);
+    if(!pgTestLit(70, 20) || !pgTestLit(70, 60) || !pgTestLit(70, 40)) pgTestFail("D2 the vertical line misses a pixel");
+    if(pgTestLit(70, 19) || pgTestLit(70, 61) || pgTestLit(71, 40) || pgTestLit(69, 40)) pgTestFail("D2 the vertical line has a pixel beyond an endpoint or off its column");
+
+    // D3: a diagonal line, both endpoints and the midpoint.
+    pgTestPoints(100, 100, 140, 120);
+    fnGline(NOPARAM);
+    if(!pgTestLit(100, 100) || !pgTestLit(140, 120) || !pgTestLit(120, 110)) pgTestFail("D3 the diagonal line misses an endpoint or its midpoint");
+
+    // D4: a box outline, then a filled box.
+    pgTestPoints(200, 50, 260, 90);
+    fnGbox(NOPARAM);
+    if(!pgTestLit(200, 50) || !pgTestLit(260, 90) || !pgTestLit(230, 50) || !pgTestLit(200, 70)) pgTestFail("D4 the box outline misses a corner or an edge");
+    if(pgTestLit(230, 70)) pgTestFail("D4 the box outline lit its interior");
+    fnGfbox(NOPARAM);
+    if(!pgTestLit(230, 70) || !pgTestLit(201, 51) || !pgTestLit(259, 89)) pgTestFail("D4 the filled box left the interior clear");
+
+    // D5: a circle outline, then a filled circle.
+    pgTestWriteLonI(REGISTER_X, 300); pgTestWriteLonI(REGISTER_Y, 100); pgTestWriteLonI(REGISTER_Z, 20);
+    fnGcircle(NOPARAM);
+    if(!pgTestLit(320, 100) || !pgTestLit(280, 100) || !pgTestLit(300, 120) || !pgTestLit(300, 80)) pgTestFail("D5 the circle misses a cardinal point");
+    if(pgTestLit(300, 100) || pgTestLit(321, 100)) pgTestFail("D5 the circle lit its center or a pixel beyond its radius");
+    fnGfcircle(NOPARAM);
+    if(!pgTestLit(300, 100) || !pgTestLit(310, 105)) pgTestFail("D5 the filled circle left the interior clear");
+
+    // D6: an arc from 0 to 90 degrees around a complex center.
+    {
+      const angularMode_t savedAm = currentAngularMode;
+      currentAngularMode = amDegree;
+      pgTestSetComplex(REGISTER_T, 200, 150);
+      pgTestWriteLonI(REGISTER_Z, 30);
+      pgTestWriteLonI(REGISTER_Y, 0);
+      pgTestWriteLonI(REGISTER_X, 90);
+      fnGarc(NOPARAM);
+      currentAngularMode = savedAm;
+      if(!pgTestLit(230, 150) || !pgTestLit(200, 180) || !pgTestLit(221, 171)) pgTestFail("D6 the arc misses a point of its quarter");
+      if(pgTestLit(200, 120) || pgTestLit(170, 150) || pgTestLit(179, 129)) pgTestFail("D6 the arc drew outside its quarter");
+      if(lastErrorCode != ERROR_NONE) { pgTestFail("D6 the arc raised an error"); lastErrorCode = ERROR_NONE; }
+    }
+
+    // D7: the clip rectangle stops a line at its edge.
+    pgTestPoints(0, 0, 199, 239);
+    fnGclip(NOPARAM);
+    pgTestPoints(100, 30, 300, 30);
+    fnGline(NOPARAM);
+    if(!pgTestLit(150, 30)) pgTestFail("D7 the clipped line lost a pixel inside the clip rectangle");
+    if(pgTestLit(250, 30)) pgTestFail("D7 the line crossed the clip edge");
+    fnErase(NOPARAM);   // resets the clip to the region
+
+    // D8: far off-screen endpoints draw only the on-screen part, without an
+    // error, up to the 32767 limit. Beyond the limit the command refuses.
+    pgTestWriteLonI(REGISTER_X, 0); pgTestWriteLonI(REGISTER_Y, 30); pgTestWriteLonI(REGISTER_Z, 5000); pgTestWriteLonI(REGISTER_T, 30);
+    fnGline(NOPARAM);
+    if(lastErrorCode != ERROR_NONE) { pgTestFail("D8 a coordinate of 5000 raised an error"); lastErrorCode = ERROR_NONE; }
+    if(!pgTestLit(0, 30) || !pgTestLit(399, 30)) pgTestFail("D8 the line to column 5000 misses an edge pixel");
+    if(pgTestLit(399, 29) || pgTestLit(390, 29) || pgTestLit(0, 31)) pgTestFail("D8 the run spilled into a neighbour row");
+    pgTestWriteLonI(REGISTER_Z, 40000);
+    fnGline(NOPARAM);
+    if(lastErrorCode != ERROR_OUT_OF_RANGE) pgTestFail("D8 a coordinate of 40000 did not raise ERROR_OUT_OF_RANGE");
+    lastErrorCode = ERROR_NONE;
+    if(pgTestLit(200, 31)) pgTestFail("D8 the refused command drew");
+
+    // D9: GMODE 2 twice restores the buffer.
+    {
+      uint8_t before[PG_ROW_BYTES * 3];
+      pgTestPoints(50, 150, 120, 152);
+      memcpy(before, pgRowPtr(PG_ROW_OF(152)), sizeof(before));
+      fnGmode(2);
+      fnGfbox(NOPARAM);
+      if(!pgTestLit(60, 151)) pgTestFail("D9 the first invert did not light a clear pixel");
+      fnGfbox(NOPARAM);
+      if(memcmp(before, pgRowPtr(PG_ROW_OF(152)), sizeof(before)) != 0) pgTestFail("D9 two inverts did not restore the three rows");
+      fnGmode(0);
+    }
+
+    // D10: the direct write and bitblt24 leave the same bytes for 1,000
+    // pseudo-random sites, dirty flags included. Each site is a vertical
+    // two-pixel line (the pixel path) and a horizontal three-pixel run on
+    // another row (the run path).
+    {
+      static uint8_t mine[SCREEN_HEIGHT * PG_ROW_BYTES];
+      uint32_t seed, i;
+      lcd_fill_rect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, LCD_SET_VALUE);
+      for(i = 0; i < SCREEN_HEIGHT; i++) pgRowPtr((int32_t)i)[0] = 0;
+      seed = 12345;
+      for(i = 0; i < 1000; i++) {
+        uint32_t x, y;
+        seed = seed * 1103515245u + 12345u;
+        x = (seed >> 8) % (SCREEN_WIDTH - 4);
+        y = 4 + (seed >> 20) % 210;                       // rows 25 to 235 as y
+        pgTestWriteLonI(REGISTER_X, x); pgTestWriteLonI(REGISTER_Y, y); pgTestWriteLonI(REGISTER_Z, x); pgTestWriteLonI(REGISTER_T, y + 1);
+        fnGline(NOPARAM);                                  // vertical: pgPixel twice
+        pgTestWriteLonI(REGISTER_Y, y - 3); pgTestWriteLonI(REGISTER_Z, x + 2); pgTestWriteLonI(REGISTER_T, y - 3);
+        fnGline(NOPARAM);                                  // horizontal: pgRun once
+      }
+      memcpy(mine, lcd_buffer, sizeof(mine));
+      lcd_fill_rect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, LCD_SET_VALUE);
+      for(i = 0; i < SCREEN_HEIGHT; i++) pgRowPtr((int32_t)i)[0] = 0;
+      seed = 12345;
+      for(i = 0; i < 1000; i++) {
+        uint32_t x, y;
+        seed = seed * 1103515245u + 12345u;
+        x = (seed >> 8) % (SCREEN_WIDTH - 4);
+        y = 4 + (seed >> 20) % 210;
+        setBlackPixel(x, (uint32_t)PG_ROW_OF((int32_t)y));
+        setBlackPixel(x, (uint32_t)PG_ROW_OF((int32_t)y + 1));
+        setBlackPixel(x,     (uint32_t)PG_ROW_OF((int32_t)y - 3));
+        setBlackPixel(x + 1, (uint32_t)PG_ROW_OF((int32_t)y - 3));
+        setBlackPixel(x + 2, (uint32_t)PG_ROW_OF((int32_t)y - 3));
+      }
+      if(memcmp(mine, lcd_buffer, sizeof(mine)) != 0) pgTestFail("D10 the direct write and bitblt24 differ in the buffer");
+    }
+
+    // D11: DISP 2 and TEXTOUT.
+    fnErase(NOPARAM);
+    pgTestSetString(REGISTER_X, "HELLO");
+    fnGdisp(2);
+    {
+      bool_t band = false, above = false;
+      uint32_t x, yy;
+      for(x = 0; x < 100 && !band; x++) for(yy = 40; yy < 60 && !band; yy++) band = lcd_buffer_pixel_on(x, yy);
+      for(x = 0; x < 100 && !above; x++) for(yy = 20; yy < 40 && !above; yy++) above = lcd_buffer_pixel_on(x, yy);
+      if(!band) pgTestFail("D11 DISP 2 did not light its line");
+      if(above) pgTestFail("D11 DISP 2 lit the line above");
+    }
+    pgTestSetString(REGISTER_Z, "Hi");
+    pgTestWriteLonI(REGISTER_X, 50); pgTestWriteLonI(REGISTER_Y, 100);
+    fnGtextout(NOPARAM);
+    {
+      bool_t cell = false;
+      uint32_t x, yy;
+      for(x = 50; x < 80 && !cell; x++) for(yy = 139; yy < 159 && !cell; yy++) cell = lcd_buffer_pixel_on(x, yy);
+      if(!cell) pgTestFail("D11 TEXTOUT did not light its cell");
+    }
+
+    // D12: a string where a coordinate is expected raises the data type error and draws nothing.
+    pgTestSetString(REGISTER_X, "X");
+    pgTestWriteLonI(REGISTER_Y, 200); pgTestWriteLonI(REGISTER_Z, 300); pgTestWriteLonI(REGISTER_T, 200);
+    fnGline(NOPARAM);
+    if(lastErrorCode != ERROR_INVALID_DATA_TYPE_FOR_OP) pgTestFail("D12 a string coordinate did not raise the data type error");
+    lastErrorCode = ERROR_NONE;
+    if(pgTestLit(300, 200)) pgTestFail("D12 the command drew after the error");
+
+    pgCloseView();
+    calcMode = CM_NORMAL;
+    lastErrorCode = ERROR_NONE;
+    pgTestWriteLonI(REGISTER_X, pgTestFailures);
+  }
+
+  // S1: the showcase screen with every 2D command (TESTING.md §6). Writes
+  // the screen to pg_showcase_2d.bmp and prints the count of lit pixels.
+  extern char _ioFileNameOverride[];
+  void pgTestShowcase2D(uint16_t unusedButMandatoryParameter) {
+    uint32_t lit = 0, x, yy;
+    const angularMode_t savedAm = currentAngularMode;
+    pgTestFailures = 0;
+    calcMode = CM_NORMAL;
+    lastErrorCode = ERROR_NONE;
+    fnPview(6);
+    fnGmode(0);
+    currentAngularMode = amDegree;
+    pgTestSetString(REGISTER_X, "program-graphics G2: LINE BOX FBOX CIRCLE FCIRCL ARC TEXTOUT DISP GMODE GCLIP");
+    fnGdisp(1);
+    pgTestPoints(10, 10, 390, 10);   fnGline(NOPARAM);           // a baseline
+    pgTestPoints(10, 10, 10, 195);   fnGline(NOPARAM);           // a left axis
+    pgTestPoints(10, 10, 120, 190);  fnGline(NOPARAM);           // a diagonal
+    pgTestPoints(40, 40, 110, 90);   fnGbox(NOPARAM);            // an outline box
+    pgTestPoints(130, 40, 200, 90);  fnGfbox(NOPARAM);           // a filled box
+    pgTestWriteLonI(REGISTER_X, 250); pgTestWriteLonI(REGISTER_Y, 65); pgTestWriteLonI(REGISTER_Z, 25); fnGcircle(NOPARAM);
+    pgTestWriteLonI(REGISTER_X, 320); pgTestWriteLonI(REGISTER_Y, 65); pgTestWriteLonI(REGISTER_Z, 25); fnGfcircle(NOPARAM);
+    pgTestSetComplex(REGISTER_T, 250, 150); pgTestWriteLonI(REGISTER_Z, 40); pgTestWriteLonI(REGISTER_Y, 30); pgTestWriteLonI(REGISTER_X, 300); fnGarc(NOPARAM);
+    pgTestSetString(REGISTER_Z, "TEXTOUT at 150,130");
+    pgTestWriteLonI(REGISTER_X, 150); pgTestWriteLonI(REGISTER_Y, 130); fnGtextout(NOPARAM);
+    pgTestPoints(300, 110, 390, 180); fnGclip(NOPARAM);          // clip, then a disc centred on the clip corner: a quarter shows
+    pgTestWriteLonI(REGISTER_X, 390); pgTestWriteLonI(REGISTER_Y, 180); pgTestWriteLonI(REGISTER_Z, 45); fnGfcircle(NOPARAM);
+    pgTestPoints(300, 110, 390, 180); fnGbox(NOPARAM);           // the clip rectangle itself, as an outline
+    pgTestPoints(0, 0, 399, 239); fnGclip(NOPARAM);
+    fnGmode(2);
+    pgTestPoints(150, 55, 180, 75); fnGfbox(NOPARAM);            // an inverted window on the filled box
+    fnGmode(0);
+    currentAngularMode = savedAm;
+    for(x = 0; x < SCREEN_WIDTH; x++) for(yy = PG_TOP_ROW; yy < SCREEN_HEIGHT; yy++) if(lcd_buffer_pixel_on(x, yy)) lit++;
+    printf("program-graphics showcase 2D: %u lit pixels in rows 20 to 239\n", lit);
+    if(lit != 10500) pgTestFail("S1 the showcase count of lit pixels moved from the recorded 10500");
+    strcpy(_ioFileNameOverride, "pg_showcase_2d.bmp");
+    fnScreenDump(0);
+    if(lastErrorCode != ERROR_NONE) { pgTestFail("S1 an error was raised while drawing the showcase"); lastErrorCode = ERROR_NONE; }
+    pgCloseView();
+
+    // A second picture: region 2 with the CANVAS softmenu visible below the drawing.
+    calcMode = CM_NORMAL;
+    showSoftmenu(-MNU_CANVAS);
+    fnPview(2);
+    pgTestSetString(REGISTER_X, "PVIEW 2: the register lines are the canvas, the softmenu stays");
+    fnGdisp(1);
+    pgTestPoints(20, 80, 380, 80);   fnGline(NOPARAM);
+    pgTestPoints(40, 90, 120, 140);  fnGbox(NOPARAM);
+    pgTestWriteLonI(REGISTER_X, 200); pgTestWriteLonI(REGISTER_Y, 115); pgTestWriteLonI(REGISTER_Z, 25); fnGfcircle(NOPARAM);
+    pgTestWriteLonI(REGISTER_X, 300); pgTestWriteLonI(REGISTER_Y, 115); pgTestWriteLonI(REGISTER_Z, 25); fnGcircle(NOPARAM);
+    strcpy(_ioFileNameOverride, "pg_show2d_menu.bmp");
+    fnScreenDump(0);
+    pgCloseView();
+    popSoftmenu();
+    calcMode = CM_NORMAL;
     pgTestWriteLonI(REGISTER_X, pgTestFailures);
   }
 #endif // TESTSUITE_BUILD

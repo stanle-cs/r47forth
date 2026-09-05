@@ -36,5 +36,7 @@
   void pgTestBaseline(uint16_t unusedButMandatoryParameter);
   void pgTestView    (uint16_t unusedButMandatoryParameter);
   void pgTestKeys    (uint16_t unusedButMandatoryParameter);
+  void pgTestDraw2D  (uint16_t unusedButMandatoryParameter);
+  void pgTestShowcase2D(uint16_t unusedButMandatoryParameter);
 
 #endif // !PGMGRAPHICS_H

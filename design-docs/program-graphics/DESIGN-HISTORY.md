@@ -145,3 +145,58 @@ Process lessons. Self-contained packets only, for both outside readers.
 A case extracted by a text pattern must be anchored inside its function
 and the fence grepped for the promised identifier. The in-family refusal
 is recorded in the skill with candidate triggers.
+
+## Stage G2: the 2D commands
+
+Ten commands on rows 2450 to 2459: `LINE`, `BOX`, `FBOX`, `CIRCLE`,
+`FCIRCL`, `ARC`, `TEXTOUT`, `DISP`, `GMODE`, `GCLIP`. The kernel writes the
+buffer directly (DESIGN.md §4.1). Two names changed from the plan: `RECT`
+is upstream's rectangular complex mode, so the filled rectangle is `FBOX`;
+and C47 has no alpha register, so `TEXTOUT` takes its string from Z and
+`DISP n` from X.
+
+The arc's full-turn test converts the span to degrees with upstream's
+`convertAngleFromTo`, because the tree has no two-pi constant under the
+name the first draft assumed. The arc's span test is an integer cross
+product per pixel against two direction vectors computed once with the
+WP34S sine and cosine.
+
+The long integer fast path reads the low limb of the register directly,
+with the sign tag, and refuses a value above 32767. The real path costs
+two decimal compares and one decimal to int32.
+
+Speed on the simulator, 100,000 `LINE` steps of 100 pixels through
+`reallyRunFunction`: 47 to 52 ms, that is about 0.5 microseconds per line
+and about 5 nanoseconds per pixel above the dispatch. The `NOP` dispatch
+stays at about 90 nanoseconds per step.
+
+The showcase screen of TESTING.md §6 has 10,500 lit pixels in rows 20 to
+239, recorded as pin S1. A second picture shows region 2 with the `CANVAS`
+softmenu below the drawing.
+
+Firmware size, `make dmcp5r47`, this package alone against no package:
+
+| Section | Without | At G1 | At G2 | Delta of G2 |
+|---|---|---|---|---|
+| flash | 1,090,512 | 1,091,000 | 1,094,552 | +3,552 bytes |
+| ram | 7,548 | 7,564 | 7,600 | +36 bytes (the two real34 limits and their flag) |
+
+Red-first results of the G2 pins on the simulator:
+
+| Mutation | Pins that went red |
+|---|---|
+| The line stepper skips its last pixel | D2, D3, S1 |
+| No right clamp in the run writer | The run writes outside the row and the suite aborts. Red by a crash, not by a pin. The clip law pin D8 checks the neighbour rows; a left-clamp mutation is the next check. |
+| Invert becomes set | D9, S1 |
+| No dirty flag in the pixel writer | D10, after the pin was rebuilt to drive the pixel path on its own rows. The first D10 drew zero-length lines, which the run writer handles, so the pixel writer was never exercised. |
+| No type check in the coordinate reader | D12 |
+| The arc is left out of the showcase | S1 |
+
+With the sources restored the suite was green: solo 13,022 and combined
+13,048 tests.
+
+Two pin lessons. A zero-length line goes through the run writer, so an
+equivalence pin that draws points does not test the pixel writer; the pin
+must draw vertical segments. And a mutation that removes a clamp can red by
+a crash before any assertion runs; the assertion that names the defect is
+the neighbour-row check.

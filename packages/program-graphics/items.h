@@ -2513,6 +2513,16 @@
 #define ITM_phi_m                   2447
 #define ITM_PVIEW                   2448  // program-graphics package: open the canvas view (claims registry: rows 2448-2463)
 #define ITM_ERASE                   2449  // program-graphics package: clear the canvas
+#define ITM_GLINE                   2450  // program-graphics package: LINE
+#define ITM_GBOX                    2451  // program-graphics package: BOX
+#define ITM_GFBOX                   2452  // program-graphics package: FBOX
+#define ITM_GCIRC                   2453  // program-graphics package: CIRCLE
+#define ITM_GFCIRC                  2454  // program-graphics package: FCIRCL
+#define ITM_GARC                    2455  // program-graphics package: ARC
+#define ITM_GTEXT                   2456  // program-graphics package: TEXTOUT
+#define ITM_GDISP                   2457  // program-graphics package: DISP n
+#define ITM_GMODE                   2458  // program-graphics package: GMODE n
+#define ITM_GCLIP                   2459  // program-graphics package: GCLIP
 #define MNU_CANVAS                  2462  // program-graphics package: the canvas softmenu
 #define ITM_2448                    2448
 #define ITM_2449                    2449

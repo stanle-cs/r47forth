@@ -17,3 +17,10 @@ Out: EC=0 RX=LonI:"0"
 Func: pgTestKeys
 In:  FL_ASLIFT=1 RX=LonI:"0"
 Out: EC=0 RX=LonI:"0"
+; Stage G2: the 2D commands (TESTING.md section 4, D1 to D12) and the showcase (section 6).
+Func: pgTestDraw2D
+In:  FL_ASLIFT=1 RX=LonI:"0"
+Out: EC=0 RX=LonI:"0"
+Func: pgTestShowcase2D
+In:  FL_ASLIFT=1 RX=LonI:"0"
+Out: EC=0 RX=LonI:"0"

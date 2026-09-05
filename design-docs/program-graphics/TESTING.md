@@ -54,11 +54,14 @@ The refresh runs first, because `pkg_build` refreshes after its suite.
 | G1 fix wave | `CC` and `.ms` from the keyboard inside the view do nothing and show no bug screen. | Remove the no-op case in `fnKeyCC`. |
 | G1 fix wave | An error inside the view paints its text on canvas line 1 at the next refresh, and the EXIT press that clears it leaves the Z line band untouched. | Remove the guard at the top of `refreshRegisterLine`. |
 | G1 fix wave, limit | Pin K3 drives the EXIT release directly, so it cannot see a press that swallowed EXIT. `keyActionProcessed` is static in keyboard.c. Documented pin limit. | none |
-| G2 | Each primitive: endpoint pixels lit, one pixel outside each edge clear. | Off-by-one in each endpoint. |
-| G2 | Clip: a line that crosses the clip edge stops at the edge. | Remove the clip test in `pgPixel`. |
-| G2 | Off-screen arguments leave the buffer unchanged. | Remove the clamp in `pgRun`. |
-| G2 | `GMODE 2` twice restores the buffer. | Use set instead of flip. |
-| G2 | For 1,000 random pixels, the direct write and `bitblt24` leave the same 52-byte row. | Change the bit order or skip the dirty flag. |
+| G2 | D1 to D6: `LINE`, `BOX`, `FBOX`, `CIRCLE`, `FCIRCL`, `ARC`: endpoint and edge pixels lit, one pixel outside clear, interior clear or filled. | Off-by-one in the endpoint of the line stepper; skip the last row of the fill. |
+| G2 | D7: `GCLIP`: a line that crosses the clip edge stops at the edge. | Remove the clip test in `pgPixel`. |
+| G2 | D8: a line from column 0 to 5000 draws the on-screen part with no error; a coordinate of 40000 raises `ERROR_OUT_OF_RANGE` and draws nothing. | Remove the clamp in `pgRun`; skip the limit check. |
+| G2 | D9: `GMODE 2` twice restores the buffer, for a filled box. | Use set instead of invert in `pgRun`. |
+| G2 | D10: for 1,000 pseudo-random pixels, the direct write and `bitblt24` leave the same bytes in every row, dirty flags included. | Change the bit order or skip the dirty flag. |
+| G2 | D11: `DISP 2` lights pixels in rows 40 to 59 only; `TEXTOUT` at a point lights pixels in its cell. | Shift the line row. |
+| G2 | D12: a string in X for `LINE` raises `ERROR_INVALID_DATA_TYPE_FOR_OP` and draws nothing. | Skip the type check. |
+| G2 | S1: the showcase screen has the recorded count of lit pixels. | Any change to a primitive. |
 | G3 | `XRNG`, `YRNG`: a real maps to the pixel that `screenWindowRatio` gives. | Off-by-one in the scale. |
 | G4 | A unit cube from a fixed eye point projects to fixed pixels, recorded once. | Any change in the projection. |
 | G4 | `WIREFRAME` of a plane draws a mesh with a known pixel count. | Skip the row lines. |
@@ -92,3 +95,12 @@ canvas and compares the count with a value recorded once. A change in any
 primitive moves the count. The BMP files go to Stan as PNG images at the
 end of G2 and G4, and the GTK simulator gives a second screenshot with the
 status bar and the softmenu, through the run-sim skill.
+
+Stan asked on 2026-09-04 for an animation as well: at G4, `pgTestShowcase3D`
+also presses the rotation keys itself through the key functions and the
+item functions (UP and DOWN, then the items BST and SST for f-UP and f-DOWN,
+then RBR and FLGSV for g-UP and g-DOWN, then plus and minus for the
+distance), writes one BMP per step, and pins the lit-pixel count of the
+first and the last frame. The frames become one GIF of the cube and the
+surface rotating about the three axes and zooming, delivered to Stan with
+the still pictures.

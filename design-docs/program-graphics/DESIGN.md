@@ -40,14 +40,14 @@ it. Every command is `US_UNCHANGED` and `SLS_UNCHANGED` (section 8).
 |---|---|---|---|
 | `LINE` | x1 in X, y1 in Y, x2 in Z, y2 in T | Draws a line from point 1 to point 2. | Plus42, RPL |
 | `BOX` | same | Draws the outline of the rectangle with corners at point 1 and point 2. | RPL |
-| `RECT` | same | Fills the rectangle with corners at point 1 and point 2. | Prime |
+| `FBOX` | same | Fills the rectangle with corners at point 1 and point 2. Upstream already has a programmable `RECT`, the rectangular complex mode, so the Prime name is not available. | none |
 | `CIRCLE` | cx in X, cy in Y, r in Z | Draws the outline of a circle. | none |
 | `FCIRCL` | same | Fills a circle. | none |
 | `ARC` | center as a complex number in T, r in Z, a1 in Y, a2 in X | Draws an arc counterclockwise from a1 to a2, in the current angle unit. A span of 360 degrees or more draws a full circle. | RPL |
-| `TEXTOUT` | x in X, y in Y, text in the alpha register | Draws the text with the standard font. The point is the top-left corner of the text cell. | Prime |
-| `DISP n` | n = 1 to 11, a step parameter; text in the alpha register | Draws the alpha register on canvas line n, from the top. | RPL |
+| `TEXTOUT` | x in X, y in Y, a string in Z | Draws the string with the standard font. The point is the top-left corner of the text cell. C47 has no alpha register; strings live in registers. | Prime |
+| `DISP n` | n = 1 to 11, a step parameter; a string in X | Draws the string on canvas line n, from the top. | RPL |
 | `GMODE n` | n = 0, 1, or 2, a step parameter | Sets the draw mode: 0 sets pixels, 1 clears pixels, 2 inverts pixels. | RPL `TLINE`, 42S `GRAMOD` |
-| `GCLIP` | x1 in X, y1 in Y, x2 in Z, y2 in T | Sets the clip rectangle. Later commands draw inside it only. | none |
+| `GCLIP` | x1 in X, y1 in Y, x2 in Z, y2 in T | Sets the clip rectangle. Later commands draw inside it only. `ERASE` and `PVIEW` reset it to the region. | none |
 
 ### 2.3 User coordinates, stage G3
 
@@ -227,6 +227,10 @@ direct write and a `bitblt24` write leave the same bytes in the buffer.
 
 ### 4.2 Clipping law
 
+The clip rectangle in force is the canvas clip while the view is open. While
+the view is closed, the drawing commands still work, as `PIXEL` does, and
+the clip is the whole screen, rows 0 to 239.
+
 Every primitive clips before it touches the buffer. `bitblt24` does not
 check the row. `lcd_fill_rect` drops the whole call when any edge is off
 screen. An off-screen argument is not an error. It draws nothing.
@@ -255,16 +259,17 @@ the octant test in full before implementation.
 
 ### 4.6 Text
 
-`TEXTOUT` calls `showString(alpha, &standardFont, col, row, vmNormal,
-true, true)` after a clip test of the whole text cell. The text is not
-clipped inside the cell. A cell that does not fit the clip rectangle is
-not drawn. `GMODE` does not apply to text. `DISP n` computes the cell:
+`TEXTOUT` draws the string of Z with `showString` and the standard font,
+after it cuts the string at the last glyph that fits between the point and
+the right edge of the clip rectangle. A cell whose top row or bottom row
+is outside the clip rectangle is not drawn. `GMODE` does not apply to
+text. `DISP n` draws the string of X the same way at the cell:
 
     row = 20 + (n - 1) * 20
     col = 1
-    if row + 19 > canvas.clipY1: return
+    if row + 19 > clipY1: return
     clear the band rows row..row+19, cols 0..SCREEN_WIDTH-1 to white
-    showString(alpha, &standardFont, col, row, vmNormal, true, true)
+    showString(the string of X, cut to the width, &standardFont, col, row, vmNormal, true, true)
 
 Region 2 has lines 1 to 7. Region 6 has lines 1 to 11. `n` outside the
 region draws nothing.
@@ -281,8 +286,8 @@ A drawing command reads each coordinate register by type:
 
 | Register type | Meaning | Path |
 |---|---|---|
-| long integer | pixel | The fast path. The value is read as int32. Values outside -32768 to 32767 are clipped to that range. |
-| real | user coordinate through the window (G3). Before G3, a real is a pixel after rounding toward zero. | The slow path. |
+| long integer | pixel | The fast path. The low 32 bits of the first limb are read directly from the register, with the sign tag. A value that does not fit in 31 bits is an `ERROR_OUT_OF_RANGE`. No GMP call. |
+| real | user coordinate through the window (G3). Before G3, a real is a pixel after rounding toward zero. A magnitude of 32768 or more is an `ERROR_OUT_OF_RANGE`. | The slow path: one decimal compare and one decimal to int32. |
 | complex, for `ARC` center and for the two-point form of `LINE` (G3) | two reals | The slow path, twice. |
 | any other type | error `ERROR_INVALID_DATA_TYPE_FOR_OP` | |
 
@@ -312,7 +317,8 @@ when G4 lands.
 |---|---|---|
 | 2448 | `PVIEW` (`TM_VALUE`, `PTP_NUMBER_8`, min 2, max 6) | G1 |
 | 2449 | `ERASE` | G1 |
-| 2450 to 2461 | the 2D commands of §2.2 and §2.3 | G2, G3 |
+| 2450 `LINE`, 2451 `BOX`, 2452 `FBOX`, 2453 `CIRCLE`, 2454 `FCIRCL`, 2455 `ARC`, 2456 `TEXTOUT`, 2457 `DISP`, 2458 `GMODE`, 2459 `GCLIP` | the 2D commands of §2.2 | G2 |
+| 2460 `XRNG`, 2461 `YRNG` | §2.3 | G3 |
 | 2462 | `CANVAS`, the softmenu (`CAT_MENU`, `MNU_CANVAS`) | G1 |
 
 The `CANVAS` menu array is defined after `menu_PFN_3` in `softmenus.c`.

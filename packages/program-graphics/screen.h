@@ -40,6 +40,17 @@
   void       pgCloseView                      (void);
   void       pgRefreshCanvasView              (void);
   uint8_t    pgEffectiveCalcMode              (void);
+  // program-graphics package, stage G2: the 2D drawing commands.
+  void       fnGline                          (uint16_t unusedButMandatoryParameter);
+  void       fnGbox                           (uint16_t unusedButMandatoryParameter);
+  void       fnGfbox                          (uint16_t unusedButMandatoryParameter);
+  void       fnGcircle                        (uint16_t unusedButMandatoryParameter);
+  void       fnGfcircle                       (uint16_t unusedButMandatoryParameter);
+  void       fnGarc                           (uint16_t unusedButMandatoryParameter);
+  void       fnGtextout                       (uint16_t unusedButMandatoryParameter);
+  void       fnGdisp                          (uint16_t line);
+  void       fnGmode                          (uint16_t mode);
+  void       fnGclip                          (uint16_t unusedButMandatoryParameter);
   void       insertAlphaCursor                (uint16_t startAt);
 
   void       drawSinglePixelFullWidthLine     (int y);
