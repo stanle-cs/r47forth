@@ -21,7 +21,7 @@
     uint8_t   region;        // 0 = view closed, else 2 or 6
     uint8_t   prevCalcMode;  // the calcMode to restore on EXIT
     uint8_t   drawMode;      // 0 set, 1 clear, 2 invert
-    uint8_t   reserved;
+    uint8_t   errorShown;    // 1 while an error message is painted on canvas line 1
     int16_t   clipX0, clipY0, clipX1, clipY1;   // screen coordinates, top-left origin, inclusive
     uint32_t  lastRefreshMs;
   } pgCanvas_t;

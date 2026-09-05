@@ -1,5 +1,5 @@
 diff --git a/src/c47/keyboard.c b/src/c47/keyboard.c
-index bc44026016e94a8865b8acc886386341596641c6..6beadae3df2b20a6edd1cd4974688d208f063505 100644
+index bc44026016e94a8865b8acc886386341596641c6..8a4806f72b8be9c751a1ca523247e49629eba326 100644
 --- a/src/c47/keyboard.c
 +++ b/src/c47/keyboard.c
 @@ -687,7 +687,7 @@ static void executeFunction(const char *data, int16_t item_);
@@ -59,13 +59,16 @@ index bc44026016e94a8865b8acc886386341596641c6..6beadae3df2b20a6edd1cd4974688d20
  
        if(calcMode == CM_ASSIGN && itemToBeAssigned != 0 && tamBuffer[0] == 0) {
          assignToKey((char *)data);
-@@ -2763,6 +2779,16 @@ RELEASE_END:
+@@ -2763,6 +2779,19 @@ RELEASE_END:
              break;
            }
  
 +          // program-graphics package: inside the canvas view R/S continues
-+          // the program and every other key does nothing. SNAP falls
-+          // through to its own arm below.
++          // the program and every other key that reaches this arm does
++          // nothing. SNAP falls through to its own arm below. EXIT, ENTER,
++          // BACKSPACE, UP, DOWN and .d have their own case above and run
++          // their key function on the release; each key function has a
++          // case for this mode.
 +          else if(calcMode == CM_GRAPHICS_CANVAS && item != ITM_SNAP) {
 +            if(item == ITM_RS) {
 +              showFunctionNameItem = 0;
@@ -76,7 +79,16 @@ index bc44026016e94a8865b8acc886386341596641c6..6beadae3df2b20a6edd1cd4974688d20
            else if(item == ITM_SNAP) {
              switch(calcMode) { //place modes here which should not work with SNAP
                //case CM_REGISTER_BROWSER:
-@@ -3587,6 +3613,10 @@ void fnKeyEnter(uint16_t unusedButMandatoryParameter) {
+@@ -3407,7 +3436,7 @@ RELEASE_END:
+ 
+ void fnKeyEnter(uint16_t unusedButMandatoryParameter) {
+   doRefreshSoftMenu = true;     //dr
+-    uint8_t effectiveCalcMode = calcMode;
++    uint8_t effectiveCalcMode = pgEffectiveCalcMode();   // program-graphics package: a program step in the canvas view runs as CM_NORMAL
+     if(GRAPHMODE && programRunStop == PGM_RUNNING) {   // a program running under CM_GRAPH or CM_PLOT_STAT (e.g. plot(int) integrand, programmed HPLOT) needs normal ENTER dup, not the empty interactive-graph case
+       effectiveCalcMode = CM_NORMAL;
+     }
+@@ -3587,6 +3616,10 @@ void fnKeyEnter(uint16_t unusedButMandatoryParameter) {
          break;
        }
  
@@ -87,7 +99,7 @@ index bc44026016e94a8865b8acc886386341596641c6..6beadae3df2b20a6edd1cd4974688d20
        default: {
          sprintf(errorMessage, commonBugScreenMessages[bugMsgCalcModeWhileProcKey], "fnKeyEnter", calcMode, "ENTER");
          displayBugScreen(errorMessage);
-@@ -3961,6 +3991,11 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
+@@ -3961,6 +3994,11 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
          break;
        }
  
@@ -99,7 +111,19 @@ index bc44026016e94a8865b8acc886386341596641c6..6beadae3df2b20a6edd1cd4974688d20
        case CM_TIMER: {
          screenUpdatingMode = SCRUPD_AUTO;
          if(lastErrorCode != 0) {
-@@ -4465,6 +4500,10 @@ void fnKeyBackspace(uint16_t unusedButMandatoryParameter) {
+@@ -4177,7 +4215,10 @@ void fnKeyCC(uint16_t complex_Type) {    //JM Using 'unusedButMandatoryParameter
+       temporaryFlagPolar = false;
+     }
+ 
+-    switch(calcMode) {                     //JM
++    switch(pgEffectiveCalcMode()) {                     //JM   // program-graphics package: see fnKeyEnter
++      case CM_GRAPHICS_CANVAS: {   // program-graphics package: no action from the keyboard in the canvas view
++        break;
++      }
+       case CM_NIM: {
+         addItemToNimBuffer(ITM_CC);
+         break;
+@@ -4465,6 +4506,10 @@ void fnKeyBackspace(uint16_t unusedButMandatoryParameter) {
          break;
        }
  
@@ -110,7 +134,7 @@ index bc44026016e94a8865b8acc886386341596641c6..6beadae3df2b20a6edd1cd4974688d20
        default: {
          sprintf(errorMessage, commonBugScreenMessages[bugMsgCalcModeWhileProcKey], "fnKeyBackspace", calcMode, "BACKSPACE");
          displayBugScreen(errorMessage);
-@@ -4685,6 +4724,10 @@ void fnKeyUp(uint16_t unusedButMandatoryParameter) {
+@@ -4685,6 +4730,10 @@ void fnKeyUp(uint16_t unusedButMandatoryParameter) {
          break;
        }
  
@@ -121,7 +145,7 @@ index bc44026016e94a8865b8acc886386341596641c6..6beadae3df2b20a6edd1cd4974688d20
        default: {
          sprintf(errorMessage, commonBugScreenMessages[bugMsgCalcModeWhileProcKey], "fnKeyUp", calcMode, "UP");
          displayBugScreen(errorMessage);
-@@ -4904,6 +4947,10 @@ void fnKeyDown(uint16_t unusedButMandatoryParameter) {
+@@ -4904,6 +4953,10 @@ void fnKeyDown(uint16_t unusedButMandatoryParameter) {
          break;
        }
  
@@ -132,7 +156,16 @@ index bc44026016e94a8865b8acc886386341596641c6..6beadae3df2b20a6edd1cd4974688d20
        default: {
          sprintf(errorMessage, commonBugScreenMessages[bugMsgCalcModeWhileProcKey], "fnKeyDown", calcMode, "DOWN");
          displayBugScreen(errorMessage);
-@@ -4944,6 +4991,10 @@ void fnKeyDotD(uint16_t unusedButMandatoryParameter) {
+@@ -4914,7 +4967,7 @@ void fnKeyDown(uint16_t unusedButMandatoryParameter) {
+ 
+ 
+ void fnKeyDotD(uint16_t unusedButMandatoryParameter) {
+-    switch(calcMode) {
++    switch(pgEffectiveCalcMode()) {   // program-graphics package: see fnKeyEnter
+       case CM_NORMAL: {
+         int32_t flag = getSystemFlag(FLAG_IRFRQ) ? FLAG_IRFRAC : FLAG_FRACT ;
+         if(getSystemFlag(flag)) {
+@@ -4944,6 +4997,10 @@ void fnKeyDotD(uint16_t unusedButMandatoryParameter) {
          break;
        }
  

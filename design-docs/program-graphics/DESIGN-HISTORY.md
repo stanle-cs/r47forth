@@ -116,3 +116,32 @@ before it paints, so a pixel in rows 171 to 239 proves nothing about the
 region clear. The clip row is the observable. And EXIT, ENTER, BACKSPACE,
 UP, DOWN, and .d run their key function on the key release, through the
 item function, so a key pin must drive the release too.
+
+## Audit round 1 on G1, 2026-09-04, and its fix wave
+
+Stan ruled the same evening: one round of bug hunting and one fix wave per
+stage, then the next stage (PLAN §10).
+
+Readers. The in-family runner's eight finder agents were refused at spawn
+by a platform classifier (category "reasoning extraction"); its report
+writer read the range itself and produced five traced findings. Sol (GPT-5)
+read a self-contained lifecycle packet. Gemini 3.1 Pro read a self-contained
+keys packet, after two repository-access forms of the same packet timed
+out with no reply. The report and the packets are in `audit/`.
+
+| Finding | Source | Disposition |
+|---|---|---|
+| EXIT never closes the view | Sol 1 | Packet defect. My extraction matched the ENTER no-op case under the EXIT label. The real case calls `pgCloseView`, pin K3 proves it. Encoded in the packet template as the tenth class. |
+| A program step that calls `calcModeNormal` (CLSTK, CLA) abandons the view and the drawing dies at STOP | Sol 2, report G1R1-2 | Confirmed. Fixed: `calcModeNormal` returns at once in mode 21. Pin K4, red first. |
+| The guard comment over-claims | Sol 3, Gemini 1 | Comment reworded. The keys with their own case have no-op arms. |
+| ENTER and `.d` as program steps inside the view do nothing | report G1R1-1 | Confirmed. Fixed: `pgEffectiveCalcMode()` returns CM_NORMAL for a running program in mode 21, and `fnKeyEnter`, `fnKeyCC`, `fnKeyDotD`, `fnTo_ms` switch on it. Pin K5, red first. New bug class in the catalog. |
+| CC and `.ms` show a bug screen inside the view | report G1R1-3 | Confirmed. The bug-screen defaults are eight, not six. Fixed with two no-op cases. Pin K6, red first. |
+| An error inside the view has no visible message, and the EXIT press paints the Z line over the canvas | report G1R1-4 | Confirmed. Fixed: the canvas case paints the error text on canvas line 1, and `refreshRegisterLine` returns at once in mode 21. Pin K7, red first. |
+| Pin K3 cannot see a press that swallows EXIT | report G1R1-5 | Documented pin limit. `keyActionProcessed` is static. |
+| Shift keys never engage in mode 21, so shifted items are unreachable | Gemini 2 | Documented limit. SNAP is a long press of EXIT on the R47. |
+| A shift state left active before the view traps R/S and EXIT | Gemini 3 | Refuted by the report's trace: the shift state is set only through `commonShiftProcessing`, which excludes mode 21, and it is reset after every resolution. |
+
+Process lessons. Self-contained packets only, for both outside readers.
+A case extracted by a text pattern must be anchored inside its function
+and the fence grepped for the promised identifier. The in-family refusal
+is recorded in the skill with candidate triggers.

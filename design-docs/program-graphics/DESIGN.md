@@ -103,7 +103,7 @@ One static struct in `pgmGraphics.c`. All fields are zero at boot.
       uint8_t   region;        // 0 = view closed, else 2 or 6
       uint8_t   prevCalcMode;  // the calcMode to restore on EXIT
       uint8_t   drawMode;      // GMODE: 0 set, 1 clear, 2 invert
-      uint8_t   reserved;
+      uint8_t   errorShown;    // 1 while an error message is painted on canvas line 1
       int16_t   clipX0, clipY0, clipX1, clipY1;   // screen coordinates, top-left origin, inclusive
       uint32_t  lastRefreshMs;                     // section 8.4
     } pgCanvas_t;
@@ -155,9 +155,15 @@ new region. It does not change `prevCalcMode`.
 | Any other key, direct key path | Ignored. A guard arm in `processKeyAction` before the SNAP arm marks every key except SNAP as processed. `fnKeyEnter`, `fnKeyBackspace`, `fnKeyUp`, `fnKeyDown`, and `fnKeyDotD` have a no-op case for the mode, because their default arm shows a bug screen. |
 | Any softkey, softkey path | Ignored. The package carries the range clause `calcMode < 19 /* package browsers 19-23, claims registry */` on the three softkey functions, byte-identical to the other packages. |
 | `VIEW`, `AVIEW` inside the view | The upstream body sets `temporaryInformation` and calls `refreshScreen`. The rule above paints nothing. The program continues. On EXIT, `temporaryInformation` is reset, so nothing shows later. |
+| A program step whose item function switches on `calcMode`: `ENTER`, `CC`, `.d`, `.ms` | The function runs as in `CM_NORMAL` while a program runs. The package helper `pgEffectiveCalcMode()` returns `CM_NORMAL` when `calcMode` is 21 and `programRunStop` is running, else `calcMode`. The four functions switch on it. From the keyboard, the same keys do nothing. Audit G1 round 1, finding G1R1-1 and G1R1-3. |
+| An error inside the view | Nothing paints at once. The next `refreshScreen` in mode 21 clears canvas line 1 (rows 20 to 39) and writes the error text there. When the error is gone, the next refresh clears the band again. The register line painter `refreshRegisterLine` returns at once in mode 21, so the upstream error line and any other register line never paint over the canvas. Audit G1 round 1, finding G1R1-4. |
+| EXIT with an error pending | Upstream consumes the EXIT press to clear the error. The view stays open. A second EXIT closes it. |
+| Shifted keys, f and g | The shift keys do not engage in mode 21. Shifted items are not reachable from the keyboard in the view. Documented limit. SNAP on the R47 keyboard is a long press of EXIT. |
 | `PAUSE` inside the view | Upstream flushes the buffer once and waits. The canvas stays. |
 | `CLLCD` inside the view | Upstream clears the whole screen, status bar included. The view stays open. The status bar repaints at the next refresh. |
-| Sleep or power off | Upstream repaints on wake. The canvas is lost. The view is closed by `pgResetOnWake()` (G1 decides the hook). Documented limit. |
+| A program step that calls `calcModeNormal()`, such as `CLSTK` or `CLA` | `calcModeNormal` returns at once while the view is open. The view and the drawing stay. The package patches `calcMode.c` for this. |
+| A program step that opens a plot view (`Draw`, `PLTf`, `PLSTAT`, `SCATR`, `HPLOT`) or stores a non-finite plot range | The plot takes the screen and sets its own mode. The canvas is abandoned and the next repaint erases it. By design: the program asked for a plot. `canvas.region` stays set, which is harmless, because every reader of it runs in mode 21 only. |
+| Sleep or power off | Upstream repaints on wake. The canvas is lost. Documented limit. |
 
 ### 3.7 ERASE
 
@@ -347,6 +353,11 @@ the label mechanism of `PGMSLV`.
    release arm after the `CM_NORMAL` R/S block, the EXIT case before
    `CM_TIMER`, and the no-op cases before the `default` arm of each key
    function.
+7. The package also patches `calcMode.c` (the guard in `calcModeNormal`),
+   `c47Extensions/addons.c` (`fnTo_ms`), and one line each in `fnKeyEnter`,
+   `fnKeyCC`, `fnKeyDotD` for `pgEffectiveCalcMode()`, plus the guard at the
+   top of `refreshRegisterLine` in `screen.c`. Each sits clear of the
+   sibling hunks.
 
 ## 8. The speed law
 
@@ -422,6 +433,10 @@ the same call as `PGMSLV` plus `PLTf` use (`execProgram`).
 5. The DMA refresh on the DM42 is untested by the package.
 6. The dirty-flag protocol of the DM42 ROM is assumed from the simulator
    and from upstream's hardware code (section 4.1). Untested by the package.
+7. `RESET` inside the view keeps the view open with a blank canvas. EXIT
+   closes it. A program that opens a plot view abandons the canvas.
+8. Shifted keys are not reachable from the keyboard in the view.
+9. The error message on canvas line 1 covers rows 20 to 39 of the drawing.
 
 ## 11. Test policy
 

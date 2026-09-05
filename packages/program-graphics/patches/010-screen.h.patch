@@ -1,8 +1,8 @@
 diff --git a/src/c47/screen.h b/src/c47/screen.h
-index 1643a2b62d0eaa0c6936bc21d7d563f1d6dab990..dfb35926ff8e7b9080c0e81071ac85b9bf7e8ef3 100644
+index 1643a2b62d0eaa0c6936bc21d7d563f1d6dab990..3a64eddead99c3d3e6a3ee4975fa907de9b792b3 100644
 --- a/src/c47/screen.h
 +++ b/src/c47/screen.h
-@@ -34,6 +34,11 @@
+@@ -34,6 +34,12 @@
    void       fnPixel                          (uint16_t unusedButMandatoryParameter);
    void       fnPoint                          (uint16_t unusedButMandatoryParameter);
    void       fnAGraph                         (uint16_t regist);
@@ -11,6 +11,7 @@ index 1643a2b62d0eaa0c6936bc21d7d563f1d6dab990..dfb35926ff8e7b9080c0e81071ac85b9
 +  void       fnErase                          (uint16_t unusedButMandatoryParameter);
 +  void       pgCloseView                      (void);
 +  void       pgRefreshCanvasView              (void);
++  uint8_t    pgEffectiveCalcMode              (void);
    void       insertAlphaCursor                (uint16_t startAt);
  
    void       drawSinglePixelFullWidthLine     (int y);

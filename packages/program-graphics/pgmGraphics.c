@@ -64,12 +64,32 @@ void fnErase(uint16_t unusedButMandatoryParameter) {
   pgRefreshNow();
 }
 
+// A program step inside the canvas view runs as in CM_NORMAL. From the
+// keyboard the same items do nothing (DESIGN.md §3.6). The item functions
+// that switch on calcMode switch on this value instead.
+uint8_t pgEffectiveCalcMode(void) {
+  if(calcMode == CM_GRAPHICS_CANVAS && programRunStop == PGM_RUNNING) {
+    return CM_NORMAL;
+  }
+  return calcMode;
+}
+
 // The refreshScreen case for the canvas view: the status bar stays live,
-// the softmenu is painted for region 2, nothing else is painted.
+// the softmenu is painted for region 2, an error shows on canvas line 1,
+// nothing else is painted.
 void pgRefreshCanvasView(void) {
   refreshStatusBar();
   if(canvas.region == PG_REGION_REGISTERS) {
     showSoftmenuCurrentPart();
+  }
+  if(lastErrorCode != ERROR_NONE) {
+    lcd_fill_rect(0, PG_TOP_ROW, SCREEN_WIDTH, 20, LCD_SET_VALUE);
+    showString(errorMessageOf(lastErrorCode), &standardFont, 1, PG_TOP_ROW, vmNormal, true, true);
+    canvas.errorShown = 1;
+  }
+  else if(canvas.errorShown) {
+    lcd_fill_rect(0, PG_TOP_ROW, SCREEN_WIDTH, 20, LCD_SET_VALUE);
+    canvas.errorShown = 0;
   }
 }
 
@@ -244,6 +264,67 @@ void pgCloseView(void) {
     if(!lcd_buffer_pixel_on(60, 100))    pgTestFail("K2 a key erased the canvas");
     if(lastErrorCode != ERROR_NONE)      pgTestFail("K2 a key raised an error");
     lastErrorCode = ERROR_NONE;
+
+    // K4: a program step that resets the mode through calcModeNormal, such
+    // as CLSTK, leaves the view open and the drawing intact at the next
+    // repaint (audit G1 round 1, finding S2).
+    runFunction(ITM_CLSTK);
+    if(calcMode != CM_GRAPHICS_CANVAS)   pgTestFail("K4 CLSTK closed the canvas view");
+    screenUpdatingMode = SCRUPD_AUTO;
+    refreshScreen(4);
+    if(!lcd_buffer_pixel_on(60, 100))    pgTestFail("K4 the repaint after CLSTK erased the canvas");
+    lastErrorCode = ERROR_NONE;
+
+    // K5: ENTER as a program step inside the view lifts the stack (audit
+    // G1 round 1, finding G1R1-1).
+    {
+      const uint8_t savedRunStop = programRunStop;
+      longInteger_t li; int32_t y = 0;
+      pgTestWriteLonI(REGISTER_X, 7);
+      pgTestWriteLonI(REGISTER_Y, 3);
+      programRunStop = PGM_RUNNING;
+      runFunction(ITM_ENTER);
+      programRunStop = savedRunStop;
+      if(getRegisterDataType(REGISTER_Y) == dtLongInteger) {
+        convertLongIntegerRegisterToLongInteger(REGISTER_Y, li);
+        longIntegerToInt32(li, y);
+        longIntegerFree(li);
+      }
+      if(y != 7)                         pgTestFail("K5 ENTER as a program step did not copy X into Y");
+      if(calcMode != CM_GRAPHICS_CANVAS) pgTestFail("K5 ENTER as a program step changed the mode");
+    }
+
+    // K6: CC and .ms from the keyboard inside the view do nothing and show
+    // no bug screen (finding G1R1-3).
+    runFunction(ITM_CC);
+    if(calcMode != CM_GRAPHICS_CANVAS)   pgTestFail("K6 CC from the keyboard left the canvas view");
+    runFunction(ITM_ms);
+    if(calcMode != CM_GRAPHICS_CANVAS)   pgTestFail("K6 .ms from the keyboard left the canvas view");
+    lastErrorCode = ERROR_NONE;
+
+    // K7: an error inside the view shows on canvas line 1 at the next
+    // refresh, and the EXIT press that clears it does not paint the Z line
+    // band over the canvas (finding G1R1-4).
+    setBlackPixel(80, 80);
+    fnPview(3);
+    if(lastErrorCode != ERROR_OUT_OF_RANGE) pgTestFail("K7 PVIEW 3 did not raise the error");
+    screenUpdatingMode = SCRUPD_AUTO;
+    refreshScreen(4);
+    {
+      bool_t lit = false;
+      for(uint32_t x = 0; x < SCREEN_WIDTH && !lit; x++) {
+        for(uint32_t yy = PG_TOP_ROW; yy < PG_TOP_ROW + 20 && !lit; yy++) {
+          lit = lcd_buffer_pixel_on(x, yy);
+        }
+      }
+      if(!lit)                           pgTestFail("K7 the error text did not appear on canvas line 1");
+    }
+    if(!lcd_buffer_pixel_on(80, 80))     pgTestFail("K7 the error refresh erased the canvas");
+    processKeyAction(ITM_EXIT1);
+    if(lastErrorCode != ERROR_NONE)      pgTestFail("K7 the EXIT press did not clear the error");
+    if(calcMode != CM_GRAPHICS_CANVAS)   pgTestFail("K7 the EXIT press with an error pending closed the view");
+    if(!lcd_buffer_pixel_on(80, 80))     pgTestFail("K7 the EXIT press painted the Z line over the canvas");
+    if(lcd_buffer_pixel_on(1, PG_TOP_ROW + 10) && canvas.errorShown) pgTestFail("K7 the error band was not cleared");
 
     // K3: EXIT closes the view. The press does nothing for this mode. The
     // release runs the EXIT item, whose function is fnKeyExit.

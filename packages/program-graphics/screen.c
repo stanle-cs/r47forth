@@ -5483,6 +5483,9 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
   }
 
   void refreshRegisterLine(calcRegister_t regist) {
+    if(calcMode == CM_GRAPHICS_CANVAS) {   // program-graphics package: no register line paints over the canvas
+      return;
+    }
     _refreshRegisterLine(regist, !RESTORE_T);
   }
 

@@ -2780,8 +2780,11 @@ RELEASE_END:
           }
 
           // program-graphics package: inside the canvas view R/S continues
-          // the program and every other key does nothing. SNAP falls
-          // through to its own arm below.
+          // the program and every other key that reaches this arm does
+          // nothing. SNAP falls through to its own arm below. EXIT, ENTER,
+          // BACKSPACE, UP, DOWN and .d have their own case above and run
+          // their key function on the release; each key function has a
+          // case for this mode.
           else if(calcMode == CM_GRAPHICS_CANVAS && item != ITM_SNAP) {
             if(item == ITM_RS) {
               showFunctionNameItem = 0;
@@ -3433,7 +3436,7 @@ RELEASE_END:
 
 void fnKeyEnter(uint16_t unusedButMandatoryParameter) {
   doRefreshSoftMenu = true;     //dr
-    uint8_t effectiveCalcMode = calcMode;
+    uint8_t effectiveCalcMode = pgEffectiveCalcMode();   // program-graphics package: a program step in the canvas view runs as CM_NORMAL
     if(GRAPHMODE && programRunStop == PGM_RUNNING) {   // a program running under CM_GRAPH or CM_PLOT_STAT (e.g. plot(int) integrand, programmed HPLOT) needs normal ENTER dup, not the empty interactive-graph case
       effectiveCalcMode = CM_NORMAL;
     }
@@ -4212,7 +4215,10 @@ void fnKeyCC(uint16_t complex_Type) {    //JM Using 'unusedButMandatoryParameter
       temporaryFlagPolar = false;
     }
 
-    switch(calcMode) {                     //JM
+    switch(pgEffectiveCalcMode()) {                     //JM   // program-graphics package: see fnKeyEnter
+      case CM_GRAPHICS_CANVAS: {   // program-graphics package: no action from the keyboard in the canvas view
+        break;
+      }
       case CM_NIM: {
         addItemToNimBuffer(ITM_CC);
         break;
@@ -4961,7 +4967,7 @@ void fnKeyDown(uint16_t unusedButMandatoryParameter) {
 
 
 void fnKeyDotD(uint16_t unusedButMandatoryParameter) {
-    switch(calcMode) {
+    switch(pgEffectiveCalcMode()) {   // program-graphics package: see fnKeyEnter
       case CM_NORMAL: {
         int32_t flag = getSystemFlag(FLAG_IRFRQ) ? FLAG_IRFRAC : FLAG_FRACT ;
         if(getSystemFlag(flag)) {

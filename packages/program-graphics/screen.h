@@ -39,6 +39,7 @@
   void       fnErase                          (uint16_t unusedButMandatoryParameter);
   void       pgCloseView                      (void);
   void       pgRefreshCanvasView              (void);
+  uint8_t    pgEffectiveCalcMode              (void);
   void       insertAlphaCursor                (uint16_t startAt);
 
   void       drawSinglePixelFullWidthLine     (int y);

@@ -298,3 +298,16 @@ comment before the next round. A new reader-pool trap goes into
 amends `CODE_AUDIT.md` and this skill. If a round taught nothing new
 about the process, say so in the report; if it did and nothing was
 encoded, the round is not finished.
+
+## Known platform refusal (2026-09-04)
+
+The in-family runner's eight finder agents were refused at spawn with the
+platform category "reasoning_extraction" ("reverse engineering or
+duplicating model outputs"), synthetic model, no tool use. The finder
+brief names no model. The refusal came with the program-graphics G1
+subject text and the standard dimensions. Not yet diagnosed. Until it is:
+run the outside readers (Gemini, Sol) and the operator's own reading, mark
+the in-family leg as "refused at spawn" in the round report, and try one
+reworded rerun per stage at most. Candidate triggers to test one at a
+time: the words "blind", "family", "reader", "verdict", and the
+structured-output instruction.

@@ -1,0 +1,14 @@
+diff --git a/src/c47/calcMode.c b/src/c47/calcMode.c
+index f296702924d2ea6edfba9b4445e4d71a41ebb0f5..b12a0890ecf2d5baa65253a9283dc07253e23907 100644
+--- a/src/c47/calcMode.c
++++ b/src/c47/calcMode.c
+@@ -41,6 +41,9 @@
+       sprintf(tmp, "^^^^### calcModeNormal");
+       jm_show_comment(tmp);
+     #endif // PC_BUILD
++    if(calcMode == CM_GRAPHICS_CANVAS) {   // program-graphics package: a program step such as CLSTK or CLA leaves the canvas view open; EXIT closes it (DESIGN.md §3.6)
++      return;
++    }
+     calcMode = CM_NORMAL;
+     if(softmenu[softmenuStack[0].softmenuId].menuItem == -MNU_ALPHA) {  //JM
+       popSoftmenu();

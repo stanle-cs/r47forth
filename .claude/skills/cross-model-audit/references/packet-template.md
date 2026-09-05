@@ -121,6 +121,15 @@ finding.
      body is included so other code can be read, say so at its fence:
      "context, not the subject — byte-identical to upstream".
 
+     TENTH CLASS (program-graphics G1, 2026-09-04): if you extract a case or
+     an arm by a TEXT PATTERN, the first match can be a different site that
+     shares the pattern's prefix. A fence labelled "fnKeyExit's case" carried
+     fnKeyEnter's no-op case (same comment prefix, earlier in the file), and
+     the reader reported "EXIT never closes the view" with very high
+     confidence. Anchor the search inside the function (find the function
+     start first), then GREP THE FENCE for the identifier the label promises
+     (pgCloseView was absent from that fence, and one grep would have said so).
+
      NINTH CLASS (round 10): if you cut by LINE RANGE, do not choose the
      range from the comment banner. A design packet took two pieces of one
      long function — the loop that sets a flag and the statement that

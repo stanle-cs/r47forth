@@ -665,3 +665,25 @@ typed text before the base suffix.
 Hunt it at: every reset/teardown helper in a test harness. Enumerate the
 globals the harness's own drivers can write. The helper must restore that
 set, not the set the author remembered.
+
+## A mode that stays live while a program runs (program-graphics G1, 2026-09-04)
+
+A package mode that stays active while a program runs (the canvas view,
+unlike the browsers that stop the world) reaches every item function that
+switches on `calcMode`. An arm written for the interactive key path (a
+no-op case) silently changes program semantics: ENTER stopped lifting the
+stack, CC showed a bug screen. Upstream met the class for CM_GRAPH with an
+`effectiveCalcMode` remap inside the function. Class test: intersect the
+`switch(calcMode)` sites with the programmable items, run each once under
+CM_NORMAL and once under the mode with `programRunStop` running, and
+compare the stack, the flags, and `calcMode` afterwards.
+
+## Split truth of an open view (program-graphics G1, 2026-09-04)
+
+"The view is open" held twice: `calcMode == 21` and `canvas.region != 0`.
+Upstream writes the first half at 44 sites (26 direct assignments plus
+`calcModeNormal`'s 18 callers) and reads neither of the package's. A
+program step such as CLSTK closed the mode and left the region set. Class
+test: for every programmable item that reaches `calcModeNormal()` or
+assigns `calcMode`, run it under the mode and assert the mode survives, or
+assert the documented abandonment for the plot family.

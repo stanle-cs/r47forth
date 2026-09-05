@@ -49,6 +49,11 @@ The refresh runs first, because `pkg_build` refreshes after its suite.
 | G1 | A direct key other than EXIT and R/S in the view changes nothing. The pin presses each key and releases it through its item function. | Remove the no-op case of `fnKeyEnter`, so the release shows a bug screen. |
 | G1 | EXIT restores the previous mode and repaints. The pin drives the press, then the release through `runFunction(ITM_EXIT1)`, as the keyboard does. | Skip the calcMode restore. |
 | G1 | `VIEW` inside the view paints nothing. | Let the mode 21 case call `_refreshNormalScreen`. |
+| G1 fix wave | `CLSTK` inside the view leaves it open and the drawing intact at the next repaint. | Remove the guard in `calcModeNormal`. |
+| G1 fix wave | `ENTER` as a program step inside the view lifts the stack: Y equals X afterwards. | Switch `fnKeyEnter` on `calcMode` instead of `pgEffectiveCalcMode()`. |
+| G1 fix wave | `CC` and `.ms` from the keyboard inside the view do nothing and show no bug screen. | Remove the no-op case in `fnKeyCC`. |
+| G1 fix wave | An error inside the view paints its text on canvas line 1 at the next refresh, and the EXIT press that clears it leaves the Z line band untouched. | Remove the guard at the top of `refreshRegisterLine`. |
+| G1 fix wave, limit | Pin K3 drives the EXIT release directly, so it cannot see a press that swallowed EXIT. `keyActionProcessed` is static in keyboard.c. Documented pin limit. | none |
 | G2 | Each primitive: endpoint pixels lit, one pixel outside each edge clear. | Off-by-one in each endpoint. |
 | G2 | Clip: a line that crosses the clip edge stops at the edge. | Remove the clip test in `pgPixel`. |
 | G2 | Off-screen arguments leave the buffer unchanged. | Remove the clamp in `pgRun`. |
