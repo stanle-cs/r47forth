@@ -24,3 +24,11 @@ Out: EC=0 RX=LonI:"0"
 Func: pgTestShowcase2D
 In:  FL_ASLIFT=1 RX=LonI:"0"
 Out: EC=0 RX=LonI:"0"
+
+Func: pgTestDraw3D
+In:  FL_ASLIFT=1 RX=LonI:"0"
+Out: EC=0 RX=LonI:"0"
+
+Func: pgTestShowcase3D
+In:  FL_ASLIFT=1 RX=LonI:"0"
+Out: EC=0 RX=LonI:"0"

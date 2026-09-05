@@ -10,6 +10,8 @@
 #include "c47.h"
 
 static pgCanvas_t canvas;
+static void pg3dEmpty(void);
+static void pg3dFreeBlock(void);
 
 // The window of §5.2. Zero at boot: no range set, a real is a pixel. Kept
 // apart from pgCanvas_t because the header is read before realType.h.
@@ -36,6 +38,7 @@ static void pgSetRegion(uint8_t region) {
   canvas.clipY0 = PG_TOP_ROW;
   canvas.clipY1 = (region == PG_REGION_REGISTERS) ? PG_REGISTER_BOTTOM_ROW : SCREEN_HEIGHT - 1;
   lcd_fill_rect(0, PG_TOP_ROW, SCREEN_WIDTH, canvas.clipY1 - PG_TOP_ROW + 1, LCD_SET_VALUE);
+  pg3dEmpty();   // §9.2.4: ERASE and PVIEW drop the retained 3D content
 }
 
 // PVIEW n: opens the canvas view over region n (DESIGN.md §3.5).
@@ -113,15 +116,18 @@ void pgCloseView(void) {
   if(calcMode != CM_GRAPHICS_CANVAS) {
     return;
   }
+  pg3dFreeBlock();   // §9.2.4: the retained 3D block goes with the view
   calcMode = canvas.prevCalcMode;
   canvas.region = 0;
-  if(calcMode == CM_AIM) {   // the view took the cursor at PVIEW; alpha input gets it back
-    setSystemFlag(FLAG_ALPHA);
-    cursorEnabled = true;
-  }
   temporaryInformation = TI_NO_INFO;
   screenUpdatingMode = SCRUPD_AUTO;
+  if(calcMode == CM_AIM) {   // the view took the cursor at PVIEW; alpha input gets it back
+    setSystemFlag(FLAG_ALPHA);
+  }
   refreshScreen(197);
+  if(calcMode == CM_AIM) {   // after the refresh, which can take the cursor away
+    cursorEnabled = true;
+  }
 }
 
 
@@ -686,7 +692,7 @@ static bool_t pgStringCut(calcRegister_t regist, uint32_t width) {
   n = pgGlyphBoundary(s, n);
   memcpy(tmpString, s, n);
   tmpString[n] = 0;
-  while(tmpString[0] != 0 && stringWidth(tmpString, &standardFont, true, true) > width) {
+  while(tmpString[0] != 0 && (uint32_t)stringWidth(tmpString, &standardFont, true, true) > width) {
     // remove the last glyph: a byte at or above 0x80 starts a two-byte
     // glyph, and the boundary cut above guarantees a whole last glyph
     size_t i = 0, last = 0;
@@ -768,6 +774,620 @@ void fnGclip(uint16_t unusedButMandatoryParameter) {
   }
   canvas.clipX0 = (int16_t)x0; canvas.clipY0 = (int16_t)r0;
   canvas.clipX1 = (int16_t)x1; canvas.clipY1 = (int16_t)r1;
+}
+
+
+// ---------------------------------------------------------------------------
+// Stage G4: 3D (DESIGN.md §9). The state, the retained block, the
+// projection, the keys, and the redraw.
+// ---------------------------------------------------------------------------
+
+#define PG3D_BLOCK_BYTES    2048
+#define PG3D_BLOCKS          512   // TO_BLOCKS(2048)
+#define PG3D_HEADER_BYTES     64
+#define PG3D_PAYLOAD_BYTES  1984
+#define PG3D_LINE_BYTES        6
+#define PG3D_MAX_LINES       330
+#define PG3D_STEPS           254   // byte values 0 to 254 span a range
+#define PG3D_HOLE            255   // a missing sample
+#define PG3D_NOPIX        -32768   // a projected point that is not drawable
+
+typedef struct {
+  float    eyeX, eyeY, eyeZ;
+  float    xlo, xhi, ylo, yhi, zlo, zhi;
+  float    curX, curY, curZ;
+  uint8_t  numX, numY;
+  uint8_t  haveCur;
+  uint8_t  angX, angY, angZ;   // step counts, 0 to 35, one step is 10 degrees
+  int8_t   zoomStep;           // -8 to 8
+  uint8_t  reserved;
+  uint8_t *block;              // the retained block, NULL when none
+} pg3d_t;
+
+typedef struct {
+  uint8_t  numX, numY;     // the grid, 0 = none
+  uint8_t  gridValid;      // 1 when every grid byte came from a complete run
+  uint8_t  frozen;         // 1 after the first record
+  uint16_t lineCount;
+  uint16_t label;          // the label of the last WIREFRAME, 0 = none
+  float    xlo, xhi, ylo, yhi, zlo, zhi;
+  float    zRecLo, zRecHi; // the z range the grid bytes span
+  float    eyeX, eyeY, eyeZ;
+  uint8_t  reserved[12];
+} pg3dHeader_t;
+
+typedef struct {
+  float eyeX, eyeY, eyeZ;
+  float xlo, xhi, ylo, yhi, zlo, zhi;
+  float zRecLo, zRecHi;
+} pg3dView_t;
+
+typedef struct {
+  pg3dView_t v;
+  float      M[9];
+  float      cx, cy, cz;
+  float      eyeYz;
+  float      eps;
+  float      wxmin, wxs, wymin, wys;
+} pg3dSetup_t;
+
+typedef struct { int16_t col, row; } pg3dPix_t;
+
+static pg3d_t   pg3d;
+static uint16_t pg3dResetCount;
+static uint32_t pg3dRunCount;
+static uint16_t pg3dLastPointError;
+
+#define PG3D_HDR() ((pg3dHeader_t *)pg3d.block)
+#define PG3D_GRID() (pg3d.block + PG3D_HEADER_BYTES)
+
+// The reset hook: the pool is rebuilt, so the block is forgotten without a
+// free, and the HP VPAR defaults return (§9.1.1).
+void pgReset(void) {
+  pg3d.block = NULL;
+  pg3dResetCount++;
+  pg3d.eyeX = 0.0f; pg3d.eyeY = -3.0f; pg3d.eyeZ = 0.0f;
+  pg3d.xlo = pg3d.ylo = pg3d.zlo = -1.0f;
+  pg3d.xhi = pg3d.yhi = pg3d.zhi = 1.0f;
+  pg3d.numX = 10; pg3d.numY = 8;
+  pg3d.curX = pg3d.curY = pg3d.curZ = 0.0f; pg3d.haveCur = 0;
+  pg3d.angX = pg3d.angY = pg3d.angZ = 0; pg3d.zoomStep = 0;
+  pgWindow.set = 0;
+}
+
+static uint32_t pg3dFreeBytes(const pg3dHeader_t *h) {
+  uint32_t used = (uint32_t)h->numX * h->numY + PG3D_LINE_BYTES * (uint32_t)h->lineCount;
+  return used > PG3D_PAYLOAD_BYTES ? 0 : PG3D_PAYLOAD_BYTES - used;
+}
+
+static uint8_t pg3dEncode(float v, float lo, float hi) {
+  float t;
+  if(v != v || v - v != 0.0f) return PG3D_HOLE;
+  t = (v - lo) * (254.0f / (hi - lo));
+  if(t <= 0.0f) return 0;
+  if(t >= 254.0f) return 254;
+  return (uint8_t)(t + 0.5f);
+}
+
+static float pg3dDecode(uint8_t b, float lo, float hi) {
+  return lo + (float)b * ((hi - lo) / 254.0f);
+}
+
+// The block: allocated by the first 3D command inside the view (§9.2.4).
+static bool_t pg3dEnsure(void) {
+  if(canvas.region == 0) return true;
+  if(pg3d.block != NULL) return true;
+  pg3d.block = allocC47Blocks(PG3D_BLOCKS);
+  if(pg3d.block == NULL) {
+    displayCalcErrorMessage(ERROR_RAM_FULL, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+    return false;
+  }
+  memset(pg3d.block, 0, PG3D_BLOCK_BYTES);
+  return true;
+}
+
+static void pg3dEmpty(void) {   // content gone, allocation kept
+  if(pg3d.block == NULL) return;
+  memset(pg3d.block, 0, PG3D_HEADER_BYTES);
+  pg3d.haveCur = 0;
+}
+
+static void pg3dFreeBlock(void) {
+  freeC47Blocks(pg3d.block, PG3D_BLOCKS);
+  pg3d.block = NULL;
+  pg3d.haveCur = 0;
+}
+
+static bool_t pg3dViewValid(const pg3dView_t *v) {
+  return v->xlo < v->xhi && v->ylo < v->yhi && v->zlo < v->zhi && v->eyeY < v->ylo;
+}
+
+// The frozen view (§9.2.5): the header keeps the volume and the eye of the
+// content it stores from the first record on.
+static bool_t pg3dRecordView(pg3dView_t *out) {
+  pg3dHeader_t *h = (pg3d.block != NULL) ? PG3D_HDR() : NULL;
+  if(h != NULL && h->frozen) {
+    out->eyeX = h->eyeX; out->eyeY = h->eyeY; out->eyeZ = h->eyeZ;
+    out->xlo = h->xlo; out->xhi = h->xhi; out->ylo = h->ylo; out->yhi = h->yhi; out->zlo = h->zlo; out->zhi = h->zhi;
+    out->zRecLo = h->zRecLo; out->zRecHi = h->zRecHi;
+    return true;
+  }
+  out->eyeX = pg3d.eyeX; out->eyeY = pg3d.eyeY; out->eyeZ = pg3d.eyeZ;
+  out->xlo = pg3d.xlo; out->xhi = pg3d.xhi; out->ylo = pg3d.ylo; out->yhi = pg3d.yhi; out->zlo = pg3d.zlo; out->zhi = pg3d.zhi;
+  out->zRecLo = pg3d.zlo; out->zRecHi = pg3d.zhi;
+  if(!pg3dViewValid(out)) {
+    displayCalcErrorMessage(ERROR_ARG_EXCEEDS_FUNCTION_DOMAIN, ERR_REGISTER_LINE, REGISTER_X);
+    return false;
+  }
+  if(h != NULL) {
+    h->eyeX = out->eyeX; h->eyeY = out->eyeY; h->eyeZ = out->eyeZ;
+    h->xlo = out->xlo; h->xhi = out->xhi; h->ylo = out->ylo; h->yhi = out->yhi; h->zlo = out->zlo; h->zhi = out->zhi;
+    h->zRecLo = out->zRecLo; h->zRecHi = out->zRecHi;
+    h->frozen = 1;
+  }
+  return true;
+}
+
+// The rotation (§9.3.2): integer step counts, a 36-entry sine table.
+static const float pg3dSin[36] = {
+  0.0f, 0.173648178f, 0.342020143f, 0.5f, 0.64278761f, 0.766044443f,
+  0.866025404f, 0.939692621f, 0.984807753f, 1.0f, 0.984807753f, 0.939692621f,
+  0.866025404f, 0.766044443f, 0.64278761f, 0.5f, 0.342020143f, 0.173648178f,
+  0.0f, -0.173648178f, -0.342020143f, -0.5f, -0.64278761f, -0.766044443f,
+  -0.866025404f, -0.939692621f, -0.984807753f, -1.0f, -0.984807753f, -0.939692621f,
+  -0.866025404f, -0.766044443f, -0.64278761f, -0.5f, -0.342020143f, -0.173648178f
+};
+#define PG3D_SIN(k) pg3dSin[(k) % 36]
+#define PG3D_COS(k) pg3dSin[((k) + 9) % 36]
+
+static const float pg3dZoom[17] = {   // 1.25 to the power k, k from -8 to 8
+  0.16777216f, 0.2097152f, 0.262144f, 0.32768f, 0.4096f, 0.512f, 0.64f, 0.8f,
+  1.0f, 1.25f, 1.5625f, 1.953125f, 2.44140625f, 3.0517578125f,
+  3.814697265625f, 4.76837158203125f, 5.9604644775390625f
+};
+
+static void pg3dMul3(const float *A, const float *B, float *out) {   // out = A * B, row major
+  int i, j, k;
+  for(i = 0; i < 3; i++) for(j = 0; j < 3; j++) {
+    float s = 0.0f;
+    for(k = 0; k < 3; k++) s += A[i * 3 + k] * B[k * 3 + j];
+    out[i * 3 + j] = s;
+  }
+}
+
+static void pg3dMatrix(float *M, uint8_t ax, uint8_t ay, uint8_t az) {
+  float sx = PG3D_SIN(ax), cx = PG3D_COS(ax), sy = PG3D_SIN(ay), cy = PG3D_COS(ay), sz = PG3D_SIN(az), cz = PG3D_COS(az);
+  float A[9] = { 1, 0, 0,  0, cx, -sx,  0, sx, cx };
+  float B[9] = { cy, 0, sy,  0, 1, 0,  -sy, 0, cy };
+  float C[9] = { cz, -sz, 0,  sz, cz, 0,  0, 0, 1 };
+  float T[9];
+  pg3dMul3(B, A, T);
+  pg3dMul3(C, T, M);
+}
+
+static float pg3dReal34ToFloat(const real34_t *r34) {
+  real_t r; float f;
+  real34ToReal(r34, &r);
+  realToFloat(&r, &f);
+  return f;
+}
+
+static void pg3dSetup(pg3dSetup_t *s, const pg3dView_t *view) {
+  s->v = *view;
+  pg3dMatrix(s->M, pg3d.angX, pg3d.angY, pg3d.angZ);
+  s->cx = (view->xlo + view->xhi) * 0.5f; s->cy = (view->ylo + view->yhi) * 0.5f; s->cz = (view->zlo + view->zhi) * 0.5f;
+  s->eyeYz = view->ylo - (view->ylo - view->eyeY) / pg3dZoom[pg3d.zoomStep + 8];
+  s->eps = (view->yhi - view->ylo) * (1.0f / 1024.0f);
+  if(pgWindow.set & 1) {
+    s->wxmin = pg3dReal34ToFloat(&pgWindow.xmin);
+    s->wxs = 399.0f / (pg3dReal34ToFloat(&pgWindow.xmax) - s->wxmin);
+  }
+  else { s->wxmin = 0.0f; s->wxs = 1.0f; }
+  if(pgWindow.set & 2) {
+    s->wymin = pg3dReal34ToFloat(&pgWindow.ymin);
+    s->wys = 239.0f / (pg3dReal34ToFloat(&pgWindow.ymax) - s->wymin);
+  }
+  else { s->wymin = 0.0f; s->wys = 1.0f; }
+}
+
+static int32_t pg3dRound(float f) {   // round half up, clamped, no libm
+  if(!(f > -32000.0f)) f = -32000.0f;
+  if(f > 32000.0f) f = 32000.0f;
+  return (int32_t)(f + 32768.5f) - 32768;
+}
+
+// One point through the rotation, the perspective, and the window (§9.3.5).
+static bool_t pg3dProject(const pg3dSetup_t *s, float x, float y, float z, int32_t *col, int32_t *row) {
+  float px = x - s->cx, py = y - s->cy, pz = z - s->cz;
+  float rx = s->M[0] * px + s->M[1] * py + s->M[2] * pz + s->cx;
+  float ry = s->M[3] * px + s->M[4] * py + s->M[5] * pz + s->cy;
+  float rz = s->M[6] * px + s->M[7] * py + s->M[8] * pz + s->cz;
+  float dy = ry - s->eyeYz, inv, u, v;
+  if(!(dy >= s->eps)) return false;   // nearer than eps is not drawable; eps itself is
+  inv = 1.0f / dy;
+  u = s->v.eyeX + (rx - s->v.eyeX) * inv;
+  v = s->v.eyeZ + (rz - s->v.eyeZ) * inv;
+  *col = pg3dRound((u - s->wxmin) * s->wxs);
+  *row = SCREEN_HEIGHT - 1 - pg3dRound((v - s->wymin) * s->wys);
+  if(*row > 32000) *row = 32000;     // the clamp holds after the row flip as well
+  if(*row < -32000) *row = -32000;
+  return true;
+}
+
+static void pg3dDrawRecord(const pg3dSetup_t *s, const uint8_t *rec, const pgRect_t *clip) {
+  float x0 = pg3dDecode(rec[0], s->v.xlo, s->v.xhi), y0 = pg3dDecode(rec[1], s->v.ylo, s->v.yhi), z0 = pg3dDecode(rec[2], s->v.zlo, s->v.zhi);
+  float x1 = pg3dDecode(rec[3], s->v.xlo, s->v.xhi), y1 = pg3dDecode(rec[4], s->v.ylo, s->v.yhi), z1 = pg3dDecode(rec[5], s->v.zlo, s->v.zhi);
+  int32_t c0, r0, c1, r1;
+  if(pg3dProject(s, x0, y0, z0, &c0, &r0) && pg3dProject(s, x1, y1, z1, &c1, &r1)) {
+    pgLine(clip, c0, r0, c1, r1);
+  }
+}
+
+// One mesh point: the lines to the previous column and the previous row (§9.4.5).
+static void pg3dMeshPoint(const pg3dSetup_t *s, pg3dPix_t *rows, uint32_t numX, uint32_t i, uint32_t j, float x, float y, float z, const pgRect_t *clip) {
+  pg3dPix_t *cur = rows + (j & 1) * numX, *prev = rows + ((j + 1) & 1) * numX;
+  int32_t col = 0, row = 0;
+  bool_t ok = (z == z) && pg3dProject(s, x, y, z, &col, &row);
+  cur[i].col = ok ? (int16_t)col : PG3D_NOPIX; cur[i].row = ok ? (int16_t)row : 0;
+  if(!ok) return;
+  if(i > 0 && cur[i - 1].col != PG3D_NOPIX) pgLine(clip, cur[i - 1].col, cur[i - 1].row, col, row);
+  if(j > 0 && prev[i].col != PG3D_NOPIX)    pgLine(clip, prev[i].col, prev[i].row, col, row);
+}
+
+// ---- WIREFRAME (§9.4) ----
+
+#define PG3D_RUN_OK       0
+#define PG3D_RUN_ABORTED  1
+#define PG3D_RUN_ALLHOLES 2
+
+// One sample: the label runs with X = x, Y = y, Z = x, T = y and leaves z in X.
+static float pg3dSample(uint16_t label, float x, float y, uint16_t *err) {
+  real_t r; float z;
+  convertDoubleToReal34Register((double)y, REGISTER_T);
+  convertDoubleToReal34Register((double)x, REGISTER_Z);
+  convertDoubleToReal34Register((double)y, REGISTER_Y);
+  convertDoubleToReal34Register((double)x, REGISTER_X);
+  dynamicMenuItem = -1;
+  pg3dRunCount++;
+  execProgram(label);
+  if(lastErrorCode != ERROR_NONE) {
+    *err = lastErrorCode;
+    if(lastErrorCode != ERROR_SOLVER_ABORT) lastErrorCode = ERROR_NONE;
+    return 0.0f / 0.0f;
+  }
+  fnToReal(NOPARAM);
+  if(lastErrorCode != ERROR_NONE) {
+    *err = lastErrorCode; lastErrorCode = ERROR_NONE;
+    return 0.0f / 0.0f;
+  }
+  real34ToReal(REGISTER_REAL34_DATA(REGISTER_X), &r);
+  realToFloat(&r, &z);
+  *err = ERROR_NONE;
+  return z;
+}
+
+// The grid loop (§9.4.3): records the bytes when retain, draws when draw.
+static int pg3dRunGrid(const pg3dSetup_t *s, pg3dHeader_t *h, pg3dPix_t *rows, uint32_t numX, uint32_t numY, bool_t retain, uint16_t label, bool_t draw, const pgRect_t *clip) {
+  uint32_t i, j, holes = 0;
+  pg3dLastPointError = ERROR_NONE;
+  for(j = 0; j < numY; j++) {
+    float y = s->v.ylo + (float)j * ((s->v.yhi - s->v.ylo) / (float)(numY - 1));
+    for(i = 0; i < numX; i++) {
+      float x = s->v.xlo + (float)i * ((s->v.xhi - s->v.xlo) / (float)(numX - 1));
+      float z; uint16_t err; uint8_t b;
+      if(lastErrorCode == ERROR_SOLVER_ABORT || programRunStop == PGM_WAITING || exitKeyWaiting()) {
+        lastErrorCode = engineNestingWasRefused ? ERROR_NESTING_TOO_DEEP : ERROR_SOLVER_ABORT;
+        if(programRunStop == PGM_RUNNING) programRunStop = PGM_WAITING;
+        return PG3D_RUN_ABORTED;
+      }
+      z = pg3dSample(label, x, y, &err);
+      if(err != ERROR_NONE) { holes++; pg3dLastPointError = err; }
+      if(pg3d.block == NULL || (h != NULL && h->frozen == 0)) retain = false;   // the body emptied or reset the block
+      b = pg3dEncode(z, s->v.zRecLo, s->v.zRecHi);
+      if(retain) PG3D_GRID()[j * numX + i] = b;
+      if(draw) {
+        float zq = (b == PG3D_HOLE) ? (0.0f / 0.0f) : pg3dDecode(b, s->v.zRecLo, s->v.zRecHi);
+        pg3dMeshPoint(s, rows, numX, i, j, x, y, zq, clip);
+      }
+    }
+    if(draw) pgRefreshMaybe();
+  }
+  if(lastErrorCode == ERROR_SOLVER_ABORT) return PG3D_RUN_ABORTED;
+  if(holes == numX * numY) return PG3D_RUN_ALLHOLES;
+  return PG3D_RUN_OK;
+}
+
+// The engine protocol around a run: the shape of the sum engine and the
+// plot engine (sumprod.c 76-123, graph.c 2935-2936, solve.c 233-248).
+typedef struct {
+  uint16_t program, local, resets;
+  uint8_t *step;
+} pg3dEngineSave_t;
+
+static void pg3dEngineEnter(pg3dEngineSave_t *sv) {
+  currentKeyCode = 255;
+  saveForUndo();
+  ++engineNestingDepth;
+  ++plotEngineActive;
+  ++currentSolverNestingDepth;
+  setSystemFlag(FLAG_SOLVING);
+  sv->program = currentProgramNumber;
+  sv->local = currentLocalStepNumber;
+  sv->step = currentStep;
+  sv->resets = pg3dResetCount;
+}
+
+static void pg3dEngineLeave(const pg3dEngineSave_t *sv) {
+  currentProgramNumber = sv->program;
+  currentLocalStepNumber = sv->local;
+  currentStep = sv->step;
+  if(--currentSolverNestingDepth == 0) clearSystemFlag(FLAG_SOLVING);
+  --plotEngineActive;
+  --engineNestingDepth;
+  temporaryInformation = TI_NO_INFO;
+  fnUndo(0);   // the undo image is consumed here, as after PLTf; nothing re-arms it
+}
+
+void fnWireframe(uint16_t label) {
+  pg3dHeader_t *h;
+  pg3dView_t view;
+  pg3dSetup_t s;
+  pgRect_t clip;
+  pg3dPix_t *rows;
+  pg3dEngineSave_t sv;
+  uint32_t numX, numY;
+  bool_t retain;
+  int result;
+  if(REGISTER_X <= label && label <= REGISTER_T) {   // the shape of _checkArgument in sumprod.c
+    char buf[2];
+    buf[0] = letteredRegisterName(label); buf[1] = 0;
+    label = findNamedLabel(buf, GLOBAL_LABELS);
+    if(label == INVALID_VARIABLE) {
+      displayCalcErrorMessage(ERROR_LABEL_NOT_FOUND, ERR_REGISTER_LINE, REGISTER_X);
+      return;
+    }
+  }
+  else if(!(FIRST_LABEL <= label && label <= LAST_LABEL)) {
+    displayCalcErrorMessage(ERROR_OUT_OF_RANGE, ERR_REGISTER_LINE, REGISTER_X);
+    return;
+  }
+  if(engineNestingRefused(true)) return;
+  if(!pg3dEnsure()) return;
+  if(!pg3dRecordView(&view)) return;
+  numX = pg3d.numX; numY = pg3d.numY;
+  h = (pg3d.block != NULL) ? PG3D_HDR() : NULL;
+  if(h != NULL) {
+    h->gridValid = 0; h->numX = 0; h->numY = 0;
+    retain = (numX * numY <= pg3dFreeBytes(h));
+    if(retain) { h->numX = (uint8_t)numX; h->numY = (uint8_t)numY; }
+  }
+  else {
+    retain = false;
+  }
+  rows = allocC47Blocks(TO_BLOCKS(2 * numX * sizeof(pg3dPix_t)));
+  if(rows == NULL) {
+    displayCalcErrorMessage(ERROR_RAM_FULL, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+    return;
+  }
+  pg3dEngineEnter(&sv);
+  pg3dSetup(&s, &view);
+  pgClipNow(&clip);
+  result = pg3dRunGrid(&s, h, rows, numX, numY, retain, label, true, &clip);
+  if(pg3dResetCount == sv.resets) freeC47Blocks(rows, TO_BLOCKS(2 * numX * sizeof(pg3dPix_t)));
+  pg3dEngineLeave(&sv);
+  h = (pg3d.block != NULL) ? PG3D_HDR() : NULL;
+  if(result == PG3D_RUN_ALLHOLES) {
+    displayCalcErrorMessage(pg3dLastPointError, ERR_REGISTER_LINE, REGISTER_X);
+  }
+  else if(result == PG3D_RUN_OK && retain && h != NULL && h->frozen && h->numX == numX && h->numY == numY) {   // a body that emptied the block leaves no valid grid
+    h->gridValid = 1; h->label = label;
+  }
+  pgRefreshNow();
+}
+
+// ---- the setting commands, PT3D and LINE3D (§9.5) ----
+
+static bool_t pg3dReadFloat(calcRegister_t regist, float *f) {
+  real_t r;
+  switch(getRegisterDataType(regist)) {
+    case dtLongInteger: convertLongIntegerRegisterToReal(regist, &r, &ctxtReal39); break;
+    case dtReal34:
+      if(real34IsNaN(REGISTER_REAL34_DATA(regist)) || real34IsInfinite(REGISTER_REAL34_DATA(regist))) { pgError(ERROR_OUT_OF_RANGE); return false; }
+      real34ToReal(REGISTER_REAL34_DATA(regist), &r);
+      break;
+    default: pgError(ERROR_INVALID_DATA_TYPE_FOR_OP); return false;
+  }
+  realToFloat(&r, f);
+  if(*f - *f != 0.0f) { pgError(ERROR_OUT_OF_RANGE); return false; }
+  return true;
+}
+
+static bool_t pg3dReadPoint(float *x, float *y, float *z) {   // x in Z, y in Y, z in X
+  return pg3dReadFloat(REGISTER_Z, x) && pg3dReadFloat(REGISTER_Y, y) && pg3dReadFloat(REGISTER_X, z);
+}
+
+static bool_t pg3dReadCount(uint8_t *n) {   // an integer from 2 to 100 in X
+  real_t r; int32_t v; bool_t err = false;
+  switch(getRegisterDataType(REGISTER_X)) {
+    case dtLongInteger: convertLongIntegerRegisterToReal(REGISTER_X, &r, &ctxtReal39); break;
+    case dtReal34:      real34ToReal(REGISTER_REAL34_DATA(REGISTER_X), &r); break;
+    default: pgError(ERROR_INVALID_DATA_TYPE_FOR_OP); return false;
+  }
+  v = realToInt32C47(&r, &err);
+  if(err || v < 2 || v > 100 || !realIsAnInteger(&r)) { pgError(ERROR_OUT_OF_RANGE); return false; }
+  *n = (uint8_t)v;
+  return true;
+}
+
+static void pg3dRange(float *lo, float *hi) {   // low in Y, high in X
+  float a, b;
+  if(!pg3dReadFloat(REGISTER_Y, &a) || !pg3dReadFloat(REGISTER_X, &b)) return;
+  if(!(a < b) || !((b - a) - (b - a) == 0.0f)) { pgError(ERROR_ARG_EXCEEDS_FUNCTION_DOMAIN); return; }   // the span must be a finite positive float
+  *lo = a; *hi = b;
+}
+
+void fnEyept(uint16_t unusedButMandatoryParameter) {
+  float x, y, z;
+  if(!pg3dEnsure()) return;
+  if(!pg3dReadPoint(&x, &y, &z)) return;
+  pg3d.eyeX = x; pg3d.eyeY = y; pg3d.eyeZ = z;
+}
+void fnXvol(uint16_t unusedButMandatoryParameter) { if(pg3dEnsure()) pg3dRange(&pg3d.xlo, &pg3d.xhi); }
+void fnYvol(uint16_t unusedButMandatoryParameter) { if(pg3dEnsure()) pg3dRange(&pg3d.ylo, &pg3d.yhi); }
+void fnZvol(uint16_t unusedButMandatoryParameter) { if(pg3dEnsure()) pg3dRange(&pg3d.zlo, &pg3d.zhi); }
+void fnNumx(uint16_t unusedButMandatoryParameter) { uint8_t n; if(pg3dEnsure() && pg3dReadCount(&n)) pg3d.numX = n; }
+void fnNumy(uint16_t unusedButMandatoryParameter) { uint8_t n; if(pg3dEnsure() && pg3dReadCount(&n)) pg3d.numY = n; }
+
+void fnPt3d(uint16_t unusedButMandatoryParameter) {
+  float x, y, z;
+  if(!pg3dEnsure()) return;
+  if(!pg3dReadPoint(&x, &y, &z)) return;
+  pg3d.curX = x; pg3d.curY = y; pg3d.curZ = z; pg3d.haveCur = 1;
+}
+
+static float pg3dClamp(float v, float lo, float hi) { return v < lo ? lo : (v > hi ? hi : v); }
+
+void fnLine3d(uint16_t unusedButMandatoryParameter) {
+  float x, y, z;
+  pg3dView_t view;
+  pg3dSetup_t s;
+  pgRect_t clip;
+  pg3dHeader_t *h;
+  uint8_t rec[6];
+  if(!pg3dEnsure()) return;
+  if(!pg3dReadPoint(&x, &y, &z)) return;
+  if(!pg3d.haveCur) {
+    pg3d.curX = x; pg3d.curY = y; pg3d.curZ = z; pg3d.haveCur = 1;
+    return;
+  }
+  if(!pg3dRecordView(&view)) return;
+  rec[0] = pg3dEncode(pg3dClamp(pg3d.curX, view.xlo, view.xhi), view.xlo, view.xhi);
+  rec[1] = pg3dEncode(pg3dClamp(pg3d.curY, view.ylo, view.yhi), view.ylo, view.yhi);
+  rec[2] = pg3dEncode(pg3dClamp(pg3d.curZ, view.zlo, view.zhi), view.zlo, view.zhi);
+  rec[3] = pg3dEncode(pg3dClamp(x, view.xlo, view.xhi), view.xlo, view.xhi);
+  rec[4] = pg3dEncode(pg3dClamp(y, view.ylo, view.yhi), view.ylo, view.yhi);
+  rec[5] = pg3dEncode(pg3dClamp(z, view.zlo, view.zhi), view.zlo, view.zhi);
+  h = (pg3d.block != NULL) ? PG3D_HDR() : NULL;
+  if(h != NULL && pg3dFreeBytes(h) >= PG3D_LINE_BYTES) {
+    memcpy(pg3d.block + PG3D_BLOCK_BYTES - PG3D_LINE_BYTES * (h->lineCount + 1), rec, PG3D_LINE_BYTES);
+    h->lineCount++;
+  }
+  pg3dSetup(&s, &view);
+  pgClipNow(&clip);
+  pg3dDrawRecord(&s, rec, &clip);
+  pg3d.curX = x; pg3d.curY = y; pg3d.curZ = z;
+  pgRefreshMaybe();
+}
+
+// ---- the keys, the redraw, and the zoom re-run (§9.6) ----
+
+static void pg3dRedraw(void) {
+  pg3dHeader_t *h = PG3D_HDR();
+  pg3dView_t view;
+  pg3dSetup_t s;
+  pgRect_t clip;
+  int32_t bottom = (canvas.region == PG_REGION_REGISTERS) ? PG_REGISTER_BOTTOM_ROW : SCREEN_HEIGHT - 1;
+  uint8_t savedMode = canvas.drawMode;
+  uint32_t k;
+  pg3dRecordView(&view);
+  lcd_fill_rect(0, PG_TOP_ROW, SCREEN_WIDTH, (uint32_t)(bottom - PG_TOP_ROW + 1), LCD_SET_VALUE);
+  canvas.drawMode = 0;
+  pg3dSetup(&s, &view);
+  pgClipNow(&clip);
+  if(h->gridValid) {
+    pg3dPix_t *rows = allocC47Blocks(TO_BLOCKS(2 * h->numX * sizeof(pg3dPix_t)));
+    if(rows == NULL) {
+      displayCalcErrorMessage(ERROR_RAM_FULL, ERR_REGISTER_LINE, NIM_REGISTER_LINE);
+    }
+    else {
+      uint32_t i, j;
+      for(j = 0; j < h->numY; j++) {
+        float y = view.ylo + (float)j * ((view.yhi - view.ylo) / (float)(h->numY - 1));
+        for(i = 0; i < h->numX; i++) {
+          float x = view.xlo + (float)i * ((view.xhi - view.xlo) / (float)(h->numX - 1));
+          uint8_t b = PG3D_GRID()[j * h->numX + i];
+          float zq = (b == PG3D_HOLE) ? (0.0f / 0.0f) : pg3dDecode(b, view.zRecLo, view.zRecHi);
+          pg3dMeshPoint(&s, rows, h->numX, i, j, x, y, zq, &clip);
+        }
+      }
+      freeC47Blocks(rows, TO_BLOCKS(2 * h->numX * sizeof(pg3dPix_t)));
+    }
+  }
+  for(k = 0; k < h->lineCount; k++) {
+    pg3dDrawRecord(&s, pg3d.block + PG3D_BLOCK_BYTES - PG3D_LINE_BYTES * (k + 1), &clip);
+  }
+  canvas.drawMode = savedMode;
+  pgRefreshNow();
+}
+
+// The re-run after a zoom step (§9.6.6): the grid bytes are recorded again
+// over the z range visible at this magnification, without drawing.
+static void pg3dRerun(pg3dHeader_t *h, pg3dView_t *view, float zNewLo, float zNewHi) {
+  pg3dEngineSave_t sv;
+  pg3dSetup_t s;
+  uint32_t numX = h->numX, numY = h->numY;
+  uint16_t label = h->label;
+  int result;
+  if(engineNestingRefused(true)) return;
+  view->zRecLo = zNewLo; view->zRecHi = zNewHi;
+  pg3dEngineEnter(&sv);
+  pg3dSetup(&s, view);
+  result = pg3dRunGrid(&s, h, NULL, numX, numY, true, label, false, NULL);
+  pg3dEngineLeave(&sv);
+  h = (pg3d.block != NULL) ? PG3D_HDR() : NULL;
+  if(h == NULL) return;
+  if(result == PG3D_RUN_OK) { h->zRecLo = zNewLo; h->zRecHi = zNewHi; }
+  else { h->gridValid = 0; }
+  if(result == PG3D_RUN_ALLHOLES) displayCalcErrorMessage(pg3dLastPointError, ERR_REGISTER_LINE, REGISTER_X);
+}
+
+static void pg3dZoomRerun(void) {
+  pg3dHeader_t *h = PG3D_HDR();
+  pg3dView_t view;
+  pg3dSetup_t s;
+  float zoom, dNear, wymax, zVisLo, zVisHi, zNewLo, zNewHi, pps;
+  bool_t wider;
+  if(h->gridValid == 0 || h->label == 0) return;
+  pg3dRecordView(&view);
+  pg3dSetup(&s, &view);   // the window floats
+  zoom = pg3dZoom[pg3d.zoomStep + 8];
+  dNear = (view.ylo - view.eyeY) / zoom;
+  wymax = s.wymin + 239.0f / s.wys;
+  zVisLo = view.eyeZ + (s.wymin - view.eyeZ) * dNear;
+  zVisHi = view.eyeZ + (wymax - view.eyeZ) * dNear;
+  if(zVisLo > zVisHi) { float t = zVisLo; zVisLo = zVisHi; zVisHi = t; }
+  zNewLo = (zVisLo > view.zlo) ? zVisLo : view.zlo;
+  zNewHi = (zVisHi < view.zhi) ? zVisHi : view.zhi;
+  if(!(zNewLo < zNewHi)) return;
+  pps = (h->zRecHi - h->zRecLo) * (1.0f / 254.0f) * s.wys / dNear;
+  if(pps < 0.0f) pps = -pps;
+  wider = (zNewLo < h->zRecLo) || (zNewHi > h->zRecHi);
+  if(!(pps > 1.0f) && !wider) return;
+  pg3dRerun(h, &view, zNewLo, zNewHi);
+}
+
+// A key in the view (§9.6.1). Called from fnKeyUp, fnKeyDown, and the guard arm.
+void pg3dKey(int16_t item) {
+  pg3dHeader_t *h;
+  if(pg3d.block == NULL) return;
+  h = PG3D_HDR();
+  if(h->gridValid == 0 && h->lineCount == 0) return;
+  switch(item) {
+    case ITM_UP1:   pg3d.angX = (uint8_t)((pg3d.angX + 1) % 36);  break;
+    case ITM_DOWN1: pg3d.angX = (uint8_t)((pg3d.angX + 35) % 36); break;
+    case ITM_BST:   pg3d.angY = (uint8_t)((pg3d.angY + 1) % 36);  break;
+    case ITM_SST:   pg3d.angY = (uint8_t)((pg3d.angY + 35) % 36); break;
+    case ITM_RBR:   pg3d.angZ = (uint8_t)((pg3d.angZ + 1) % 36);  break;
+    case ITM_FLGSV: pg3d.angZ = (uint8_t)((pg3d.angZ + 35) % 36); break;
+    case ITM_ADD:   if(pg3d.zoomStep >= 8) return;  pg3d.zoomStep++; pg3dZoomRerun(); break;
+    case ITM_SUB:   if(pg3d.zoomStep <= -8) return; pg3d.zoomStep--; pg3dZoomRerun(); break;
+    case ITM_5:
+      if(pg3d.angX == 0 && pg3d.angY == 0 && pg3d.angZ == 0 && pg3d.zoomStep == 0) return;
+      pg3d.angX = pg3d.angY = pg3d.angZ = 0; pg3d.zoomStep = 0; pg3dZoomRerun();
+      break;
+    default: return;
+  }
+  pg3dRedraw();
 }
 
 #if defined(TESTSUITE_BUILD)
@@ -1039,7 +1659,9 @@ void fnGclip(uint16_t unusedButMandatoryParameter) {
     if(getSystemFlag(FLAG_ALPHA))    pgTestFail("K8 FLAG_ALPHA stays set in the view");
     if(canvas.prevCalcMode != CM_AIM) pgTestFail("K8 the view did not record alpha input mode");
     pgCloseView();
-    if(calcMode != CM_AIM || !cursorEnabled || !getSystemFlag(FLAG_ALPHA)) pgTestFail("K8 EXIT did not give alpha input its cursor back");
+    if(calcMode != CM_AIM)          pgTestFail("K8 EXIT did not return to alpha input mode");
+    if(!cursorEnabled)              pgTestFail("K8 EXIT did not give alpha input its cursor back");
+    if(!getSystemFlag(FLAG_ALPHA))  pgTestFail("K8 EXIT did not set FLAG_ALPHA back");
     calcModeNormal();
     calcMode = CM_NORMAL;
     lastErrorCode = ERROR_NONE;
@@ -1565,6 +2187,342 @@ void fnGclip(uint16_t unusedButMandatoryParameter) {
     pgCloseView();
     calcMode = CM_NORMAL;
     lastErrorCode = ERROR_NONE;
+    pgTestWriteLonI(REGISTER_X, pgTestFailures);
+  }
+
+
+  // ---- stage G4: the 3D pins (DESIGN.md §9.8) ----
+
+  // Loads a program from bytes through the official loader, as the suite's
+  // own covWriteAndLoadPgm does (testSuite.c 1167-1183).
+  static void pgTestLoadProgram(const uint8_t *pgm, size_t n, const char *label) {
+    FILE *f;
+    size_t i;
+    if(findNamedLabel(label, GLOBAL_LABELS) != INVALID_VARIABLE) return;   // loaded by an earlier driver: a duplicate global label breaks a later equation test
+    f = fopen("c47programTest.bin", "wb");
+    if(f == NULL) { pgTestFail("cannot write c47programTest.bin"); return; }
+    fprintf(f, "PROGRAM_FILE_FORMAT\n0\nC47_program_file_version\n1\nPROGRAM\n%u\n", (unsigned)n);
+    for(i = 0; i < n; i++) fprintf(f, "%u\n", pgm[i]);
+    fclose(f);
+    fnLoadProgram(NOPARAM);
+    remove("c47programTest.bin");   // a stale file fails a later string test of the suite
+    aimBuffer[0] = 0;               // the loader leaves a word in the alpha input buffer; a later string test expects it empty
+  }
+
+  static const uint8_t pgTestPgmSaddle[] = {
+    ITM_LBL, STRING_LABEL_VARIABLE, 4, 'S', 'A', 'D', 'L',
+    ITM_SQUARE, ITM_XexY, ITM_SQUARE, ITM_SUB,
+    (uint8_t)((ITM_END >> 8) | 0x80), (uint8_t)(ITM_END & 0xff),
+  };
+  static const uint8_t pgTestPgmErase[] = {   // a body that empties the block under the run
+    ITM_LBL, STRING_LABEL_VARIABLE, 4, 'E', 'R', 'A', 'S',
+    (uint8_t)((ITM_ERASE >> 8) | 0x80), (uint8_t)(ITM_ERASE & 0xff),
+    (uint8_t)((ITM_PT3D >> 8) | 0x80), (uint8_t)(ITM_PT3D & 0xff),       // the sample point as the current point
+    (uint8_t)((ITM_LINE3D >> 8) | 0x80), (uint8_t)(ITM_LINE3D & 0xff),   // a zero-length line that freezes the header again
+    ITM_CLX,
+    (uint8_t)((ITM_END >> 8) | 0x80), (uint8_t)(ITM_END & 0xff),
+  };
+  static const uint8_t pgTestPgmPlane[] = {
+    ITM_LBL, STRING_LABEL_VARIABLE, 4, 'P', 'L', 'N', 'E',
+    ITM_CLX,
+    (uint8_t)((ITM_END >> 8) | 0x80), (uint8_t)(ITM_END & 0xff),
+  };
+
+  static void pgTestWriteFloat(calcRegister_t regist, const char *text) {
+    pgTestWriteReal(regist, text);
+  }
+
+  static void pgTestSet3(const char *x, const char *y, const char *z) {   // x in Z, y in Y, z in X
+    pgTestWriteFloat(REGISTER_Z, x); pgTestWriteFloat(REGISTER_Y, y); pgTestWriteFloat(REGISTER_X, z);
+  }
+
+  static uint32_t pgTestLitCanvas(void) {
+    uint32_t lit = 0, x, yy;
+    for(x = 0; x < SCREEN_WIDTH; x++) for(yy = PG_TOP_ROW; yy < SCREEN_HEIGHT; yy++) if(lcd_buffer_pixel_on(x, yy)) lit++;
+    return lit;
+  }
+
+  static uint8_t pgTestCanvasCopy[SCREEN_HEIGHT * 50];
+  static void pgTestSnapCanvas(void) {   // bytes 2 to 51 of rows 20 to 239
+    uint32_t r;
+    for(r = PG_TOP_ROW; r < SCREEN_HEIGHT; r++) memcpy(pgTestCanvasCopy + r * 50, pgRowPtr((int32_t)r) + 2, 50);
+  }
+  static uint32_t pgTestCanvasDiff(void) {
+    uint32_t r, d = 0, i;
+    for(r = PG_TOP_ROW; r < SCREEN_HEIGHT; r++) for(i = 0; i < 50; i++) if(pgTestCanvasCopy[r * 50 + i] != pgRowPtr((int32_t)r)[2 + i]) d++;
+    return d;
+  }
+
+  // The unit-cube view of §9.3.6 inside PVIEW 6.
+  static void pgTestUnitCubeView(void) {
+    calcMode = CM_NORMAL; lastErrorCode = ERROR_NONE;
+    pgReset();
+    fnPview(6); fnGmode(0);
+    pgTestWriteLonI(REGISTER_Y, 0); pgTestWriteLonI(REGISTER_X, 1); fnXrng(NOPARAM); fnYrng(NOPARAM);
+    fnXvol(NOPARAM); fnYvol(NOPARAM); fnZvol(NOPARAM);
+    pgTestSet3("0.5", "-1", "0.5"); fnEyept(NOPARAM);
+  }
+
+  void pgTestDraw3D(uint16_t unusedButMandatoryParameter) {
+    pgTestFailures = 0;
+    pgTestLoadProgram(pgTestPgmSaddle, sizeof(pgTestPgmSaddle), "SADL");
+    pgTestLoadProgram(pgTestPgmPlane, sizeof(pgTestPgmPlane), "PLNE");
+    pgTestLoadProgram(pgTestPgmErase, sizeof(pgTestPgmErase), "ERAS");
+
+    // P1: the eight corners of the unit cube project to the recorded pixels.
+    pgTestUnitCubeView();
+    {
+      static const float corner[8][3] = { {0,0,0},{1,0,0},{0,0,1},{1,0,1},{0,1,0},{1,1,0},{0,1,1},{1,1,1} };
+      static const int32_t want[8][2] = { {0,239},{399,239},{0,0},{399,0},{100,179},{299,179},{100,60},{299,60} };
+      pg3dView_t view; pg3dSetup_t s; int k;
+      if(!pg3dRecordView(&view)) pgTestFail("P1 the unit-cube view is not valid");
+      pg3dSetup(&s, &view);
+      for(k = 0; k < 8; k++) {
+        int32_t col, row;
+        if(!pg3dProject(&s, corner[k][0], corner[k][1], corner[k][2], &col, &row) || col != want[k][0] || row != want[k][1]) {
+          printf("program-graphics test FAIL: P1 corner %d projects to (%d, %d), expected (%d, %d)\n", k, (int)col, (int)row, (int)want[k][0], (int)want[k][1]);
+          pgTestFailures++;
+        }
+      }
+    }
+
+    // P2: WIREFRAME of the plane z = 0 with a 2 by 2 grid lights the recorded count.
+    {
+      uint32_t lit;
+      pgTestWriteLonI(REGISTER_X, 2); fnNumx(NOPARAM); fnNumy(NOPARAM);
+      fnWireframe((uint16_t)findNamedLabel("PLNE", GLOBAL_LABELS));
+      if(lastErrorCode != ERROR_NONE) { pgTestFail("P2 WIREFRAME of the plane raised an error"); lastErrorCode = ERROR_NONE; }
+      lit = pgTestLitCanvas();
+      if(lit != 798) { printf("program-graphics test FAIL: P2 the plane mesh lit %u pixels, expected 798\n", lit); pgTestFailures++; }
+    }
+
+    // P3: the block is 512 pool blocks, taken by the first 3D command in the view and returned at EXIT.
+    {
+      uint32_t before;
+      pgCloseView(); calcMode = CM_NORMAL;
+      pgTestSet3("0", "-3", "0");   // the registers first: a register write takes pool blocks of its own
+      before = c47MemInBlocks;
+      fnEyept(NOPARAM);
+      if(c47MemInBlocks != before) pgTestFail("P3 EYEPT outside the view took pool memory");
+      fnPview(6);
+      before = c47MemInBlocks;
+      fnEyept(NOPARAM);
+      if(c47MemInBlocks != before + PG3D_BLOCKS) pgTestFail("P3 the first 3D command in the view did not take 512 blocks");
+      pgCloseView(); calcMode = CM_NORMAL;
+      if(c47MemInBlocks != before) pgTestFail("P3 EXIT did not return the block");
+    }
+
+    // P5: the byte encoding.
+    if(pg3dEncode(0.0f / 0.0f, 0, 1) != 255 || pg3dEncode(0, 0, 1) != 0 || pg3dEncode(1, 0, 1) != 254 || pg3dEncode(7, 0, 1) != 254 || pg3dEncode(-7, 0, 1) != 0) pgTestFail("P5 the byte encoding is wrong");
+    if(pg3dDecode(254, 0, 1) != 1.0f || pg3dDecode(0, 0, 1) != 0.0f) pgTestFail("P5 the byte decoding is wrong");
+
+    // P9 and P26: each key changes its counter, in both directions.
+    pgTestUnitCubeView();
+    pgTestWriteLonI(REGISTER_X, 2); fnNumx(NOPARAM); fnNumy(NOPARAM);
+    fnWireframe((uint16_t)findNamedLabel("PLNE", GLOBAL_LABELS));
+    processKeyAction(ITM_RBR);   if(pg3d.angZ != 1)  pgTestFail("P9 RBR did not turn about z");
+    processKeyAction(ITM_FLGSV); if(pg3d.angZ != 0)  pgTestFail("P26 FLGSV did not turn back about z");
+    processKeyAction(ITM_BST);   if(pg3d.angY != 1)  pgTestFail("P9 BST did not turn about y");
+    processKeyAction(ITM_SST);   if(pg3d.angY != 0)  pgTestFail("P26 SST did not turn back about y");
+    processKeyAction(ITM_UP1);   if(pg3d.angX != 1)  pgTestFail("P9 UP did not turn about x");
+    processKeyAction(ITM_DOWN1); if(pg3d.angX != 0)  pgTestFail("P26 DOWN did not turn back about x");
+    processKeyAction(ITM_ADD);   if(pg3d.zoomStep != 1) pgTestFail("P9 plus did not zoom in");
+    processKeyAction(ITM_SUB);   if(pg3d.zoomStep != 0) pgTestFail("P9 minus did not zoom out");
+    processKeyAction(ITM_UP1); processKeyAction(ITM_ADD);
+    processKeyAction(ITM_5);
+    if(pg3d.angX != 0 || pg3d.angY != 0 || pg3d.angZ != 0 || pg3d.zoomStep != 0) pgTestFail("P9 the key 5 did not reset the view");
+    processKeyAction(ITM_4);
+    if(pg3d.angX != 0 || pg3d.zoomStep != 0) pgTestFail("P9 the key 4 changed the view");
+    if(lastErrorCode != ERROR_NONE) { pgTestFail("P9 a key raised an error"); lastErrorCode = ERROR_NONE; }
+
+    // P10: 36 UP presses return the canvas exactly.
+    {
+      int k; uint32_t d;
+      processKeyAction(ITM_5);
+      pgTestSnapCanvas();
+      for(k = 0; k < 36; k++) processKeyAction(ITM_UP1);
+      d = pgTestCanvasDiff();
+      if(pg3d.angX != 0) pgTestFail("P10 36 presses did not close the turn");
+      if(d != 0) { printf("program-graphics test FAIL: P10 %u canvas bytes differ after a full turn\n", d); pgTestFailures++; }
+    }
+
+    // P29: a body that calls ERASE leaves no valid grid (audit G4 round 1, Gemini H 2).
+    fnErase(NOPARAM);
+    pgTestWriteLonI(REGISTER_X, 2); fnNumx(NOPARAM); fnNumy(NOPARAM);
+    fnWireframe((uint16_t)findNamedLabel("ERAS", GLOBAL_LABELS));
+    lastErrorCode = ERROR_NONE;
+    if(pg3d.block != NULL && PG3D_HDR()->gridValid != 0) pgTestFail("P29 a body that emptied the block left a valid grid");
+    pgTestUnitCubeView();
+    pgTestWriteLonI(REGISTER_X, 2); fnNumx(NOPARAM); fnNumy(NOPARAM);
+    fnWireframe((uint16_t)findNamedLabel("PLNE", GLOBAL_LABELS));
+
+    // P16: the stack survives WIREFRAME.
+    pgTestWriteLonI(REGISTER_X, 1); pgTestWriteLonI(REGISTER_Y, 2); pgTestWriteLonI(REGISTER_Z, 3); pgTestWriteLonI(REGISTER_T, 4);
+    fnWireframe((uint16_t)findNamedLabel("SADL", GLOBAL_LABELS));
+    {
+      int32_t v;
+      if(!pgReadCoord(REGISTER_X, &v) || v != 1) pgTestFail("P16 X changed across WIREFRAME");
+      if(!pgReadCoord(REGISTER_T, &v) || v != 4) pgTestFail("P16 T changed across WIREFRAME");
+    }
+    lastErrorCode = ERROR_NONE;
+
+    // P19: ERASE empties the retained content; a key press then draws nothing.
+    fnErase(NOPARAM);
+    if(PG3D_HDR()->lineCount != 0 || PG3D_HDR()->gridValid != 0) pgTestFail("P19 ERASE kept the retained content");
+    processKeyAction(ITM_UP1);
+    if(pgTestLitCanvas() != 0) pgTestFail("P19 a key press after ERASE drew");
+
+    // P20: bad counts and a bad range are refused.
+    pgTestWriteLonI(REGISTER_X, 1);   fnNumx(NOPARAM);
+    if(lastErrorCode != ERROR_OUT_OF_RANGE) { pgTestFail("P20 NUMX 1 was accepted"); }
+    lastErrorCode = ERROR_NONE;
+    pgTestWriteLonI(REGISTER_X, 101); fnNumx(NOPARAM);
+    if(lastErrorCode != ERROR_OUT_OF_RANGE) { pgTestFail("P20 NUMX 101 was accepted"); }
+    lastErrorCode = ERROR_NONE;
+    pgTestWriteReal(REGISTER_X, "2.5"); fnNumx(NOPARAM);
+    if(lastErrorCode != ERROR_OUT_OF_RANGE) { pgTestFail("P20 NUMX 2.5 was accepted"); }
+    lastErrorCode = ERROR_NONE;
+    if(pg3d.numX != 2) { pgTestFail("P20 a refused NUMX changed the count"); }
+    pgTestSetString(REGISTER_X, "X"); fnNumx(NOPARAM);
+    if(lastErrorCode != ERROR_INVALID_DATA_TYPE_FOR_OP) { pgTestFail("P20 NUMX with a string did not raise the type error"); }
+    lastErrorCode = ERROR_NONE;
+    pgTestWriteLonI(REGISTER_Y, 1); pgTestWriteLonI(REGISTER_X, 1); fnXvol(NOPARAM);
+    if(lastErrorCode != ERROR_ARG_EXCEEDS_FUNCTION_DOMAIN) { pgTestFail("P20 XVOL 1 1 was accepted"); }
+    lastErrorCode = ERROR_NONE;
+
+    // P23: LINE3D without a current point sets it and draws nothing.
+    fnErase(NOPARAM);
+    pg3d.haveCur = 0;
+    pgTestSet3("0.2", "0.2", "0.2"); fnLine3d(NOPARAM);
+    if(pgTestLitCanvas() != 0) pgTestFail("P23 LINE3D without a current point drew");
+    if(!pg3d.haveCur) pgTestFail("P23 LINE3D without a current point did not set it");
+
+    // P12: 330 lines fill the block; the 331st draws and is not retained.
+    {
+      uint32_t k, litBefore;
+      uint8_t header[PG3D_HEADER_BYTES];
+      fnErase(NOPARAM);
+      pgTestSet3("0", "0", "0"); fnPt3d(NOPARAM);
+      for(k = 0; k < 330; k++) {
+        char b[16]; sprintf(b, "%.4f", 0.1f + 0.8f * (float)(k % 7) / 7.0f);
+        pgTestSet3((k & 1) ? "0.9" : "0.1", b, (k & 2) ? "0.9" : "0.1"); fnLine3d(NOPARAM);
+      }
+      if(PG3D_HDR()->lineCount != 330) pgTestFail("P12 330 lines did not fill the block");
+      memcpy(header, pg3d.block, PG3D_HEADER_BYTES);
+      lcd_fill_rect(0, PG_TOP_ROW, SCREEN_WIDTH, SCREEN_HEIGHT - PG_TOP_ROW, LCD_SET_VALUE);   // a clear canvas, the block untouched
+      litBefore = pgTestLitCanvas();
+      pgTestSet3("0.5", "0.5", "0.5"); fnLine3d(NOPARAM);
+      if(pgTestLitCanvas() <= litBefore) pgTestFail("P12 the 331st line did not draw");
+      if(PG3D_HDR()->lineCount != 330) pgTestFail("P12 the 331st line was retained past the block");
+      if(memcmp(header, pg3d.block, PG3D_HEADER_BYTES) != 0) pgTestFail("P12 the 331st line changed the header");
+    }
+
+    // P27: a point exactly one 1024th of the depth in front of the eye is drawable (audit G4 round 1, Sol G 2).
+    {
+      pg3dView_t view; pg3dSetup_t s; int32_t col, row;
+      pgReset();
+      pg3d.ylo = 0.0f; pg3d.yhi = 1024.0f; pg3d.eyeY = -1.0f;
+      if(!pg3dRecordView(&view)) pgTestFail("P27 the view is not valid");
+      pg3dSetup(&s, &view);
+      if(!pg3dProject(&s, 0.0f, 0.0f, 0.0f, &col, &row)) pgTestFail("P27 a point at exactly eps was rejected");
+      if(pg3dProject(&s, 0.0f, -0.5f, 0.0f, &col, &row)) pgTestFail("P27 a point nearer than eps was drawn");
+      pgReset();
+    }
+
+    // P28: the clamp holds on the final row as well (audit G4 round 1, Sol G 3).
+    {
+      pg3dView_t view; pg3dSetup_t s; int32_t col, row;
+      pgReset();
+      pg3d.xlo = -2.0f; pg3d.xhi = 2.0f; pg3d.ylo = -1.0f; pg3d.yhi = 1.0f; pg3d.zlo = -2.0f; pg3d.zhi = 2.0f;
+      pg3d.eyeX = 0.0f; pg3d.eyeY = -3.0f; pg3d.eyeZ = 0.0f;
+      pgTestWriteReal(REGISTER_Y, "0");           pgTestWriteReal(REGISTER_X, "0.009975");  fnXrng(NOPARAM);   // 399 / 40000
+      pgTestWriteReal(REGISTER_Y, "-0.005939511"); pgTestWriteReal(REGISTER_X, "0");         fnYrng(NOPARAM);   // -239 / 40239
+      if(!pg3dRecordView(&view)) pgTestFail("P28 the view is not valid");
+      pg3dSetup(&s, &view);
+      if(!pg3dProject(&s, 2.0f, -1.0f, -2.0f, &col, &row)) pgTestFail("P28 the far corner was rejected");
+      if(col != 32000 || row != 32000) { printf("program-graphics test FAIL: P28 the far corner projects to (%d, %d), expected (32000, 32000)\n", (int)col, (int)row); pgTestFailures++; }
+      pgWindow.set = 0;
+      pgReset();
+    }
+
+    // P20b: a volume span that overflows float is refused (audit G4 round 1, Sol I 1).
+    pgTestWriteReal(REGISTER_Y, "-2e38"); pgTestWriteReal(REGISTER_X, "2e38"); fnXvol(NOPARAM);
+    if(lastErrorCode != ERROR_ARG_EXCEEDS_FUNCTION_DOMAIN) pgTestFail("P20b XVOL -2e38 2e38 was accepted");
+    lastErrorCode = ERROR_NONE;
+
+    // P18: the reset hook forgets the block without a free and restores the defaults.
+    {
+      uint32_t before = c47MemInBlocks;
+      uint8_t *held = pg3d.block;
+      pgReset();
+      if(pg3d.block != NULL) pgTestFail("P18 reset kept the block pointer");
+      if(c47MemInBlocks != before) pgTestFail("P18 reset freed the block");
+      if(pg3d.eyeY != -3.0f || pg3d.xlo != -1.0f || pg3d.numX != 10 || pg3d.numY != 8) pgTestFail("P18 reset did not restore the HP defaults");
+      freeC47Blocks(held, PG3D_BLOCKS);   // the pin returns the block the reset forgot
+    }
+
+    pgCloseView();
+    calcMode = CM_NORMAL;
+    lastErrorCode = ERROR_NONE;
+    pgTestWriteLonI(REGISTER_X, pgTestFailures);
+  }
+
+  // S3: the 3D showcase and the animation frames (TESTING.md §6, DESIGN.md §9.7).
+  void pgTestShowcase3D(uint16_t unusedButMandatoryParameter) {
+    uint32_t lit, k;
+    char name[24];
+    uint16_t saddle;
+    pgTestFailures = 0;
+    pgTestLoadProgram(pgTestPgmSaddle, sizeof(pgTestPgmSaddle), "SADL");
+    saddle = (uint16_t)findNamedLabel("SADL", GLOBAL_LABELS);
+    calcMode = CM_NORMAL; lastErrorCode = ERROR_NONE;
+    pgReset();
+    fnPview(6); fnGmode(0);
+    pgTestWriteReal(REGISTER_Y, "-1");   pgTestWriteReal(REGISTER_X, "1");   fnXrng(NOPARAM);
+    pgTestWriteReal(REGISTER_Y, "-0.6"); pgTestWriteReal(REGISTER_X, "0.6"); fnYrng(NOPARAM);
+    pgTestSet3("0", "-3", "0"); fnEyept(NOPARAM);
+    pgTestWriteReal(REGISTER_Y, "-1"); pgTestWriteReal(REGISTER_X, "1"); fnXvol(NOPARAM); fnYvol(NOPARAM); fnZvol(NOPARAM);
+    pgTestWriteLonI(REGISTER_X, 24); fnNumx(NOPARAM); fnNumy(NOPARAM);
+    fnWireframe(saddle);
+    if(lastErrorCode != ERROR_NONE) { pgTestFail("S3 WIREFRAME of the saddle raised an error"); lastErrorCode = ERROR_NONE; }
+    lit = pgTestLitCanvas();
+    printf("program-graphics showcase 3D: saddle alone %u lit pixels\n", lit);
+    {
+      static const char *v[8][3] = { {"-1","-1","-1"},{"1","-1","-1"},{"1","1","-1"},{"-1","1","-1"},{"-1","-1","1"},{"1","-1","1"},{"1","1","1"},{"-1","1","1"} };
+      static const int path[10] = { 0, 1, 2, 3, 0, 4, 5, 6, 7, 4 };
+      int i;
+      pgTestSet3(v[0][0], v[0][1], v[0][2]); fnPt3d(NOPARAM);
+      for(i = 1; i < 10; i++) { pgTestSet3(v[path[i]][0], v[path[i]][1], v[path[i]][2]); fnLine3d(NOPARAM); }
+      pgTestSet3(v[1][0], v[1][1], v[1][2]); fnPt3d(NOPARAM); pgTestSet3(v[5][0], v[5][1], v[5][2]); fnLine3d(NOPARAM);
+      pgTestSet3(v[2][0], v[2][1], v[2][2]); fnPt3d(NOPARAM); pgTestSet3(v[6][0], v[6][1], v[6][2]); fnLine3d(NOPARAM);
+      pgTestSet3(v[3][0], v[3][1], v[3][2]); fnPt3d(NOPARAM); pgTestSet3(v[7][0], v[7][1], v[7][2]); fnLine3d(NOPARAM);
+    }
+    pgTestSetString(REGISTER_X, "program-graphics G4: EYEPT XVOL YVOL ZVOL NUMX NUMY WIREFRAME PT3D LINE3D");
+    fnGdisp(1);
+    lit = pgTestLitCanvas();
+    printf("program-graphics showcase 3D: %u lit pixels in rows 20 to 239\n", lit);
+    if(lit != 8656) { printf("program-graphics test FAIL: S3 the showcase count moved from the recorded %u\n", (unsigned)0u /* recorded at the first green run */); pgTestFailures++; }
+    strcpy(_ioFileNameOverride, "pg3d_000.bmp"); fnScreenDump(0);
+    processKeyAction(ITM_5);   // frame 001: the home view without the caption; a redraw with nothing to change draws the same picture
+    pg3dRedraw();
+    strcpy(_ioFileNameOverride, "pg3d_001.bmp"); fnScreenDump(0);
+    pgTestSnapCanvas();
+    k = 2;
+    #define PG_FRAME(item) do { processKeyAction(item); sprintf(name, "pg3d_%03u.bmp", (unsigned)k++); strcpy(_ioFileNameOverride, name); fnScreenDump(0); } while(0)
+    { int i; for(i = 0; i < 36; i++) PG_FRAME(ITM_UP1); }
+    if(pgTestCanvasDiff() != 0) pgTestFail("R1 a full turn about x did not return the canvas");
+    { int i; for(i = 0; i < 36; i++) PG_FRAME(ITM_BST); }
+    if(pgTestCanvasDiff() != 0) pgTestFail("R1y a full turn about y did not return the canvas");
+    { int i; for(i = 0; i < 36; i++) PG_FRAME(ITM_RBR); }
+    if(pgTestCanvasDiff() != 0) pgTestFail("R1z a full turn about z did not return the canvas");
+    { int i; for(i = 0; i < 6; i++) PG_FRAME(ITM_ADD); }
+    { int i; for(i = 0; i < 6; i++) PG_FRAME(ITM_SUB); }
+    if(pgTestCanvasDiff() != 0) pgTestFail("R2 six zoom steps in and out did not return the canvas");
+    #undef PG_FRAME
+    printf("program-graphics showcase 3D: %u frames, %u program runs\n", (unsigned)k, (unsigned)pg3dRunCount);
+    if(lastErrorCode != ERROR_NONE) { pgTestFail("S3 an error was raised during the animation"); lastErrorCode = ERROR_NONE; }
+    pgCloseView();
+    calcMode = CM_NORMAL;
     pgTestWriteLonI(REGISTER_X, pgTestFailures);
   }
 

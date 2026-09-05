@@ -1,8 +1,8 @@
 diff --git a/src/testSuite/testSuite.c b/src/testSuite/testSuite.c
-index bc8a9792a584984b3e18dee2a6626ce81a330205..99a1dc222b9bc04386ac07bd904b246875a2dda6 100644
+index bc8a9792a584984b3e18dee2a6626ce81a330205..bd2c5badefe021f3aeb6090ecfce4368122121cc 100644
 --- a/src/testSuite/testSuite.c
 +++ b/src/testSuite/testSuite.c
-@@ -58,6 +58,13 @@ void covSolveErr(uint16_t which);
+@@ -58,6 +58,15 @@ void covSolveErr(uint16_t which);
  void covLoadPgm(uint16_t unusedButMandatoryParameter);
  void covLoadPgmLongLabel(uint16_t unusedButMandatoryParameter);
  void covLoadStateLongLabel(uint16_t unusedButMandatoryParameter);
@@ -13,10 +13,12 @@ index bc8a9792a584984b3e18dee2a6626ce81a330205..99a1dc222b9bc04386ac07bd904b2468
 +void pgTestKeys(uint16_t unusedButMandatoryParameter);
 +void pgTestDraw2D(uint16_t unusedButMandatoryParameter);
 +void pgTestShowcase2D(uint16_t unusedButMandatoryParameter);
++void pgTestDraw3D(uint16_t unusedButMandatoryParameter);
++void pgTestShowcase3D(uint16_t unusedButMandatoryParameter);
  void covIterationTi(uint16_t which);
  void covNamedVariableFold(uint16_t unusedButMandatoryParameter);
  void covStatsRegister(uint16_t unusedButMandatoryParameter);
-@@ -304,6 +311,14 @@ const funcTest_t funcTestNoParam[] = {
+@@ -304,6 +313,16 @@ const funcTest_t funcTestNoParam[] = {
    {"fnEffToICov",            covEffToI, 1 },
    {"fnAmortCov",             covAmort, 1 },
    {"fnAmortNextCov",         covAmortNext, 1 },
@@ -28,6 +30,8 @@ index bc8a9792a584984b3e18dee2a6626ce81a330205..99a1dc222b9bc04386ac07bd904b2468
 +  {"pgTestKeys",             pgTestKeys,          1},
 +  {"pgTestDraw2D",           pgTestDraw2D,        1},
 +  {"pgTestShowcase2D",       pgTestShowcase2D,    1},
++  {"pgTestDraw3D",           pgTestDraw3D,        1},
++  {"pgTestShowcase3D",       pgTestShowcase3D,    1},
    // Statistics (use FARG=1 with fnSigmaAddRem to accumulate a (Y,X) data point).
    {"fnSigmaAddRem",          fnSigmaAddRem         },
    {"fnMeanX",                fnMeanX               },

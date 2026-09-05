@@ -401,3 +401,134 @@ than kept as a guard nothing can test; D17b now pins the cut through
 its canary, red under the old cap guard.
 
 Firmware size: measured at the G4 commit, not per fix wave.
+
+## Stage G4: 3D, 2026-09-05
+
+Nine commands on the upstream CONV spare rows 2864 to 2872: `EYEPT`,
+`XVOL`, `YVOL`, `ZVOL`, `NUMX`, `NUMY`, `WIREFRAME`, `PT3D`, `LINE3D`.
+The specification came from a research pass on the same day: five
+readers on the HP projection, the program runner, the memory pool, the
+key routes, and the animation tooling, then one writer. Every choice the
+research left open is marked DECISION in DESIGN.md §9 for Stan to rule
+on. The upstream facts the specification cites were verified by hand
+before the code was written: the engine globals, the label helpers, the
+shift macros, the reset anchor, the free item rows, and the key items.
+
+What the stage does. The projection is the HP 48 rule: the plane sits
+one unit in front of the eye and moves with it, so the near face draws
+at scale 1 when the eye is one unit before it. The three rotations are
+integer step counts of 10 degrees with a 36-entry sine table, so a full
+turn returns the canvas byte for byte and no float trigonometry enters
+the flash. The zoom moves the eye so the near face scales by exactly
+1.25 per press. The retained content lives in one 2 KB block of the pool:
+a 64-byte header, the grid bytes up from the header, the line records
+down from the end, one byte per value in 254 steps with 255 as the hole.
+The block is taken by the first 3D command inside the view, emptied by
+`ERASE` and `PVIEW`, freed at EXIT, and forgotten without a free at a
+reset through a one-line `config.c` hook. `WIREFRAME` runs the label
+with the engine protocol of the sum and plot engines, `FLAG_SOLVING`
+included, so the body runs inside a program; the stack comes back
+through the undo image. The keys reach the package through the existing
+`fnKeyUp` and `fnKeyDown` cases and the guard arm; the shift keys engage
+because the package now carries undo-history's shift gate line byte for
+byte, and the shift glyph stays in the status bar through two macro
+edits in `defines.h`.
+
+The showcase: a saddle from a four-step program on a 24 by 24 grid and
+the cube of the volume, then the film: one home frame, 36 steps about
+each axis, six zoom steps in and six out. The suite writes every frame
+as a BMP and the assembly script joins them into a GIF.
+
+Three suite lessons from the first runs. A register write takes pool
+blocks of its own, so a pin that counts pool blocks sets its registers
+before it reads the count. The program loader `fnLoadProgram` reads the
+file's lines into the alpha input buffer and leaves the last word there,
+and a later string test expects that buffer empty; the test loader clears
+it. A program loaded twice gives a duplicate global label, and a later
+equation test then fails with a syntax error; the test loader skips a
+label that exists.
+
+One open question, handed to the G4 audit round as a pre-verified fact.
+With the package's drivers in their G3 place in the suite list, the first
+formula integration of `integrate_cov.txt` later fails with a syntax
+error: the parser's word reader sees a word longer than seven glyphs in a
+formula that reads "X". A backtrace put the site in `_parseWord` under
+`parseEquation` under the integrator. The failure needs both 3D drivers
+in the same run, goes away without the engine's undo pair, and does not
+change any of thirty-four probed globals across the drivers. The
+package's test file now runs right after the equation files, as the
+suite's own comment orders those files by the pool state they inherit;
+the tail of the list is where every sibling package appends its own
+file, and an entry there conflicts in the combined build. Whether a G4
+command leaves a pool block dirty, or the upstream parser reads past a
+formula, is not settled.
+
+Numbers recorded at the first green run:
+
+| Number | Value |
+|---|---|
+| P2, the plane z = 0 on a 2 by 2 grid in the unit-cube view | 798 lit pixels, as the specification computed before the first run |
+| S3a, the saddle alone, 24 by 24 | 6,083 lit pixels |
+| S3, the showcase still with the cube and the caption | 8,656 lit pixels |
+| The film | 122 frames; the canvas returns byte for byte after 36 steps about each axis and after six zoom steps in and out |
+| Program runs in the showcase | 6,940 across the suite's 3D drivers: the saddle grid, the zoom re-runs (one per press past the threshold, 576 samples each), and the pins |
+| `NOP` and `LINE` baselines, unchanged | about 95 ms per million steps, 47 to 49 ms per 100,000 lines of 100 pixels |
+
+Red-first results of the G4 pins on the simulator:
+
+| Mutation | Pins that went red |
+|---|---|
+| The projection plane one unit farther from the eye | P1, all eight corners |
+| No row lines in the mesh | P2 (600 pixels for 798), S3 |
+| No free of the block at EXIT (inside `pg3dFreeBlock`) | P3 |
+| A clamped value encodes as the hole | P5, S3 |
+| RBR dropped from the guard arm | P9, P26 |
+| The steps counted modulo 37 | P10 |
+| No stack restore after WIREFRAME | P16, both registers |
+| The reset hook frees the block | P18 |
+| ERASE keeps the retained content | P19, both checks |
+| NUMX accepts 1 | P20, both checks |
+| LINE3D without a current point draws from the origin | P23 |
+| No free-bytes test for a line | P12, both checks |
+| The eps test exclusive again | P27 |
+| No clamp of the final row | P28: (32000, 32239) for (32000, 32000) |
+| No finite-span check | P20b |
+| A valid grid without the counts check | P29 |
+
+The first form of the "no free at EXIT" mutation replaced the call in
+`pgCloseView` with two assignments that name the 3D state, which is
+declared later in the file, so it did not compile; the second form
+removes the free inside `pg3dFreeBlock`.
+
+Firmware size, `make dmcp5r47`, R47.elf, text plus data for flash and
+data plus BSS for RAM:
+
+| Section | Without | With G4 and its fix wave | Delta against G3 | Delta of the package |
+|---|---|---|---|---|
+| flash | 1,090,512 | 1,101,144 | +5,856 bytes | +10,632 bytes |
+| ram | 7,564 | 7,720 | +72 bytes (the 3D state and two counters) | +156 bytes, plus a 2 KB pool block while a 3D view is open |
+
+Out-of-family round 1 on G4, same day, three packets: G (Sol, the
+projection and the block arithmetic), H (Gemini, the engine protocol),
+I (Sol, the setting commands and the lines). Packet I came back with one
+finding: a volume range whose span overflows float (`XVOL -2e38 2e38`)
+makes the byte scale zero and the decode NaN. Fixed in the G4 fix wave:
+`pg3dRange` refuses a span that is not a finite positive float, pin
+P20b. Packet I also noted that the packet text carried the `pgWindow`
+struct twice and lacked two helpers it named; a packet defect, not a
+code one.
+
+Packet G (Sol, GPT-5) came back with three: a hole byte in a line record
+decodes as a coordinate (unreachable: the readers refuse NaN and infinity
+before a record is written; recorded, not fixed); a point exactly one
+1024th of the depth in front of the eye was rejected where the contract
+says "nearer than" (fixed, pin P27); the final row was not clamped after
+the flip, so the kernel could receive 32239 where the contract promises
+32000 (fixed, pin P28). Packet H (Gemini 3.1 Pro) came back with two: the
+restore of the undo flag after the engine's `fnUndo` re-armed a consumed
+undo image (removed: the image is consumed as after PLTf); a body that
+calls `ERASE` under `WIREFRAME` could leave a valid grid with zero counts
+(fixed: a valid grid needs the header's counts intact, pin P29). Gemini
+cleared the STOP, error, string, nesting, EXIT, reset and boot paths.
+Neither reader could name a mechanism for the open suite question from
+the code in its packet.

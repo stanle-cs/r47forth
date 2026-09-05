@@ -53,6 +53,17 @@
   void       fnGclip                          (uint16_t unusedButMandatoryParameter);
   void       fnXrng                           (uint16_t unusedButMandatoryParameter);
   void       fnYrng                           (uint16_t unusedButMandatoryParameter);
+  void       fnEyept                          (uint16_t unusedButMandatoryParameter);
+  void       fnXvol                           (uint16_t unusedButMandatoryParameter);
+  void       fnYvol                           (uint16_t unusedButMandatoryParameter);
+  void       fnZvol                           (uint16_t unusedButMandatoryParameter);
+  void       fnNumx                           (uint16_t unusedButMandatoryParameter);
+  void       fnNumy                           (uint16_t unusedButMandatoryParameter);
+  void       fnWireframe                      (uint16_t label);
+  void       fnPt3d                           (uint16_t unusedButMandatoryParameter);
+  void       fnLine3d                         (uint16_t unusedButMandatoryParameter);
+  void       pg3dKey                          (int16_t item);
+  void       pgReset                          (void);
   void       insertAlphaCursor                (uint16_t startAt);
 
   void       drawSinglePixelFullWidthLine     (int y);

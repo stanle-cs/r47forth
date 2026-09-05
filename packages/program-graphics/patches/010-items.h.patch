@@ -1,8 +1,8 @@
 diff --git a/src/c47/items.h b/src/c47/items.h
-index 98924313217f3b57f1b663367c8e45c0dc0f1010..87f289ef4d41fe9d7394268fa0b403e9ed5ec655 100644
+index 98924313217f3b57f1b663367c8e45c0dc0f1010..b2fb51cb62f92f27c88c3c13c431a183a79deb84 100644
 --- a/src/c47/items.h
 +++ b/src/c47/items.h
-@@ -2511,6 +2511,21 @@
+@@ -2511,6 +2511,30 @@
  #define ITM_j_CIRC                  2445
  #define ITM_k_CIRC                  2446
  #define ITM_phi_m                   2447
@@ -20,6 +20,15 @@ index 98924313217f3b57f1b663367c8e45c0dc0f1010..87f289ef4d41fe9d7394268fa0b403e9
 +#define ITM_GCLIP                   2459  // program-graphics package: GCLIP
 +#define ITM_XRNG                    2460  // program-graphics package: XRNG
 +#define ITM_YRNG                    2461  // program-graphics package: YRNG
++#define ITM_EYEPT                   2864  // program-graphics package: EYEPT
++#define ITM_XVOL                    2865  // program-graphics package: XVOL
++#define ITM_YVOL                    2866  // program-graphics package: YVOL
++#define ITM_ZVOL                    2867  // program-graphics package: ZVOL
++#define ITM_NUMX                    2868  // program-graphics package: NUMX
++#define ITM_NUMY                    2869  // program-graphics package: NUMY
++#define ITM_WIREFRAME               2870  // program-graphics package: WIREFRAME
++#define ITM_PT3D                    2871  // program-graphics package: PT3D
++#define ITM_LINE3D                  2872  // program-graphics package: LINE3D
 +#define MNU_CANVAS                  2462  // program-graphics package: the canvas softmenu
  #define ITM_2448                    2448
  #define ITM_2449                    2449

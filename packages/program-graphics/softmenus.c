@@ -352,7 +352,8 @@ TO_QSPI const int16_t menu_STAT[]        = { ITM_SIGMAPLUS,                 ITM_
 /* program-graphics package: the canvas softmenu (claims registry: rows 2448-2463). */
 TO_QSPI const int16_t menu_CANVAS[]      = { ITM_PVIEW,                 ITM_ERASE,                 ITM_GLINE,                 ITM_GBOX,                  ITM_GFBOX,                 ITM_GCIRC,
                                              ITM_GFCIRC,                ITM_GARC,                  ITM_GTEXT,                 ITM_GDISP,                 ITM_GMODE,                 ITM_GCLIP,
-                                             ITM_XRNG,                  ITM_YRNG            };
+                                             ITM_XRNG,                  ITM_YRNG,                  ITM_EYEPT,                 ITM_XVOL,                  ITM_YVOL,                  ITM_ZVOL,
+                                             ITM_NUMX,                  ITM_NUMY,                  ITM_WIREFRAME,             ITM_PT3D,                  ITM_LINE3D          };
 
 
 TO_QSPI const int16_t menu_REGR[]        = { ITM_LR,                        ITM_CORR,                   ITM_SXY,                  ITM_COV,               ITM_XCIRC,                   ITM_YCIRC,

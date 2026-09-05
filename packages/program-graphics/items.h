@@ -2525,6 +2525,15 @@
 #define ITM_GCLIP                   2459  // program-graphics package: GCLIP
 #define ITM_XRNG                    2460  // program-graphics package: XRNG
 #define ITM_YRNG                    2461  // program-graphics package: YRNG
+#define ITM_EYEPT                   2864  // program-graphics package: EYEPT
+#define ITM_XVOL                    2865  // program-graphics package: XVOL
+#define ITM_YVOL                    2866  // program-graphics package: YVOL
+#define ITM_ZVOL                    2867  // program-graphics package: ZVOL
+#define ITM_NUMX                    2868  // program-graphics package: NUMX
+#define ITM_NUMY                    2869  // program-graphics package: NUMY
+#define ITM_WIREFRAME               2870  // program-graphics package: WIREFRAME
+#define ITM_PT3D                    2871  // program-graphics package: PT3D
+#define ITM_LINE3D                  2872  // program-graphics package: LINE3D
 #define MNU_CANVAS                  2462  // program-graphics package: the canvas softmenu
 #define ITM_2448                    2448
 #define ITM_2449                    2449

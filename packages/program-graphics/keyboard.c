@@ -1601,7 +1601,7 @@ endReturnTrue:
     }
 
     //handle the shift button processing
-    if((calcMode == CM_NORMAL || calcMode == CM_AIM || calcMode == CM_NIM  || calcMode == CM_MIM || calcMode == CM_EIM || calcMode == CM_PEM || calcMode == CM_PLOT_STAT || calcMode == CM_GRAPH || calcMode == CM_ASSIGN || calcMode == CM_ASN_BROWSER || calcMode == CM_REGISTER_BROWSER || calcMode == CM_FLAG_BROWSER || calcMode == CM_FONT_BROWSER || calcMode == CM_TIMER)) {
+    if((calcMode == CM_NORMAL || calcMode == CM_AIM || calcMode == CM_NIM  || calcMode == CM_MIM || calcMode == CM_EIM || calcMode == CM_PEM || calcMode == CM_PLOT_STAT || calcMode == CM_GRAPH || calcMode == CM_ASSIGN || calcMode == CM_ASN_BROWSER || calcMode == CM_REGISTER_BROWSER || calcMode == CM_FLAG_BROWSER || calcMode == CM_FONT_BROWSER || (calcMode >= 19 && calcMode <= 23) /* package browsers */ || calcMode == CM_TIMER)) {
       if(((key->primary == ITM_SHIFTf || ShiftOverride == ITM_SHIFTf))) {
         commonShiftProcessing(ITM_SHIFTf);
         return ITM_NOP;
@@ -2788,6 +2788,10 @@ RELEASE_END:
           else if(calcMode == CM_GRAPHICS_CANVAS && item != ITM_SNAP) {
             if(item == ITM_RS) {
               showFunctionNameItem = 0;
+            }
+            else if(item == ITM_BST || item == ITM_SST || item == ITM_RBR || item == ITM_FLGSV
+                 || item == ITM_ADD || item == ITM_SUB || item == ITM_4 || item == ITM_5 || item == ITM_6) {
+              pg3dKey(item);   // program-graphics package, stage G4: rotation, zoom, home view
             }
             keyActionProcessed = true;
           }
@@ -4730,7 +4734,8 @@ void fnKeyUp(uint16_t unusedButMandatoryParameter) {
         break;
       }
 
-      case CM_GRAPHICS_CANVAS: {   // program-graphics package: no action in the canvas view
+      case CM_GRAPHICS_CANVAS: {   // program-graphics package: stage G4, rotation about x
+        pg3dKey(ITM_UP1);
         break;
       }
 
@@ -4953,7 +4958,8 @@ void fnKeyDown(uint16_t unusedButMandatoryParameter) {
         break;
       }
 
-      case CM_GRAPHICS_CANVAS: {   // program-graphics package: no action in the canvas view
+      case CM_GRAPHICS_CANVAS: {   // program-graphics package: stage G4, rotation about x
+        pg3dKey(ITM_DOWN1);
         break;
       }
 

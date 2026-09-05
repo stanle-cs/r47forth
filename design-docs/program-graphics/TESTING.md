@@ -89,8 +89,24 @@ The refresh runs first, because `pkg_build` refreshes after its suite.
 | G2 audit, in-family wave | K9: the function name paint records the item and paints nothing in the view; the hide clears the item and repaints nothing. | Remove either arm in the screen.c mirror. |
 | G2 audit, in-family wave | K10: a real softkey press with the `CANVAS` menu pushed changes nothing in the view. | Remove the range clause of `executeFunction`. |
 | G2 audit, in-family wave | V9: in region 2 the softmenu band is cleared before the painter runs. | Skip the band clear. |
-| G4 | A unit cube from a fixed eye point projects to fixed pixels, recorded once. | Any change in the projection. |
-| G4 | `WIREFRAME` of a plane draws a mesh with a known pixel count. | Skip the row lines. |
+| G4 | P1: the eight corners of the unit cube project to the recorded pixels (DESIGN.md §9.3.6). | Any change in the projection. |
+| G4 | P2: `WIREFRAME` of the plane z = 0 on a 2 by 2 grid lights 798 pixels. | Skip the row lines. |
+| G4 | P3: the block is 512 pool blocks, taken by the first 3D command in the view, returned at EXIT, never taken outside the view. | Skip the free in `pgCloseView`. |
+| G4 | P5: the byte encoding: NaN is 255, the range ends are 0 and 254, values outside clamp. | Return 255 for a clamped value. |
+| G4 | P9, P26: each key changes its counter in both directions; 5 resets; 4 does nothing. | Drop a key from the guard arm. |
+| G4 | P10: 36 UP presses return the canvas byte for byte. | Count the steps modulo 37. |
+| G4 | P16: the stack survives `WIREFRAME`. | Skip `fnUndo(0)`. |
+| G4 | P18: the reset hook forgets the block without a free and restores the HP defaults. | Free the block in `pgReset`. |
+| G4 | P19: `ERASE` empties the retained content; a key press then draws nothing. | Skip `pg3dEmpty` in `pgSetRegion`. |
+| G4 | P20: `NUMX` with 1, 101, 2.5 and a string, and `XVOL` with equal ends, are refused and change nothing. | Accept 1. |
+| G4 | P23: `LINE3D` without a current point sets it and draws nothing. | Draw from (0, 0, 0). |
+| G4 | P12: 330 lines fill the block. | Skip the free-bytes test. |
+| G4 | S3, R1, R1y, R1z, R2: the showcase count, and the canvas returns after each full turn and after six zoom steps in and out. | Any change to a primitive or to the projection. |
+| G4 fix wave | P27: a point exactly one 1024th of the depth in front of the eye is drawable; nearer is not. | Make the eps test exclusive again. |
+| G4 fix wave | P28: the far corner of an extreme window projects to (32000, 32000): the clamp holds on the final row. | Drop the row clamp after the flip. |
+| G4 fix wave | P20b: `XVOL -2e38 2e38`, a span that overflows float, is refused. | Drop the finite-span check. |
+| G4 fix wave | P29: a body that calls `ERASE`, `PT3D`, and `LINE3D` under `WIREFRAME` leaves no valid grid. | Drop the counts check before `gridValid`. |
+| G4 fix wave | P3, second mutation: the block is not freed inside `pg3dFreeBlock`. | The first form did not compile: it named the 3D state above its declaration. |
 
 ## 5. Baseline measurement, stage G0
 

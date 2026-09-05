@@ -1,5 +1,5 @@
 diff --git a/src/c47/keyboard.c b/src/c47/keyboard.c
-index bc44026016e94a8865b8acc886386341596641c6..8a4806f72b8be9c751a1ca523247e49629eba326 100644
+index bc44026016e94a8865b8acc886386341596641c6..ad9d4a3dad9988d9cf32174432083aaa54cbee67 100644
 --- a/src/c47/keyboard.c
 +++ b/src/c47/keyboard.c
 @@ -687,7 +687,7 @@ static void executeFunction(const char *data, int16_t item_);
@@ -29,6 +29,15 @@ index bc44026016e94a8865b8acc886386341596641c6..8a4806f72b8be9c751a1ca523247e496
  
        if(data[0] == 0) {
          item = item_;
+@@ -1601,7 +1601,7 @@ endReturnTrue:
+     }
+ 
+     //handle the shift button processing
+-    if((calcMode == CM_NORMAL || calcMode == CM_AIM || calcMode == CM_NIM  || calcMode == CM_MIM || calcMode == CM_EIM || calcMode == CM_PEM || calcMode == CM_PLOT_STAT || calcMode == CM_GRAPH || calcMode == CM_ASSIGN || calcMode == CM_ASN_BROWSER || calcMode == CM_REGISTER_BROWSER || calcMode == CM_FLAG_BROWSER || calcMode == CM_FONT_BROWSER || calcMode == CM_TIMER)) {
++    if((calcMode == CM_NORMAL || calcMode == CM_AIM || calcMode == CM_NIM  || calcMode == CM_MIM || calcMode == CM_EIM || calcMode == CM_PEM || calcMode == CM_PLOT_STAT || calcMode == CM_GRAPH || calcMode == CM_ASSIGN || calcMode == CM_ASN_BROWSER || calcMode == CM_REGISTER_BROWSER || calcMode == CM_FLAG_BROWSER || calcMode == CM_FONT_BROWSER || (calcMode >= 19 && calcMode <= 23) /* package browsers */ || calcMode == CM_TIMER)) {
+       if(((key->primary == ITM_SHIFTf || ShiftOverride == ITM_SHIFTf))) {
+         commonShiftProcessing(ITM_SHIFTf);
+         return ITM_NOP;
 @@ -1688,6 +1688,16 @@ endReturnTrue:
          }
        }
@@ -59,7 +68,7 @@ index bc44026016e94a8865b8acc886386341596641c6..8a4806f72b8be9c751a1ca523247e496
  
        if(calcMode == CM_ASSIGN && itemToBeAssigned != 0 && tamBuffer[0] == 0) {
          assignToKey((char *)data);
-@@ -2763,6 +2779,19 @@ RELEASE_END:
+@@ -2763,6 +2779,23 @@ RELEASE_END:
              break;
            }
  
@@ -73,13 +82,17 @@ index bc44026016e94a8865b8acc886386341596641c6..8a4806f72b8be9c751a1ca523247e496
 +            if(item == ITM_RS) {
 +              showFunctionNameItem = 0;
 +            }
++            else if(item == ITM_BST || item == ITM_SST || item == ITM_RBR || item == ITM_FLGSV
++                 || item == ITM_ADD || item == ITM_SUB || item == ITM_4 || item == ITM_5 || item == ITM_6) {
++              pg3dKey(item);   // program-graphics package, stage G4: rotation, zoom, home view
++            }
 +            keyActionProcessed = true;
 +          }
 +
            else if(item == ITM_SNAP) {
              switch(calcMode) { //place modes here which should not work with SNAP
                //case CM_REGISTER_BROWSER:
-@@ -3407,7 +3436,7 @@ RELEASE_END:
+@@ -3407,7 +3440,7 @@ RELEASE_END:
  
  void fnKeyEnter(uint16_t unusedButMandatoryParameter) {
    doRefreshSoftMenu = true;     //dr
@@ -88,7 +101,7 @@ index bc44026016e94a8865b8acc886386341596641c6..8a4806f72b8be9c751a1ca523247e496
      if(GRAPHMODE && programRunStop == PGM_RUNNING) {   // a program running under CM_GRAPH or CM_PLOT_STAT (e.g. plot(int) integrand, programmed HPLOT) needs normal ENTER dup, not the empty interactive-graph case
        effectiveCalcMode = CM_NORMAL;
      }
-@@ -3587,6 +3616,10 @@ void fnKeyEnter(uint16_t unusedButMandatoryParameter) {
+@@ -3587,6 +3620,10 @@ void fnKeyEnter(uint16_t unusedButMandatoryParameter) {
          break;
        }
  
@@ -99,7 +112,7 @@ index bc44026016e94a8865b8acc886386341596641c6..8a4806f72b8be9c751a1ca523247e496
        default: {
          sprintf(errorMessage, commonBugScreenMessages[bugMsgCalcModeWhileProcKey], "fnKeyEnter", calcMode, "ENTER");
          displayBugScreen(errorMessage);
-@@ -3961,6 +3994,11 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
+@@ -3961,6 +3998,11 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
          break;
        }
  
@@ -111,7 +124,7 @@ index bc44026016e94a8865b8acc886386341596641c6..8a4806f72b8be9c751a1ca523247e496
        case CM_TIMER: {
          screenUpdatingMode = SCRUPD_AUTO;
          if(lastErrorCode != 0) {
-@@ -4177,7 +4215,10 @@ void fnKeyCC(uint16_t complex_Type) {    //JM Using 'unusedButMandatoryParameter
+@@ -4177,7 +4219,10 @@ void fnKeyCC(uint16_t complex_Type) {    //JM Using 'unusedButMandatoryParameter
        temporaryFlagPolar = false;
      }
  
@@ -123,7 +136,7 @@ index bc44026016e94a8865b8acc886386341596641c6..8a4806f72b8be9c751a1ca523247e496
        case CM_NIM: {
          addItemToNimBuffer(ITM_CC);
          break;
-@@ -4465,6 +4506,10 @@ void fnKeyBackspace(uint16_t unusedButMandatoryParameter) {
+@@ -4465,6 +4510,10 @@ void fnKeyBackspace(uint16_t unusedButMandatoryParameter) {
          break;
        }
  
@@ -134,29 +147,31 @@ index bc44026016e94a8865b8acc886386341596641c6..8a4806f72b8be9c751a1ca523247e496
        default: {
          sprintf(errorMessage, commonBugScreenMessages[bugMsgCalcModeWhileProcKey], "fnKeyBackspace", calcMode, "BACKSPACE");
          displayBugScreen(errorMessage);
-@@ -4685,6 +4730,10 @@ void fnKeyUp(uint16_t unusedButMandatoryParameter) {
+@@ -4685,6 +4734,11 @@ void fnKeyUp(uint16_t unusedButMandatoryParameter) {
          break;
        }
  
-+      case CM_GRAPHICS_CANVAS: {   // program-graphics package: no action in the canvas view
++      case CM_GRAPHICS_CANVAS: {   // program-graphics package: stage G4, rotation about x
++        pg3dKey(ITM_UP1);
 +        break;
 +      }
 +
        default: {
          sprintf(errorMessage, commonBugScreenMessages[bugMsgCalcModeWhileProcKey], "fnKeyUp", calcMode, "UP");
          displayBugScreen(errorMessage);
-@@ -4904,6 +4953,10 @@ void fnKeyDown(uint16_t unusedButMandatoryParameter) {
+@@ -4904,6 +4958,11 @@ void fnKeyDown(uint16_t unusedButMandatoryParameter) {
          break;
        }
  
-+      case CM_GRAPHICS_CANVAS: {   // program-graphics package: no action in the canvas view
++      case CM_GRAPHICS_CANVAS: {   // program-graphics package: stage G4, rotation about x
++        pg3dKey(ITM_DOWN1);
 +        break;
 +      }
 +
        default: {
          sprintf(errorMessage, commonBugScreenMessages[bugMsgCalcModeWhileProcKey], "fnKeyDown", calcMode, "DOWN");
          displayBugScreen(errorMessage);
-@@ -4914,7 +4967,7 @@ void fnKeyDown(uint16_t unusedButMandatoryParameter) {
+@@ -4914,7 +4973,7 @@ void fnKeyDown(uint16_t unusedButMandatoryParameter) {
  
  
  void fnKeyDotD(uint16_t unusedButMandatoryParameter) {
@@ -165,7 +180,7 @@ index bc44026016e94a8865b8acc886386341596641c6..8a4806f72b8be9c751a1ca523247e496
        case CM_NORMAL: {
          int32_t flag = getSystemFlag(FLAG_IRFRQ) ? FLAG_IRFRAC : FLAG_FRACT ;
          if(getSystemFlag(flag)) {
-@@ -4944,6 +4997,10 @@ void fnKeyDotD(uint16_t unusedButMandatoryParameter) {
+@@ -4944,6 +5003,10 @@ void fnKeyDotD(uint16_t unusedButMandatoryParameter) {
          break;
        }
  

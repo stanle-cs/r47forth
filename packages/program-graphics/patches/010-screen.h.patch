@@ -1,8 +1,8 @@
 diff --git a/src/c47/screen.h b/src/c47/screen.h
-index 1643a2b62d0eaa0c6936bc21d7d563f1d6dab990..8205680a68aaa8b7b7e0142f3b9694801a4c2365 100644
+index 1643a2b62d0eaa0c6936bc21d7d563f1d6dab990..8ea71b580ab09de4a3d72174c90dbd812148f656 100644
 --- a/src/c47/screen.h
 +++ b/src/c47/screen.h
-@@ -34,6 +34,25 @@
+@@ -34,6 +34,36 @@
    void       fnPixel                          (uint16_t unusedButMandatoryParameter);
    void       fnPoint                          (uint16_t unusedButMandatoryParameter);
    void       fnAGraph                         (uint16_t regist);
@@ -25,6 +25,17 @@ index 1643a2b62d0eaa0c6936bc21d7d563f1d6dab990..8205680a68aaa8b7b7e0142f3b969480
 +  void       fnGclip                          (uint16_t unusedButMandatoryParameter);
 +  void       fnXrng                           (uint16_t unusedButMandatoryParameter);
 +  void       fnYrng                           (uint16_t unusedButMandatoryParameter);
++  void       fnEyept                          (uint16_t unusedButMandatoryParameter);
++  void       fnXvol                           (uint16_t unusedButMandatoryParameter);
++  void       fnYvol                           (uint16_t unusedButMandatoryParameter);
++  void       fnZvol                           (uint16_t unusedButMandatoryParameter);
++  void       fnNumx                           (uint16_t unusedButMandatoryParameter);
++  void       fnNumy                           (uint16_t unusedButMandatoryParameter);
++  void       fnWireframe                      (uint16_t label);
++  void       fnPt3d                           (uint16_t unusedButMandatoryParameter);
++  void       fnLine3d                         (uint16_t unusedButMandatoryParameter);
++  void       pg3dKey                          (int16_t item);
++  void       pgReset                          (void);
    void       insertAlphaCursor                (uint16_t startAt);
  
    void       drawSinglePixelFullWidthLine     (int y);
