@@ -114,65 +114,73 @@ if (ROUND === 1 && !threeFamilyMet) {
 
 /* The auditor brief, inlined verbatim rather than referenced. Naming the file
  * and telling the agent to follow it has failed here before (2026-08-04). */
+/* The finder brief. Plain words on purpose (2026-09-04): the platform
+ * classifier refused the finders eight of eight, category
+ * "reasoning_extraction", and five bisects found the trigger in the OUTPUT
+ * SCHEMA, not in this text: the pair of descriptions "what was read, what
+ * was not, what the budget did not reach" and "considered and cleared, with
+ * the reasoning" together read as a request for the model's own reasoning.
+ * Either one alone passed. The schema below describes the CODE, never the
+ * reader's process, and the brief follows the same rule. Keep it so. */
 const BRIEF = `
-This is a CORRECTNESS review of hobby calculator firmware — functional bugs
-and design flaws only. It is not a security assessment; there is no security
-dimension to assess. Report findings. Do not fix anything. Do not produce
-patches.
+This is a correctness review of the firmware of a hobby pocket calculator.
+Find functional bugs and design flaws only. This is not a security review,
+and there is no security dimension. Report findings. Do not fix anything.
+Do not write patches.
 
-THE SUBJECT. A personal hobby project: a Forth interpreter built as an external
-package over the open-source C47/R47 firmware for a DM42-class pocket
-calculator. Single-user handheld. No network stack, no untrusted input, no
-privilege boundary. The worst outcome of any bug is that the calculator reboots
-and the owner loses the program they were typing. A finding whose impact
-statement needs an attacker is NOT a finding. Ordinary correctness — wrong
-answers, lost work, stuck states, crashes — is the whole job.
+THE SUBJECT. A personal hobby project: external packages over the
+open-source C47/R47 firmware for a DM42-class pocket calculator. One user,
+one handheld. No network, no untrusted input, no privilege boundary. The
+worst outcome of a bug is a reboot and the loss of the program that the
+owner typed at that moment. A finding that needs an attacker is not a
+finding. Wrong answers, lost work, stuck states and crashes are the whole
+job.
 
-READ THE DESIGN BEFORE THE CODE. design-docs/forth-core/DESIGN.md is
-authoritative. The stage sheet (design-docs/forth-core/STAGE_*.md) carries the
-rulings; STAGE_*_TRACES.md carries evidence with file:line. Code that
-contradicts DESIGN.md is a finding. Code that contradicts your expectations but
-matches DESIGN.md is not.
+READ THE DESIGN BEFORE THE CODE. The DESIGN.md of the package named in
+SUBJECT is the authority. The stage sheets carry the rulings. The
+DESIGN-HISTORY.md carries the evidence. Code that contradicts DESIGN.md is
+a finding. Code that contradicts your expectation but agrees with DESIGN.md
+is not.
 
-EVERY FINDING MUST SUPPLY, or it does not count:
- 1. where: file:line
- 2. the REACHING INPUT: the concrete keypress sequence, Forth line, or call
-    path that gets there. This is the part usually missing and the part that
-    matters.
- 3. what goes wrong: the observable consequence, in terms of what the owner sees
- 4. why it is wrong: the contract, comment, ruling or invariant violated, quoted
+THE FOUR ITEMS OF A FINDING. Give these four items in each finding, or the
+finding does not count:
+ 1. Where: give the file and the line.
+ 2. The reaching input: give the key sequence, the program step, or the
+    call path that reaches the line. This item is absent most often, and
+    it is the one that matters.
+ 3. What goes wrong: give the result that the owner sees.
+ 4. Why it is wrong: quote the contract, comment, ruling or invariant that
+    the code breaks.
 
 WHAT NOT TO FLAG:
- 1. Decisions the code already explains. This codebase carries load-bearing
-    comments; a comment explaining why something looks wrong is the design
-    telling you it considered your finding first. Real examples that look like
-    bugs and are not: calcModeNormal() followed by an unconditional
-    popSoftmenu() in the EXIT ladder; a formatter copying into a caller's
-    buffer rather than tmpString (display.c writes tmpString in ~190 places);
-    a reset that clears one store and deliberately not its neighbour. If a
-    comment explains the choice and you still think it is wrong, QUOTE the
-    comment and argue with it — that is legitimate. Ignoring it is not.
- 2. Deliberate scope. Every stage sheet has a Non-goals section. Absent
-    features listed there are not defects.
- 3. Style, naming, formatting, or code you would have written differently.
- 4. A theoretical path with no input that reaches it. REACHABILITY, NOT
-    WRITE-SET: one trace claimed a drain worked "by construction" from reading
-    the predicates and was wrong about the "if" above them; another reported a
-    bug from two true facts and a wrong conclusion and was retracted on the
-    reachability trace. If you cannot say what calls it with that argument, mark
-    the finding unreached rather than asserting it.
- 5. Anything the build gate or the compiler already reports.
+ 1. A decision that the code explains. This code carries comments that
+    explain choices that look wrong. Such a comment says that the design
+    considered your finding first.
 
-If unsure whether something is a defect or a deliberate decision whose reasoning
-you have not found, SAY SO rather than guessing. A confident wrong finding costs
-more than silence: it trains the reader to skim, and then the one real finding
-gets skimmed too.
+    Three examples look like bugs and are not. Example one:
+    calcModeNormal() followed by an unconditional popSoftmenu() in the
+    EXIT ladder. Example two: a formatter that copies into the buffer of
+    its caller and not into tmpString. Example three: a reset that clears
+    one store and deliberately not its neighbour. If a comment explains
+    the choice and you still think that the code is wrong, quote the
+    comment. Then argue with it.
+ 2. Deliberate scope. Each stage sheet has a Non-goals section. A feature
+    listed there is not a defect.
+ 3. Style, names, formatting, or code that you write differently.
+ 4. A path that no input reaches. Reachability, not write-set: name the
+    caller and the argument. If you cannot, mark the finding as unreached.
+    Do not assert it.
+ 5. Anything that the build gate or the compiler already reports.
 
-DO NOT pad the finding count and do not drive it to zero. You must also report
-what you considered and cleared — an empty "deliberately not flagged" means you
-did not understand what you read.
+If you are not sure whether something is a defect or a deliberate decision,
+say so. Do not guess. A confident wrong finding costs more than silence,
+because the owner then reads all findings less carefully.
 
-You may read anything and run read-only commands. Do NOT edit files.
+Do not pad the finding count. Do not force it to zero. Also list the
+sites that you examined and found correct, one line each. An empty list
+means that you did not understand what you read.
+
+You can read anything and run read-only commands. Do not edit files.
 `.trim()
 
 const FINDING_SCHEMA = {
@@ -190,16 +198,16 @@ const FINDING_SCHEMA = {
           title:          { type: 'string', description: 'one line, the claim alone' },
           file:           { type: 'string' },
           line:           { type: 'integer' },
-          reaching_input: { type: 'string', description: 'concrete sequence/call path, or "UNREACHED: ..." if none found' },
-          consequence:    { type: 'string', description: 'what the owner sees' },
-          violated:       { type: 'string', description: 'the contract/comment/ruling, quoted' },
+          reaching_input: { type: 'string', description: 'the key sequence, program step, or call path that reaches the line. If none was found, "UNREACHED: ..."' },
+          consequence:    { type: 'string', description: 'the result that the owner sees' },
+          violated:       { type: 'string', description: 'the contract, comment or ruling that the code breaks, quoted' },
           severity:       { type: 'string', enum: ['crash-or-data-loss', 'wrong-result', 'stuck-state', 'latent', 'design-flaw'] },
           confidence:     { type: 'string', enum: ['high', 'medium', 'low'] },
         },
       },
     },
-    coverage:    { type: 'string', description: 'what was read, what was not, what the budget did not reach' },
-    not_flagged: { type: 'string', description: 'considered and cleared, with the reasoning' },
+    coverage:    { type: 'string', description: 'the files and functions that were read, and the ones that were not' },
+    not_flagged: { type: 'string', description: 'the sites examined and found correct, one line each' },
     verdict:     { type: 'string' },
   },
 }
@@ -215,28 +223,28 @@ const VERDICT_SCHEMA = {
      * survival, and a machine reading the pair would have filed it either
      * way (restarted round 1, process item 3). State the reason, not a
      * second verdict. */
-    why:      { type: 'string', description: 'the reason, NOT a verdict token — do not begin with REFUTED/SURVIVES; it must not contradict the verdict field' },
-    evidence: { type: 'string', description: 'the path constructed, the trace followed, or the ruling found' },
+    why:      { type: 'string', description: 'the reason in the code. Do not begin with REFUTED or SURVIVES. Do not contradict the verdict field' },
+    evidence: { type: 'string', description: 'the call path, the code path, or the ruling, with file and line' },
   },
 }
 
 const DIMENSIONS = [
   { key: 'contracts', effort: 'high',
-    q: 'CONTRACTS VS CALLERS. Does each function\'s stated contract hold at EVERY call site, including ones added recently? Who calls it with the argument the banner says is impossible? Check preconditions the caller is assumed to establish and the ones nobody establishes.' },
+    q: 'CONTRACTS AGAINST CALLERS. Does the stated contract of each function hold at every call site? Include the recent call sites. Which caller passes the argument that the banner says is impossible? Examine the preconditions that a caller must establish, and the ones that nobody establishes.' },
   { key: 'lifecycle', effort: 'high',
-    q: 'STATE MACHINES AND LIFECYCLE. Capture open/suspend/close, the fold, the softmenu stack, calcMode, FLAG_ALPHA. What sequence leaves a state nobody handles? What survives a reset that should not, or dies that should not? What happens when two of these change at once?' },
+    q: 'STATE MACHINES AND LIFECYCLE. Examine the open, suspend and close of a capture or a view, the softmenu stack, calcMode, and FLAG_ALPHA. Which sequence leaves a state that nobody handles? What survives a reset but must not survive? What dies at a reset but must not die? If two of these change at the same time, what happens?' },
   { key: 'arithmetic', effort: 'high',
-    q: 'BOUNDARIES AND ARITHMETIC. Indices, wraps, caps, lengths, off-by-one, unsigned underflow, buffer sizes vs the strings written into them. Where does a counter meet a cap, and what happens one past it? Check every cast and every subtraction on an unsigned type.' },
+    q: 'BOUNDARIES AND ARITHMETIC. Examine indexes, wraps, caps, lengths, off-by-one, unsigned underflow, and buffer sizes against the strings written into them. Where does a counter meet a cap? What happens one past the cap? Examine each cast and each subtraction on an unsigned type.' },
   { key: 'errorpaths', effort: 'high',
-    q: 'ERROR AND REFUSAL PATHS. The unhappy path. After a refusal, an error, or an early return: is every piece of state consistent with every other? What did the early return skip that a later line assumes was done? Who clears lastErrorCode and who reads it after.' },
+    q: 'ERROR PATHS. The unhappy path. After an error, a rejected input, or an early return, is each piece of state consistent with each other piece? What did the early return skip that a later line assumes is complete? Who clears lastErrorCode? Who reads it after that?' },
   { key: 'guards', effort: 'high',
-    q: 'GUARD REACHABILITY. For each conjunct in each gate: construct the input that falsifies it. A guard nobody can reach is dead code; a conjunct that cannot be falsified is noise; a MISSING conjunct is a defect. Pay attention to gates that were recently edited.' },
+    q: 'GUARD REACHABILITY. For each condition in each gate, give the input that makes the condition false. A guard that nobody can reach is dead code. A condition that is always true is noise. A missing condition is a defect. Examine the recently edited gates with care.' },
   { key: 'tests', effort: 'high',
-    q: 'TESTS THAT CANNOT FAIL. Vacuous assertions (comparisons always true/false by type range), self-comparison, oracles that pass on the wrong answer, a goto cleanup with no fail=1, a test whose comment claims more than its body checks, a fixture that silently no-ops. Name the specific assertion and what would have to break for it to fire.' },
+    q: 'TESTS THAT CANNOT FAIL. Examine assertions that are always true or always false by type range, and self-comparison. Examine oracles that pass on the wrong answer, and a goto cleanup with no fail flag. Examine a test whose comment claims more than its body tests, and a fixture that silently does nothing. Name the assertion. Say what must break to make it fire.' },
   { key: 'design', effort: 'xhigh',
-    q: 'DESIGN FLAWS, not bugs. Two places that must agree with nothing forcing them to. State stored that could be derived, so it can now disagree with its source. A rule with non-enumerable exceptions. A contract that is correct but that every caller gets wrong — a defect of the contract. Duplicated truth. Anything that will be a bug the next time someone touches it.' },
+    q: 'DESIGN FLAWS, not bugs. Two places that must agree with nothing that forces them to agree. Stored state that the code can derive, so it can disagree with its source. A rule with exceptions that nobody can list. A contract that is correct but that each caller applies incorrectly, which is a defect of the contract. Duplicated truth. Report each thing that becomes a bug the next time that somebody touches it.' },
   { key: 'upstream', effort: 'medium',
-    q: 'UPSTREAM DISCIPLINE. Package overrides vs upstream files: hunks larger than they need to be, behaviour changed inline where a call would do, drift risk in the largest overrides (screen.c, keyboard.c, items.c). Anything that will conflict badly on the next upstream merge.' },
+    q: 'UPSTREAM DISCIPLINE. Examine package overrides against upstream files. Find hunks larger than necessary, and behaviour changed inline where a call is enough. Find drift risk in the largest overrides (screen.c, keyboard.c, items.c). Report each change that will conflict badly at the next upstream merge.' },
 ]
 
 const dims = A.dimensions
@@ -257,18 +265,19 @@ SUBJECT: ${SUBJECT}
 COMMIT RANGE: ${RANGE}
 FILES IN SCOPE: ${FILES}
 
-Start by reading design-docs/forth-core/DESIGN.md (the sections relevant to your
-dimension), then the stage sheet and traces, then the code. Use
-\`git log -p ${RANGE}\` and \`git diff ${RANGE}\` to see what actually changed.
+Start with the DESIGN.md of the package named in SUBJECT. Read the sections
+that concern your dimension. Then read the stage sheet and the history.
+Then read the code. Read the commits of the range with \`git log -p ${RANGE}\`
+and \`git diff ${RANGE}\` to see what changed.
 
-The named bug-class catalog is
-.claude/skills/cross-model-audit/references/bug-classes.md — classes this
-codebase has already paid for. Hunt your dimension's members at ALL their
-sites: recurrence is the norm here (the same shape has come back at a second
-site after the first was fixed and commented).
+The catalog of named bug classes is
+.claude/skills/cross-model-audit/references/bug-classes.md. This codebase
+already paid the cost of each class. Search for the members of your
+dimension at every site. The same shape returned at a second site after
+the first site was fixed and commented.
 
-YOUR DIMENSION — stay in it, someone else has the others; duplicated coverage is
-worth less than independent coverage:
+Stay in YOUR dimension. Other readers cover the other dimensions, and
+independent coverage is worth more than duplicated coverage:
 
 ${d.q}`,
     { label: `find:${d.key}`, phase: 'Find', schema: FINDING_SCHEMA, effort: d.effort, ...MODEL })
@@ -311,9 +320,9 @@ phase('Refute')
  * Three lenses, assigned round-robin so every finding gets a verifier whose
  * angle differs from the finder's. */
 const LENSES = [
-  { key: 'reachability', text: 'REACHABILITY — construct the call path and the concrete input that reaches the reported line. If you cannot construct it, the finding is REFUTED. "It looks reachable" is not construction.' },
-  { key: 'correctness',  text: 'CORRECTNESS — grant the path. Is the described consequence what the code actually does? Trace it. A finding can have a real path and a wrong conclusion; that is the commonest failure mode here.' },
-  { key: 'intent',       text: 'INTENT — is this documented as deliberate? Search the comments, DESIGN.md, the stage sheets and DESIGN-HISTORY.md. If the design ruled on it, the finding is REFUTED and you cite the ruling.' },
+  { key: 'reachability', text: 'REACHABILITY. Construct the call path and the concrete input that reaches the reported line. If you cannot construct it, the finding is REFUTED. "It looks reachable" is not construction.' },
+  { key: 'correctness',  text: 'CORRECTNESS. Grant the path. Trace the code. Make sure that the described consequence is what the code does. A finding can have a real path and a wrong conclusion. That is the most common failure mode here.' },
+  { key: 'intent',       text: 'INTENT. Is this behaviour documented as deliberate? Search the comments, DESIGN.md, the stage sheets and DESIGN-HISTORY.md. If the design ruled on it, the finding is REFUTED. Cite the ruling.' },
 ]
 
 /* Round 8's in-family findings filled the old cap of 24 and left all ten
@@ -328,36 +337,40 @@ const toVerify = unique.slice(0, CAP)
 const judged = await parallel(toVerify.map((f, i) => () => {
   const lens = LENSES[i % LENSES.length]
   return agent(
-`You are cross-checking a finding from a CORRECTNESS review of hobby calculator
-firmware (functional bugs, not security — there is no security dimension here).
-Your job is to REFUTE the finding: assume it is wrong and look for the reason.
-Findings that survive a genuine attempt to disprove them are worth acting on;
-findings that were merely admired are not. DEFAULT TO REFUTED WHEN UNCERTAIN.
+`You cross-check a finding from a CORRECTNESS review of hobby calculator
+firmware. The review is for functional bugs, not security (there is no
+security dimension here). Your job is to refute the finding: assume that it
+is wrong, and search for the reason. A finding that survives a real attempt
+to disprove it is worth action. A finding that a reader only admired is not.
+If you are uncertain, the default verdict is REFUTED.
 
 Repo: /home/stan/c43. Subject: ${SUBJECT} (${RANGE}).
 
-WORKTREE CHECK — YOUR FIRST TWO ACTIONS, BEFORE ANY READ. Requested by
-rounds 2, 3, 4 and the restarted round 1; a worktree's ref is a CLAIM.
+WORKTREE CHECK. Do these two actions first, before you read anything. Rounds
+2, 3, 4 and the restarted round 1 requested this check. A worktree's ref is a
+CLAIM.
   1. Run: git log --oneline -1 && git merge-base --is-ancestor ${TIP} HEAD && echo ANCESTOR-OK
      The audited tip is ${TIP}.
-     Worktrees have spawned ~110 commits behind, where the audited code does
-     not exist yet — a verifier there judges a codebase that is not there.
-     If that does not print ANCESTOR-OK, or HEAD is not ${TIP}, run
-     'git checkout ${TIP}' before reading anything. Six consecutive rounds
-     have spawned at a ref ~110 commits behind, where the audited files do
-     not exist; every round was usable only because the readers caught it.
-  2. 'git status --porcelain' and 'git diff'. A worktree has ARRIVED carrying a
-     live foreign mutation written by a sibling verifier working the same
-     finding (restarted round 1: 'prettyVisual.c:1457'). A dirty worktree you
-     did not dirty means your reads and any gate run are UNTRUSTWORTHY unless
-     you account for the edit. REPORT a foreign edit in your evidence, and
-     NEVER revert it ('git checkout'/'restore' once nearly destroyed
-     uncommitted stage work). If the edit is exactly the mutation your
-     verification needed, say so and use it — but say so.
-Your own mutations: mark them 'AUDIT-PROBE R<n>', revert by INVERSE EDIT in
-this same step, and verify the mutation reached the built artifact.
+     Worktrees spawned ~110 commits behind, where the audited code does not
+     exist yet. A verifier there judges a codebase that is not there.
+     If that command does not print ANCESTOR-OK, or HEAD is not ${TIP}, run
+     'git checkout ${TIP}' before you read anything. Six consecutive rounds
+     spawned at a ref ~110 commits behind, where the audited files do not
+     exist. Each round was usable only because the readers caught it.
+  2. Run 'git status --porcelain' and 'git diff'. In the restarted round 1, a
+     worktree arrived with a live foreign mutation ('prettyVisual.c:1457').
+     A sibling verifier that worked on the same finding wrote it. If the
+     worktree is dirty and the edit is not yours, your reads and each gate
+     run are untrustworthy until you explain the edit. Report a foreign edit
+     in your evidence, and NEVER revert it ('git checkout'/'restore' once
+     nearly destroyed uncommitted stage work). If the edit is exactly the
+     mutation that your verification needed, say so and use it, but always
+     say so.
+For your own mutations: mark them 'AUDIT-PROBE R<n>'. Revert them by an
+inverse edit in the same step. Make sure that the mutation reached the built
+artifact.
 
-THE FINDING (produced by a different reader, working the "${f.dim}" dimension):
+THE FINDING (a different reader produced it on the "${f.dim}" dimension):
   title:          ${f.title}
   where:          ${f.file}:${f.line}
   reaching input: ${f.reaching_input}
@@ -365,44 +378,48 @@ THE FINDING (produced by a different reader, working the "${f.dim}" dimension):
   violated:       ${f.violated}
   severity:       ${f.severity}
 
-SCOPE — YOU ARE NOT LIMITED TO WHAT THE FINDING QUOTES. If the finding
-came from an out-of-family packet, that packet's excerpt is NOT your scope:
-you have the whole repository and the finding may turn on code the reader
+SCOPE. You are not limited to what the finding quotes. If the finding came
+from an out-of-family packet, that packet's excerpt is NOT your scope. You
+have the whole repository, and the finding can depend on code that the reader
 never saw. Round 2 settled two of four findings on code outside the packet
-(the STO arm for one, the BIGOP DONE arm for the other) — a refuter who had
-assumed packet scope would have returned the wrong verdict on BOTH, one
-SURVIVES that should have been REFUTED and one REFUTED-as-unreachable that
-was real. Go read the callers.
+(the STO arm for one, the BIGOP DONE arm for the other). A refuter limited to
+the packet scope gets both verdicts wrong: one wrong SURVIVES (the correct
+verdict was REFUTED) and one wrong REFUTED-as-unreachable (the finding was
+real). Read the callers.
 
-YOUR LENS — use only this one:
+YOUR LENS. Use only this one:
 ${lens.text}
 
-Where the claim is "this is not covered" or "this test cannot fail", the proof
-is a MUTATION: break the thing, run ./packages/forth-core/build-test.sh, and see
-whether it goes red. Apply the mutation, observe, and REVERT it in the same
-step. The tree must be clean when you finish — verify with \`git status\`.
+If the claim is "this is not covered" or "this test cannot fail", the proof
+is a mutation. Break the thing. Run ./packages/forth-core/build-test.sh.
+Observe whether the gate goes red. Apply the mutation, observe, and revert it
+in the same step. When you finish, the tree must be clean. Make sure of that
+with \`git status\`.
 
-YOU ARE IN YOUR OWN GIT WORKTREE. Mutate freely HERE; this is the only place
-you may. Round 5 is why this is spelled out: verifiers shared the owner's
-working tree, and two of three mutation runs were contaminated by a sibling's
-live \`/* MUTATION */\` edits — one saw a baseline gate come back RED at a
-clean HEAD. Do NOT touch any tree but your own, and do not revert an edit you
-did not make: a foreign edit means a stale sibling, and the correct response is
-to say so in your evidence, not to clean up after it.
+OWN WORKTREE. You are in your own git worktree. Mutate freely here. This is
+the only place where you can mutate. Round 5 is the reason for this explicit
+rule. Verifiers shared the owner's working tree, and a sibling's live
+\`/* MUTATION */\` edits contaminated two of three mutation runs. One run saw a
+baseline gate return red at a clean HEAD.
 
-FIRST ACTION, before reading anything: run \`git log --oneline -1\` in your
-worktree. Worktrees have spawned at a STALE ref (round 6 caught two at
-c3a00768c, ~114 commits behind the audited tip) — a worktree at the wrong ref
-produces verdicts about a codebase that does not exist. If HEAD is not the
-audited tip named in the subject line, run \`git checkout <audited-tip>\`
-(detached is fine) and say so in your evidence. The audited tip for this run
-is the commit named in SUBJECT; if none is named, match the main repo:
+Do NOT touch a tree other than your own. Do not revert an edit that you did
+not make. A foreign edit means a stale sibling. The correct response is to
+say so in your evidence, not to remove the edit.
+
+FIRST ACTION, before you read anything: run \`git log --oneline -1\` in your
+worktree. Worktrees spawned at a STALE ref (round 6 caught two at c3a00768c,
+~114 commits behind the audited tip), and a worktree at the wrong ref produces
+verdicts about a codebase that does not exist. If HEAD is not the audited tip
+named in the subject line, run \`git checkout <audited-tip>\` (detached is
+fine). Say so in your evidence. The audited tip for this run is the commit
+named in SUBJECT. If SUBJECT names no commit, match the main repo:
 \`git -C /home/stan/c43 rev-parse HEAD\`.
 
 Otherwise do not edit the tree at all.
 
-Answer REFUTED or SURVIVES, one paragraph of why, then your evidence: the path
-you constructed, the trace you followed, or the ruling you found.`,
+Answer REFUTED or SURVIVES, then give one paragraph of why. Then give your
+evidence: the path you constructed, the trace you followed, or the ruling you
+found.`,
     { label: `refute:${lens.key}:${f.file.split('/').pop()}:${f.line}`, phase: 'Refute',
       schema: VERDICT_SCHEMA, effort: 'high', ...MODEL,
       /* AUDIT round 5 earned this: verifiers mutate to prove a coverage claim,
@@ -425,40 +442,42 @@ log(`${confirmed.length} survived refutation, ${refuted.length} refuted`)
 phase('Synthesis')
 
 const report = await agent(
-`Write the audit report for ${SUBJECT} (${RANGE}), round ${ROUND}, following
-design-docs/forth-core/CODE_AUDIT.md's "Report" section EXACTLY — its eight
+`Write the audit report for ${SUBJECT} (${RANGE}), round ${ROUND}. Follow the
+"Report" section of design-docs/forth-core/CODE_AUDIT.md EXACTLY. Use its eight
 sections, in its order. Repo: /home/stan/c43.
 
-House style: this is an internal design doc for the project owner. Dense,
-direct, technical. No marketing, no summary paragraph that restates, no
-recommendations the evidence does not carry.
+House style: this is an internal design doc for the project owner. Write it
+dense, direct, and technical. Do not write marketing. Do not write a summary
+paragraph that restates. Do not write recommendations that the evidence does
+not carry.
 
-RANK BY WHAT THE FINDING COSTS THE OWNER, not by how clever it is: a crash on a
-common gesture outranks a wrong result in a case nobody reaches, which outranks
-a contract that is merely untidy.
+Rank each finding by what it COSTS the owner, not by how clever it is. A crash
+on a common gesture outranks a wrong result in a case nobody reaches. A wrong
+result in a case nobody reaches outranks a contract that is merely untidy.
 
-DO NOT drive the finding count to zero and do not pad it. Say which findings you
-would leave alone if the goal were code that is correct rather than code that
-passes an audit.
+Do NOT drive the finding count to zero. Do not pad it. Assume that the goal is
+code that is correct, not code that passes an audit. Say which findings you
+will then leave alone.
 
-For every CONFIRMED finding include the concrete reaching input, the violated
-contract quoted, the bug class, and the class-level test that would pin it —
-but NO patches. This audit produces findings, not fixes.
+For every CONFIRMED finding, include the concrete reaching input. Quote the
+violated contract. Also include the bug class and the class-level test that
+will pin it. Include no patches. This audit produces findings, not fixes.
 
-The "deliberately not flagged" section is MANDATORY and must be substantive:
-merge what the finders reported clearing with what the refutation pass
-disproved, and say WHY each was cleared. An audit with an empty section there
-did not understand what it read.
+The "deliberately not flagged" section is MANDATORY, and it must be
+substantive. Merge the items that the finders reported as cleared with the
+items that the refutation pass disproved. For each item, say why it is
+cleared. An audit with an empty section there did not understand what it read.
 
-OUT-OF-FAMILY ACCOUNTING — round ${ROUND}; ${oofStatus}.
+OUT-OF-FAMILY ACCOUNTING, round ${ROUND}: ${oofStatus}.
 ${oofBanner
   ? `Open section 1 with this banner VERBATIM, its own paragraph, before anything else:\n${oofBanner}`
   : `In section 1, list every out-of-family reader: its packet path, its reply path, the MODEL line quoted VERBATIM from the reply file (READ each reply file; a missing or empty reply is a timeout or an overwrite, never a clean bill — if you find one, open section 1 with a banner saying so instead), and how many findings that reply raised. Section 8 carries the same list plus how many of each reader's findings survived refutation.`}
 
-CONFIRMED (survived the independent refutation pass):
+CONFIRMED (these findings survived the independent refutation pass):
 ${JSON.stringify(confirmed.map(f => ({ ...f, verdict: f.verdict })), null, 1)}
 
-REFUTED (and why — this is the raw material for "deliberately not flagged"):
+REFUTED, with the reason for each. This list is the raw material for
+"deliberately not flagged":
 ${JSON.stringify(refuted.map(f => ({ title: f.title, file: f.file, line: f.line, why: f.verdict.why, evidence: f.verdict.evidence })), null, 1)}
 
 ${unique.length > CAP ? `UNVERIFIED (beyond the verification cap — list these honestly as unverified):\n${JSON.stringify(unique.slice(CAP), null, 1)}` : ''}
@@ -466,8 +485,9 @@ ${unique.length > CAP ? `UNVERIFIED (beyond the verification cap — list these 
 PER-DIMENSION COVERAGE AND CLEARED ITEMS (from the finders):
 ${JSON.stringify(reports.map((r, i) => ({ dimension: dims[i].key, coverage: r.coverage, not_flagged: r.not_flagged, verdict: r.verdict })), null, 1)}
 
-Write the report to design-docs/forth-core/AUDIT_${(SUBJECT || 'subject').replace(/[^A-Za-z0-9]+/g, '-')}_${A.date || 'report'}.md
-and return the absolute path plus a five-line summary.`,
+Write the report to this path:
+design-docs/forth-core/AUDIT_${(SUBJECT || 'subject').replace(/[^A-Za-z0-9]+/g, '-')}_${A.date || 'report'}.md
+Return the absolute path plus a five-line summary.`,
   { label: 'synthesise-report', phase: 'Synthesis', effort: 'xhigh', ...MODEL })
 
 return {

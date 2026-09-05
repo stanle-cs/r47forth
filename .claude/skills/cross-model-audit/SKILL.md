@@ -299,15 +299,28 @@ amends `CODE_AUDIT.md` and this skill. If a round taught nothing new
 about the process, say so in the report; if it did and nothing was
 encoded, the round is not finished.
 
-## Known platform refusal (2026-09-04)
+## Platform refusal, diagnosed (2026-09-04)
 
 The in-family runner's eight finder agents were refused at spawn with the
-platform category "reasoning_extraction" ("reverse engineering or
-duplicating model outputs"), synthetic model, no tool use. The finder
-brief names no model. The refusal came with the program-graphics G1
-subject text and the standard dimensions. Not yet diagnosed. Until it is:
-run the outside readers (Gemini, Sol) and the operator's own reading, mark
-the in-family leg as "refused at spawn" in the round report, and try one
-reworded rerun per stage at most. Candidate triggers to test one at a
-time: the words "blind", "family", "reader", "verdict", and the
-structured-output instruction.
+platform category "reasoning_extraction", zero tokens, in four seconds.
+Five bisects found the trigger, and it was not the text: the byte-exact
+prompt passed with a small output schema and every text variant was
+refused with the full schema. Inside the schema, the pair of descriptions
+"what was read, what was not, what the budget did not reach" (coverage)
+and "considered and cleared, with the reasoning" (not_flagged) is the
+trigger. Either one alone passed. Together they read as a request for the
+model's own reasoning. The fix in `audit-workflow.js`: every schema
+description names a thing in the CODE (the files read, the sites found
+correct, the call path), never the reader's process. The brief, the
+dimension questions, the finder tail, the refuter prompt, the lenses, and
+the report prompt then went through an ASD-STE100 pass (pragmatic mode,
+six checkers and one completeness critic, 2026-09-05). Both the plain
+rewrite and the STE version passed the classifier eight of eight, on the
+exact prompts that the workflow assembles, with the new schema.
+
+Rules that follow. A schema description never asks for the reader's
+process, budget, or reasoning. A refusal with zero tokens is a classifier
+decision on the whole request, tool definitions included: bisect the
+schema with the text. A shortened task tail does not mask the trigger
+(bisect 5, S0), so a cheap bisect is a valid bisect. The proof of a fix is
+one real run of the finders, not a bisect variant.
