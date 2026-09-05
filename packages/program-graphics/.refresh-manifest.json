@@ -1,7 +1,7 @@
 {
   "base_commit": "af7ad934a0dfeeada96c21136e2ab7084647de01",
   "files": {
-    "pgmGraphics.c": "3e9f82ef2a834ede8db70cd9f87578670dcd68f6cb86f15f136be8ac24e5ab3f",
+    "pgmGraphics.c": "1f84749f0943747bd06356004fb0d8ed0187183fc405f5b6c82ba6c8b8e24852",
     "pgmGraphics.h": "b70dbdaaee5df3faf56e1b5cfb15cf61e1fd0cea7a38b8defbb95811b1731d39",
     "testSuite/tests/program_graphics.txt": "31c40c31a0ae7139c2ef866df315784e9537c81e0c8a45dffa7161419e4d78aa"
   },
@@ -9,12 +9,12 @@
     "010-c47Extensions__addons.c.patch": "9769955bbe027beece61a39a6e51dfb0a00f1bac2d859ebc3491bff38a0ade9c",
     "010-calcMode.c.patch": "5bd8a3aeae6885a0a9e582a4de24841a16ad6bb7a2c74fc800939613a7ad2086",
     "010-defines.h.patch": "99755d76dcc46033c3258989c82281ccbc0c3f9aaf047cbb552c09fbd7cafd04",
-    "010-items.c.patch": "20a0bc0f6f24caa9ab1481ce9fbcd736ccb185473ca8ad4550036af38ffaed20",
-    "010-items.h.patch": "3222e99bdbe572b7459c5244a97db7e9b4840078004066a9237772d1f1161f62",
+    "010-items.c.patch": "26ae1bc9cec1f5a458163dc692cdda59a6679d660e1e696f43df49404c8a4a13",
+    "010-items.h.patch": "b15892a243a6acb7373beff1043b1880af42d3462b75ef755d7f01a1e570c14d",
     "010-keyboard.c.patch": "3c23c47e57b31d16651c73603ed6058d0030442ac953ff83ce50fc635cda4752",
     "010-screen.c.patch": "18e3cc1cd863b4afd64c7e635a183c39546300ad9fa0046ecba9329fb3de09db",
-    "010-screen.h.patch": "039a9232e7794a118835c8dcd56975c9b8c7cd26116d0dd58f68d029d9ce43e9",
-    "010-softmenus.c.patch": "f9393653c56570ebf4a9edfbcf430fa26bbc096c410969d6de4a18a5b6b48e3e",
+    "010-screen.h.patch": "9dcfad6c466cb880bc2876459bab42479061da163cf70d739da36b2be9e29042",
+    "010-softmenus.c.patch": "d660110b79bf491163231aacc55020471bac75dcee91a64265f4a1292f921db0",
     "010-testSuite__testSuite.c.patch": "3942e7eb7b17846a4c1e10f71c714995a12f960238cb92384b2be6e95b8e474a",
     "010-testSuite__tests__testSuiteList.txt.patch": "450ed6f8c1940a98da9a5bc4b8dd25b4737cd6ed5dcd54c5da923a915d2fe166"
   }

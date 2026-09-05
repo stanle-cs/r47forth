@@ -11,6 +11,13 @@
 
 static pgCanvas_t canvas;
 
+// The window of §5.2. Zero at boot: no range set, a real is a pixel. Kept
+// apart from pgCanvas_t because the header is read before realType.h.
+static struct {
+  uint8_t  set;            // bit 0: XRNG was set, bit 1: YRNG was set
+  real34_t xmin, xmax, ymin, ymax;
+} pgWindow;
+
 // Sends the changed rows to the LCD and stamps the time (DESIGN.md §8.4).
 static void pgRefreshNow(void) {
   canvas.lastRefreshMs = getUptimeMs();
@@ -343,15 +350,55 @@ static void pgArc(const pgRect_t *c, int32_t cx, int32_t cyUser, int32_t r,
 
 // ---- the argument reader (§5.1) ----
 
-static real34_t pgLimitPos, pgLimitNeg;   // +32768 and -32768, built once
-static bool_t   pgLimitsReady;
-
 static void pgError(uint16_t code) {
   displayCalcErrorMessage(code, ERR_REGISTER_LINE, REGISTER_X);
 }
 
-// Reads a pixel coordinate from regist into *v. Returns false after an error.
-static bool_t pgReadCoord(calcRegister_t regist, int32_t *v) {
+#define PG_AXIS_X    0
+#define PG_AXIS_Y    1
+#define PG_AXIS_NONE 2   // a radius: pixels, rounded, never through the window
+
+// A real through the window of its axis (§5.2), with the arithmetic of
+// upstream's screenWindowRatio (plotstat.c): the ratio in 39 digits, then
+// rounded half away from zero. Without a window the real is a pixel,
+// rounded the same way. A result beyond 32767 is ERROR_OUT_OF_RANGE.
+static bool_t pgRealToPixel(const real34_t *v34, uint8_t axis, int32_t *out) {
+  real_t t, den;
+  bool_t err = false;
+  int32_t temp;
+  if(real34IsNaN(v34) || real34IsInfinite(v34)) {
+    pgError(ERROR_OUT_OF_RANGE);
+    return false;
+  }
+  real34ToReal(v34, &t);
+  if(axis != PG_AXIS_NONE && (pgWindow.set & (1u << axis))) {
+    real_t mn;
+    real34ToReal(axis == PG_AXIS_X ? &pgWindow.xmin : &pgWindow.ymin, &mn);
+    real34ToReal(axis == PG_AXIS_X ? &pgWindow.xmax : &pgWindow.ymax, &den);
+    realSubtract(&t, &mn, &t, &ctxtReal39);
+    realSubtract(&den, &mn, &den, &ctxtReal39);
+    realDivide(&t, &den, &t, &ctxtReal39);
+    int32ToReal(axis == PG_AXIS_X ? SCREEN_WIDTH - 1 : SCREEN_HEIGHT - 1, &den);
+    realMultiply(&t, &den, &t, &ctxtReal39);
+  }
+  if(realIsNegative(&t)) {
+    realSubtract(&t, const_1on2, &t, &ctxtReal39);
+  }
+  else {
+    realAdd(&t, const_1on2, &t, &ctxtReal39);
+  }
+  temp = realToInt32C47(&t, &err);
+  if(err || temp > 32767 || temp < -32767) {
+    pgError(ERROR_OUT_OF_RANGE);
+    return false;
+  }
+  *out = temp;
+  return true;
+}
+
+// Reads a coordinate from regist into *v: a long integer is a pixel, a real
+// goes through the window of the axis. Returns false after an error.
+static bool_t pgReadCoordAxis(calcRegister_t regist, uint8_t axis, int32_t *v) {
   switch(getRegisterDataType(regist)) {
     case dtLongInteger: {
       const uint8_t *p = REGISTER_LONG_INTEGER_DATA(regist);
@@ -377,24 +424,78 @@ static bool_t pgReadCoord(calcRegister_t regist, int32_t *v) {
       }
       return true;
     }
-    case dtReal34: {
-      const real34_t *x = REGISTER_REAL34_DATA(regist);
-      if(!pgLimitsReady) {
-        int32ToReal34(32768, &pgLimitPos);
-        int32ToReal34(-32768, &pgLimitNeg);
-        pgLimitsReady = true;
-      }
-      if(real34IsNaN(x) || real34IsInfinite(x) || !real34CompareLessThan(x, &pgLimitPos) || !real34CompareLessThan(&pgLimitNeg, x)) {
-        pgError(ERROR_OUT_OF_RANGE);
-        return false;
-      }
-      *v = real34ToInt32(x);
-      return true;
-    }
+    case dtReal34:
+      return pgRealToPixel(REGISTER_REAL34_DATA(regist), axis, v);
     default:
       pgError(ERROR_INVALID_DATA_TYPE_FOR_OP);
       return false;
   }
+}
+
+#define pgReadCoord(regist, v) pgReadCoordAxis((regist), PG_AXIS_NONE, (v))
+
+// Reads a complex register as a point: the real part through the x window,
+// the imaginary part through the y window. Returns false after an error.
+static bool_t pgReadComplexPoint(calcRegister_t regist, int32_t *x, int32_t *y) {
+  if(getRegisterDataType(regist) != dtComplex34) {
+    pgError(ERROR_INVALID_DATA_TYPE_FOR_OP);
+    return false;
+  }
+  return pgRealToPixel(REGISTER_REAL34_DATA(regist), PG_AXIS_X, x) && pgRealToPixel(REGISTER_IMAG34_DATA(regist), PG_AXIS_Y, y);
+}
+
+// Reads a range end for XRNG and YRNG: a long integer or a real.
+static bool_t pgReadReal(calcRegister_t regist, real34_t *out) {
+  real_t r;
+  switch(getRegisterDataType(regist)) {
+    case dtLongInteger:
+      convertLongIntegerRegisterToReal(regist, &r, &ctxtReal39);
+      realToReal34(&r, out);
+      return true;
+    case dtReal34:
+      if(real34IsNaN(REGISTER_REAL34_DATA(regist)) || real34IsInfinite(REGISTER_REAL34_DATA(regist))) {
+        pgError(ERROR_OUT_OF_RANGE);
+        return false;
+      }
+      real34Copy(REGISTER_REAL34_DATA(regist), out);
+      return true;
+    default:
+      pgError(ERROR_INVALID_DATA_TYPE_FOR_OP);
+      return false;
+  }
+}
+
+// XRNG and YRNG: the minimum in Y, the maximum in X (§2.3). Equal ends are
+// ERROR_ARG_EXCEEDS_FUNCTION_DOMAIN and leave the window unchanged. A reversed range
+// mirrors the axis. The window survives ERASE and PVIEW.
+static void pgRange(uint8_t axis) {
+  real34_t mn, mx;
+  real_t a, b;
+  if(!pgReadReal(REGISTER_Y, &mn) || !pgReadReal(REGISTER_X, &mx)) return;
+  real34ToReal(&mn, &a);
+  real34ToReal(&mx, &b);
+  realSubtract(&b, &a, &a, &ctxtReal39);
+  if(realIsZero(&a)) {
+    pgError(ERROR_ARG_EXCEEDS_FUNCTION_DOMAIN);
+    return;
+  }
+  if(axis == PG_AXIS_X) {
+    real34Copy(&mn, &pgWindow.xmin);
+    real34Copy(&mx, &pgWindow.xmax);
+  }
+  else {
+    real34Copy(&mn, &pgWindow.ymin);
+    real34Copy(&mx, &pgWindow.ymax);
+  }
+  pgWindow.set |= (uint8_t)(1u << axis);
+}
+
+void fnXrng(uint16_t unusedButMandatoryParameter) {
+  pgRange(PG_AXIS_X);
+}
+
+void fnYrng(uint16_t unusedButMandatoryParameter) {
+  pgRange(PG_AXIS_Y);
 }
 
 // Reads an angle from regist into a real, in the current angular mode.
@@ -423,10 +524,23 @@ static void pgRefreshMaybe(void) {
   }
 }
 
-// Reads the two points of a two-point command: (X, Y) and (Z, T), y converted to rows.
+// Reads the two points of a two-point command, y converted to rows: (X, Y)
+// and (Z, T), or two complex points, the first in Y and the second in X
+// (§5.1). A complex in one of X and Y without the other is a type error.
 static bool_t pgReadTwoPoints(int32_t *x0, int32_t *r0, int32_t *x1, int32_t *r1) {
   int32_t y0, y1;
-  if(!pgReadCoord(REGISTER_X, x0) || !pgReadCoord(REGISTER_Y, &y0) || !pgReadCoord(REGISTER_Z, x1) || !pgReadCoord(REGISTER_T, &y1)) {
+  bool_t cx = getRegisterDataType(REGISTER_X) == dtComplex34, cy = getRegisterDataType(REGISTER_Y) == dtComplex34;
+  if(cx || cy) {
+    if(!cx || !cy) {
+      pgError(ERROR_INVALID_DATA_TYPE_FOR_OP);
+      return false;
+    }
+    if(!pgReadComplexPoint(REGISTER_Y, x0, &y0) || !pgReadComplexPoint(REGISTER_X, x1, &y1)) {
+      return false;
+    }
+  }
+  else if(!pgReadCoordAxis(REGISTER_X, PG_AXIS_X, x0) || !pgReadCoordAxis(REGISTER_Y, PG_AXIS_Y, &y0) ||
+          !pgReadCoordAxis(REGISTER_Z, PG_AXIS_X, x1) || !pgReadCoordAxis(REGISTER_T, PG_AXIS_Y, &y1)) {
     return false;
   }
   *r0 = PG_ROW_OF(y0);
@@ -464,7 +578,7 @@ void fnGfbox(uint16_t unusedButMandatoryParameter) {
 static void pgCircleCommand(bool_t filled) {
   int32_t cx, cy, r;
   pgRect_t c;
-  if(!pgReadCoord(REGISTER_X, &cx) || !pgReadCoord(REGISTER_Y, &cy) || !pgReadCoord(REGISTER_Z, &r)) return;
+  if(!pgReadCoordAxis(REGISTER_X, PG_AXIS_X, &cx) || !pgReadCoordAxis(REGISTER_Y, PG_AXIS_Y, &cy) || !pgReadCoord(REGISTER_Z, &r)) return;
   pgClipNow(&c);
   pgCircle(&c, cx, PG_ROW_OF(cy), r, filled);
   pgRefreshMaybe();
@@ -485,26 +599,7 @@ void fnGarc(uint16_t unusedButMandatoryParameter) {
   float f;
   bool_t wide, fullCircle;
   pgRect_t c;
-  if(getRegisterDataType(REGISTER_T) != dtComplex34) {
-    pgError(ERROR_INVALID_DATA_TYPE_FOR_OP);
-    return;
-  }
-  {
-    const real34_t *re = REGISTER_REAL34_DATA(REGISTER_T);
-    const real34_t *im = REGISTER_IMAG34_DATA(REGISTER_T);
-    if(!pgLimitsReady) {
-      int32ToReal34(32768, &pgLimitPos);
-      int32ToReal34(-32768, &pgLimitNeg);
-      pgLimitsReady = true;
-    }
-    if(real34IsNaN(re) || real34IsInfinite(re) || !real34CompareLessThan(re, &pgLimitPos) || !real34CompareLessThan(&pgLimitNeg, re) ||
-       real34IsNaN(im) || real34IsInfinite(im) || !real34CompareLessThan(im, &pgLimitPos) || !real34CompareLessThan(&pgLimitNeg, im)) {
-      pgError(ERROR_OUT_OF_RANGE);
-      return;
-    }
-    cx = real34ToInt32(re);
-    cy = real34ToInt32(im);
-  }
+  if(!pgReadComplexPoint(REGISTER_T, &cx, &cy)) return;
   if(!pgReadCoord(REGISTER_Z, &r) || !pgReadAngle(REGISTER_Y, &a1) || !pgReadAngle(REGISTER_X, &a2)) return;
   // A span of 360 degrees or more is a full circle (§2.2): compare the span in degrees.
   realSubtract(&a2, &a1, &d, &ctxtReal39);
@@ -576,7 +671,7 @@ static bool_t pgStringCut(calcRegister_t regist, uint32_t width) {
 void fnGtextout(uint16_t unusedButMandatoryParameter) {
   int32_t x, y, row;
   pgRect_t c;
-  if(!pgReadCoord(REGISTER_X, &x) || !pgReadCoord(REGISTER_Y, &y)) return;
+  if(!pgReadCoordAxis(REGISTER_X, PG_AXIS_X, &x) || !pgReadCoordAxis(REGISTER_Y, PG_AXIS_Y, &y)) return;
   pgClipNow(&c);
   row = PG_ROW_OF(y);
   if(x < c.x0 || x > c.x1 || row < c.y0 || row + 19 > c.y1) {
@@ -645,6 +740,7 @@ void fnGclip(uint16_t unusedButMandatoryParameter) {
 
 #if defined(TESTSUITE_BUILD)
   #include <stdio.h>
+  #include <math.h>
 
   static uint32_t pgTestFailures;
 
@@ -893,6 +989,11 @@ void fnGclip(uint16_t unusedButMandatoryParameter) {
     int32ToLongInteger(value, li);
     convertLongIntegerToLongIntegerRegister(li, regist);
     longIntegerFree(li);
+  }
+
+  static void pgTestWriteReal(calcRegister_t regist, const char *text) {
+    reallocateRegister(regist, dtReal34, 0, amNone);
+    stringToReal34(text, REGISTER_REAL34_DATA(regist));
   }
 
   static void pgTestSetString(calcRegister_t regist, const char *s) {
@@ -1198,6 +1299,82 @@ void fnGclip(uint16_t unusedButMandatoryParameter) {
       if(pgTestLit(230, 100) || pgTestLit(200, 130)) pgTestFail("D18 the refused arc drew");
     }
 
+    // W1: without a window a real is a pixel, rounded half away from zero:
+    // 2.5 is 3, 100.49 is 100, and -0.5 is -1, which is off the screen.
+    fnErase(NOPARAM);
+    pgWindow.set = 0;
+    pgTestWriteReal(REGISTER_X, "2.5"); pgTestWriteReal(REGISTER_Y, "100.49"); pgTestWriteReal(REGISTER_Z, "2.5"); pgTestWriteReal(REGISTER_T, "100.49");
+    fnGline(NOPARAM);
+    if(lastErrorCode != ERROR_NONE) { pgTestFail("W1 a real coordinate raised an error"); lastErrorCode = ERROR_NONE; }
+    if(!pgTestLit(3, 100) || pgTestLit(2, 100) || pgTestLit(3, 101)) pgTestFail("W1 a real without a window is not rounded half away from zero");
+    pgTestWriteReal(REGISTER_X, "-0.5"); pgTestWriteReal(REGISTER_Y, "50"); pgTestWriteReal(REGISTER_Z, "-0.5"); pgTestWriteReal(REGISTER_T, "50");
+    fnGline(NOPARAM);
+    if(pgTestLit(0, 50)) pgTestFail("W1 a real of -0.5 was rounded toward zero onto the screen");
+
+    // W2: XRNG 0 10 and YRNG 0 5 map the user point (5, 2.5) to the pixel
+    // (200, 120): 199.5 and 119.5 rounded half away from zero. The corners
+    // map to (0, 0) and (399, 239). A long integer stays a pixel.
+    pgTestWriteLonI(REGISTER_Y, 0); pgTestWriteLonI(REGISTER_X, 10); fnXrng(NOPARAM);
+    pgTestWriteLonI(REGISTER_Y, 0); pgTestWriteLonI(REGISTER_X, 5);  fnYrng(NOPARAM);
+    if(lastErrorCode != ERROR_NONE) { pgTestFail("W2 XRNG or YRNG raised an error"); lastErrorCode = ERROR_NONE; }
+    pgTestWriteReal(REGISTER_X, "5"); pgTestWriteReal(REGISTER_Y, "2.5"); pgTestWriteReal(REGISTER_Z, "5"); pgTestWriteReal(REGISTER_T, "2.5");
+    fnGline(NOPARAM);
+    if(!pgTestLit(200, 120) || pgTestLit(199, 120) || pgTestLit(200, 119) || pgTestLit(201, 120)) pgTestFail("W2 the user point (5, 2.5) did not map to the pixel (200, 120)");
+    pgTestWriteReal(REGISTER_X, "0"); pgTestWriteReal(REGISTER_Y, "0"); pgTestWriteReal(REGISTER_Z, "10"); pgTestWriteReal(REGISTER_T, "0");
+    fnGline(NOPARAM);
+    if(!pgTestLit(0, 0) || !pgTestLit(399, 0) || pgTestLit(0, 1)) pgTestFail("W2 the bottom edge of the window did not map to the bottom row");
+    pgTestWriteLonI(REGISTER_X, 5); pgTestWriteLonI(REGISTER_Y, 100); pgTestWriteLonI(REGISTER_Z, 5); pgTestWriteLonI(REGISTER_T, 100);
+    fnGline(NOPARAM);
+    if(!pgTestLit(5, 100)) pgTestFail("W2 a long integer under a window is not a pixel");
+
+    // W3: equal ends are refused and leave the window; a reversed range mirrors the axis.
+    pgTestWriteLonI(REGISTER_Y, 3); pgTestWriteLonI(REGISTER_X, 3); fnXrng(NOPARAM);
+    if(lastErrorCode != ERROR_ARG_EXCEEDS_FUNCTION_DOMAIN) pgTestFail("W3 XRNG with equal ends did not raise ERROR_ARG_EXCEEDS_FUNCTION_DOMAIN");
+    lastErrorCode = ERROR_NONE;
+    pgTestWriteReal(REGISTER_X, "5"); pgTestWriteReal(REGISTER_Y, "2.5"); pgTestWriteReal(REGISTER_Z, "5"); pgTestWriteReal(REGISTER_T, "2.5");
+    fnGline(NOPARAM);
+    if(!pgTestLit(200, 120)) pgTestFail("W3 a refused XRNG changed the window");
+    pgTestWriteLonI(REGISTER_Y, 10); pgTestWriteLonI(REGISTER_X, 0); fnXrng(NOPARAM);
+    pgTestWriteReal(REGISTER_X, "10"); pgTestWriteReal(REGISTER_Y, "2.5"); pgTestWriteReal(REGISTER_Z, "10"); pgTestWriteReal(REGISTER_T, "2.5");
+    fnGline(NOPARAM);
+    if(!pgTestLit(0, 120) || pgTestLit(399, 120)) pgTestFail("W3 a reversed XRNG did not mirror the axis");
+    if(lastErrorCode != ERROR_NONE) { pgTestFail("W3 the reversed range raised an error"); lastErrorCode = ERROR_NONE; }
+
+    // W4: a real that maps beyond 32767 pixels is ERROR_OUT_OF_RANGE; one
+    // that maps to 3990 is clipped without an error.
+    pgTestWriteLonI(REGISTER_Y, 0); pgTestWriteLonI(REGISTER_X, 10); fnXrng(NOPARAM);
+    pgTestWriteReal(REGISTER_X, "1000"); pgTestWriteReal(REGISTER_Y, "2.5"); pgTestWriteReal(REGISTER_Z, "1000"); pgTestWriteReal(REGISTER_T, "2.5");
+    fnGline(NOPARAM);
+    if(lastErrorCode != ERROR_OUT_OF_RANGE) pgTestFail("W4 a user x of 1000 in a window of 10 did not raise ERROR_OUT_OF_RANGE");
+    lastErrorCode = ERROR_NONE;
+    pgTestWriteReal(REGISTER_X, "100"); pgTestWriteReal(REGISTER_Z, "100");
+    fnGline(NOPARAM);
+    if(lastErrorCode != ERROR_NONE) { pgTestFail("W4 a user x of 100 raised an error"); lastErrorCode = ERROR_NONE; }
+    if(pgTestLit(399, 120)) pgTestFail("W4 an off-screen real drew on the screen");
+
+    // W5: the complex two-point form, the first point in Y and the second in X.
+    pgTestWriteLonI(REGISTER_Y, 0); pgTestWriteLonI(REGISTER_X, 399); fnXrng(NOPARAM);
+    pgTestWriteLonI(REGISTER_Y, 0); pgTestWriteLonI(REGISTER_X, 239); fnYrng(NOPARAM);
+    pgTestSetComplex(REGISTER_Y, 10, 20);
+    pgTestSetComplex(REGISTER_X, 50, 20);
+    fnGline(NOPARAM);
+    if(lastErrorCode != ERROR_NONE) { pgTestFail("W5 the complex form raised an error"); lastErrorCode = ERROR_NONE; }
+    if(!pgTestLit(10, 20) || !pgTestLit(50, 20) || !pgTestLit(30, 20) || pgTestLit(30, 21)) pgTestFail("W5 the complex two-point line is wrong");
+    pgTestWriteLonI(REGISTER_Y, 60);
+    fnGline(NOPARAM);
+    if(lastErrorCode != ERROR_INVALID_DATA_TYPE_FOR_OP) pgTestFail("W5 a complex in X with a long integer in Y did not raise the type error");
+    lastErrorCode = ERROR_NONE;
+    if(pgTestLit(50, 60)) pgTestFail("W5 the mixed pair drew");
+
+    // W6: the window survives ERASE.
+    pgTestWriteLonI(REGISTER_Y, 0); pgTestWriteLonI(REGISTER_X, 10); fnXrng(NOPARAM);
+    pgTestWriteLonI(REGISTER_Y, 0); pgTestWriteLonI(REGISTER_X, 5);  fnYrng(NOPARAM);
+    fnErase(NOPARAM);
+    pgTestWriteReal(REGISTER_X, "5"); pgTestWriteReal(REGISTER_Y, "2.5"); pgTestWriteReal(REGISTER_Z, "5"); pgTestWriteReal(REGISTER_T, "2.5");
+    fnGline(NOPARAM);
+    if(!pgTestLit(200, 120)) pgTestFail("W6 ERASE reset the window");
+    pgWindow.set = 0;
+
     pgCloseView();
     calcMode = CM_NORMAL;
     lastErrorCode = ERROR_NONE;
@@ -1216,7 +1393,8 @@ void fnGclip(uint16_t unusedButMandatoryParameter) {
     fnPview(6);
     fnGmode(0);
     currentAngularMode = amDegree;
-    pgTestSetString(REGISTER_X, "program-graphics G2: LINE BOX FBOX CIRCLE FCIRCL ARC TEXTOUT DISP GMODE GCLIP");
+    pgWindow.set = 0;
+    pgTestSetString(REGISTER_X, "program-graphics G3: LINE BOX FBOX CIRCLE FCIRCL ARC TEXTOUT DISP GMODE GCLIP XRNG YRNG");
     fnGdisp(1);
     pgTestPoints(10, 10, 390, 10);   fnGline(NOPARAM);           // a baseline
     pgTestPoints(10, 10, 10, 195);   fnGline(NOPARAM);           // a left axis
@@ -1235,10 +1413,25 @@ void fnGclip(uint16_t unusedButMandatoryParameter) {
     fnGmode(2);
     pgTestPoints(150, 55, 180, 75); fnGfbox(NOPARAM);            // an inverted window on the filled box
     fnGmode(0);
+    {
+      // A sine curve through the window: x from 0 to 2 pi on columns 130
+      // to 390, y from -1 to 1 on rows 92 to 108, 26 segments of reals.
+      char a[24], b[24];
+      int k;
+      pgTestWriteReal(REGISTER_Y, "-3.1421"); pgTestWriteReal(REGISTER_X, "6.5016"); fnXrng(NOPARAM);
+      pgTestWriteReal(REGISTER_Y, "-12.5");   pgTestWriteReal(REGISTER_X, "17.375"); fnYrng(NOPARAM);
+      for(k = 0; k < 26; k++) {
+        double x0 = k * 6.283185307 / 26, x1 = (k + 1) * 6.283185307 / 26;
+        sprintf(a, "%.6f", x0); pgTestWriteReal(REGISTER_X, a); sprintf(a, "%.6f", sin(x0)); pgTestWriteReal(REGISTER_Y, a);
+        sprintf(b, "%.6f", x1); pgTestWriteReal(REGISTER_Z, b); sprintf(b, "%.6f", sin(x1)); pgTestWriteReal(REGISTER_T, b);
+        fnGline(NOPARAM);
+      }
+      pgWindow.set = 0;
+    }
     currentAngularMode = savedAm;
     for(x = 0; x < SCREEN_WIDTH; x++) for(yy = PG_TOP_ROW; yy < SCREEN_HEIGHT; yy++) if(lcd_buffer_pixel_on(x, yy)) lit++;
     printf("program-graphics showcase 2D: %u lit pixels in rows 20 to 239\n", lit);
-    if(lit != 10500) pgTestFail("S1 the showcase count of lit pixels moved from the recorded 10500");
+    if(lit != 10760) pgTestFail("S1 the showcase count of lit pixels moved from the recorded 10760");
     strcpy(_ioFileNameOverride, "pg_showcase_2d.bmp");
     fnScreenDump(0);
     if(lastErrorCode != ERROR_NONE) { pgTestFail("S1 an error was raised while drawing the showcase"); lastErrorCode = ERROR_NONE; }

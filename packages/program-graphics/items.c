@@ -1106,6 +1106,8 @@ bool_t isFunctionOldParam16(uint16_t func) {
   void fnGdisp                     (uint16_t unusedButMandatoryParameter) {}   // program-graphics package
   void fnGmode                     (uint16_t unusedButMandatoryParameter) {}   // program-graphics package
   void fnGclip                     (uint16_t unusedButMandatoryParameter) {}   // program-graphics package
+  void fnXrng                      (uint16_t unusedButMandatoryParameter) {}   // program-graphics package
+  void fnYrng                      (uint16_t unusedButMandatoryParameter) {}   // program-graphics package
   void fnSumXY                     (uint16_t unusedButMandatoryParameter) {}
   void fnMeanXY                    (uint16_t unusedButMandatoryParameter) {}
   void fnMeanX                     (uint16_t unusedButMandatoryParameter) {}
@@ -4331,8 +4333,8 @@ TO_QSPI const item_t indexOfItems[] = {
 /* 2457 */  { fnGdisp,                           TM_VALUE,                    "DISP",                                        "DISP",                                        (1 << TAM_MAX_BITS) |    11, CAT_FNCT | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_NUMBER_8     | HG_ENABLED         },  // program-graphics package
 /* 2458 */  { fnGmode,                           TM_VALUE,                    "GMODE",                                       "GMODE",                                       (0 << TAM_MAX_BITS) |     2, CAT_FNCT | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_NUMBER_8     | HG_ENABLED         },  // program-graphics package
 /* 2459 */  { fnGclip,                           NOPARAM,                     "GCLIP",                                       "GCLIP",                                       (0 << TAM_MAX_BITS) |     0, CAT_FNCT | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_NONE         | HG_ENABLED         },  // program-graphics package
-/* 2460 */  { itemToBeCoded,                NOPARAM,                     "2460",                                        "2460",                                        (0 << TAM_MAX_BITS) |     0, CAT_FREE | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
-/* 2461 */  { itemToBeCoded,                NOPARAM,                     "2461",                                        "2461",                                        (0 << TAM_MAX_BITS) |     0, CAT_FREE | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
+/* 2460 */  { fnXrng,                            NOPARAM,                     "XRNG",                                        "XRNG",                                        (0 << TAM_MAX_BITS) |     0, CAT_FNCT | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_NONE         | HG_ENABLED         },  // program-graphics package
+/* 2461 */  { fnYrng,                            NOPARAM,                     "YRNG",                                        "YRNG",                                        (0 << TAM_MAX_BITS) |     0, CAT_FNCT | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_NONE         | HG_ENABLED         },  // program-graphics package
 /* 2462 */  { itemToBeCoded,                     NOPARAM,                     "CANVAS",                                      "CANVAS",                                      (0 << TAM_MAX_BITS) |     0, CAT_MENU | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },  // program-graphics package: the canvas softmenu
 /* 2463 */  { itemToBeCoded,                NOPARAM,                     "2463",                                        "2463",                                        (0 << TAM_MAX_BITS) |     0, CAT_FREE | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
 

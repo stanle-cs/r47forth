@@ -270,3 +270,66 @@ one build session:
 |---|---|---|---|
 | flash | 1,090,512 | 1,094,824 | +4,312 bytes (+272 against the G2 commit) |
 | ram | 7,564 | 7,616 | +52 bytes (the 64-bit square root and the sentinel clip) |
+
+## Stage G3: the window, 2026-09-05
+
+Two commands on rows 2460 and 2461: `XRNG` and `YRNG`, the minimum in
+Y and the maximum in X. A real coordinate now goes through the window of
+its axis with the arithmetic of upstream's `screenWindowRatio` in
+plotstat.c: the ratio in 39 digits, then rounded half away from zero.
+Without a range set, a real is a pixel with the same rounding, so 2.5 is
+pixel 3 where G2 truncated it to 2. A long integer stays a pixel under
+any window. A radius is always pixels.
+
+Three rulings made during the stage, all recorded in DESIGN.md §5:
+
+- A result beyond 32767 pixels is `ERROR_OUT_OF_RANGE`, where upstream's
+  plots clamp. A clamped endpoint changes the slope of a line, and a
+  refused command draws nothing wrong.
+- Equal range ends are `ERROR_ARG_EXCEEDS_FUNCTION_DOMAIN` and leave the
+  window as it was. A reversed range mirrors the axis.
+- The complex two-point form: `LINE`, `BOX`, `FBOX`, and `GCLIP` accept
+  two complex points, the first in Y and the second in X, as RPL `LINE`
+  takes them from levels 2 and 1. A complex in one of X and Y without the
+  other is the type error. `ARC` reads its complex center through the
+  window the same way.
+
+The window lives in its own static struct next to the canvas state at
+the top of the file, because the package header is read before
+`realType.h` and cannot name `real34_t`. The window survives `ERASE` and `PVIEW`. Only `XRNG`, `YRNG`,
+and a reset change it. In `PVIEW 6` the top 20 rows of the y range lie
+under the status bar, because the window maps onto the full pixel grid.
+
+Two build lessons. The catalog generator compiles items.c with a stub per
+function, and a new item needs its stub in the package's stub block or the
+generator fails before the firmware compiles. The equal-ends error was
+first written with an error name that does not exist in defines.h; the
+compiler found it.
+
+The showcase gained a sine curve through the window on columns 130 to
+390, rows 92 to 108: 26 segments of real endpoints. The recorded count
+S1 moved from 10,500 to 10,760 lit pixels.
+
+Red-first results of the G3 pins on the simulator:
+
+| Mutation | Pins that went red |
+|---|---|
+| Round toward zero instead of half away | W1 both checks, and W2, W3, W5, W6, S1 with it |
+| A scale of 398 instead of 399 | W2 both checks, and W3, W6, S1 |
+| No equal-ends check | W3 both checks |
+| Clamp at 32767 instead of the error | W4 |
+| Real and imaginary parts swapped | W5, and D6, D16 through the shared arc center reader |
+| `ERASE` clears the window | W6, on the second form of the mutation |
+
+The first form of the `ERASE` mutation did not compile: the window struct
+was declared after `pgSetRegion`, so the mutation could not name it. The
+struct now sits next to the canvas state at the top of the file, and the
+mutation was rerun on that form.
+
+Firmware size, `make dmcp5r47`, R47.elf, text plus data for flash and
+data plus BSS for RAM:
+
+| Section | Without | With G3 | Delta against the G2 fix wave |
+|---|---|---|---|
+| flash | 1,090,512 | 1,095,288 | +464 bytes |
+| ram | 7,564 | 7,648 | +32 bytes (the window struct, less the two real34 limits it replaced) |

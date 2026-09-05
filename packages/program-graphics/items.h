@@ -2523,6 +2523,8 @@
 #define ITM_GDISP                   2457  // program-graphics package: DISP n
 #define ITM_GMODE                   2458  // program-graphics package: GMODE n
 #define ITM_GCLIP                   2459  // program-graphics package: GCLIP
+#define ITM_XRNG                    2460  // program-graphics package: XRNG
+#define ITM_YRNG                    2461  // program-graphics package: YRNG
 #define MNU_CANVAS                  2462  // program-graphics package: the canvas softmenu
 #define ITM_2448                    2448
 #define ITM_2449                    2449

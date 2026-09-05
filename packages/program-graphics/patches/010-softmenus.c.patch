@@ -1,5 +1,5 @@
 diff --git a/src/c47/softmenus.c b/src/c47/softmenus.c
-index 6d036d9a0c49cf030d1e1b82d0deb5b32cc02183..e096d9e6715e27e9aaae90458c739599945fb072 100644
+index 6d036d9a0c49cf030d1e1b82d0deb5b32cc02183..71ea0453bca56f667ea46d607a5974ffa7fb70e3 100644
 --- a/src/c47/softmenus.c
 +++ b/src/c47/softmenus.c
 @@ -334,7 +334,7 @@ TO_QSPI const int16_t menu_PFN_1[]       = { ITM_INPUT,                 ITM_AVIE
@@ -11,18 +11,19 @@ index 6d036d9a0c49cf030d1e1b82d0deb5b32cc02183..e096d9e6715e27e9aaae90458c739599
  
  TO_QSPI const int16_t menu_PFN_3[]       = { ITM_LBL,                   ITM_GTO,                   ITM_XEQ,                   ITM_RTN,                   ITM_END,                   -MNU_PFN,
                                               ITM_SKIP,                  ITM_BACK,                  ITM_XEQP1,                 ITM_RTNP1,                 -MNU_LOOP,                 -MNU_TEST,
-@@ -349,6 +349,10 @@ TO_QSPI const int16_t menu_STAT[]        = { ITM_SIGMAPLUS,                 ITM_
+@@ -349,6 +349,11 @@ TO_QSPI const int16_t menu_STAT[]        = { ITM_SIGMAPLUS,                 ITM_
                                               ITM_NULL,                      ITM_PERCENTILE,             ITM_MAD,                  ITM_IQR,               ITM_NULL,                    ITM_SIGMARANGE,
                                               ITM_NULL,                      ITM_NULL,                   ITM_NULL,                 ITM_NULL,              ITM_NULL,                    ITM_CLSIGMA                   };
  
 +/* program-graphics package: the canvas softmenu (claims registry: rows 2448-2463). */
 +TO_QSPI const int16_t menu_CANVAS[]      = { ITM_PVIEW,                 ITM_ERASE,                 ITM_GLINE,                 ITM_GBOX,                  ITM_GFBOX,                 ITM_GCIRC,
-+                                             ITM_GFCIRC,                ITM_GARC,                  ITM_GTEXT,                 ITM_GDISP,                 ITM_GMODE,                 ITM_GCLIP           };
++                                             ITM_GFCIRC,                ITM_GARC,                  ITM_GTEXT,                 ITM_GDISP,                 ITM_GMODE,                 ITM_GCLIP,
++                                             ITM_XRNG,                  ITM_YRNG            };
 +
  
  TO_QSPI const int16_t menu_REGR[]        = { ITM_LR,                        ITM_CORR,                   ITM_SXY,                  ITM_COV,               ITM_XCIRC,                   ITM_YCIRC,
                                               ITM_SA,                        ITM_NULL,                   ITM_NULL,                 ITM_NULL,              ITM_NULL,                    ITM_NULL,
-@@ -1216,6 +1220,7 @@ TO_QSPI const softmenu_t softmenu[] = {
+@@ -1216,6 +1221,7 @@ TO_QSPI const softmenu_t softmenu[] = {
  /* 178 */  {.menuItem = -MNU_BASE2,         .numItems = sizeof(menu_Base2         )/sizeof(int16_t), .softkeyItem = menu_Base2          },       // NOTE !! do not add menus here, add them at the end. The menu numbers are fixed for the Wiki references. 2024-02-21 jm
  /* 179 */  {.menuItem = -MNU_42,            .numItems = sizeof(menu_42            )/sizeof(int16_t), .softkeyItem = menu_42             },       // NOTE !! do not add menus here, add them at the end. The menu numbers are fixed for the Wiki references. 2024-02-21 jm
  /* 180 */  {.menuItem = -MNU_CONV_SECTION,  .numItems = sizeof(menu_ConvSection   )/sizeof(int16_t), .softkeyItem = menu_ConvSection    },       // NOTE !! do not add menus here, add them at the end. The menu numbers are fixed for the Wiki references. 2024-02-21 jm

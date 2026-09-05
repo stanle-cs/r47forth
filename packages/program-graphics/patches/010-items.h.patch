@@ -1,8 +1,8 @@
 diff --git a/src/c47/items.h b/src/c47/items.h
-index 98924313217f3b57f1b663367c8e45c0dc0f1010..37e4e9af3599dbf883089d67493865eac9bd3308 100644
+index 98924313217f3b57f1b663367c8e45c0dc0f1010..87f289ef4d41fe9d7394268fa0b403e9ed5ec655 100644
 --- a/src/c47/items.h
 +++ b/src/c47/items.h
-@@ -2511,6 +2511,19 @@
+@@ -2511,6 +2511,21 @@
  #define ITM_j_CIRC                  2445
  #define ITM_k_CIRC                  2446
  #define ITM_phi_m                   2447
@@ -18,6 +18,8 @@ index 98924313217f3b57f1b663367c8e45c0dc0f1010..37e4e9af3599dbf883089d67493865ea
 +#define ITM_GDISP                   2457  // program-graphics package: DISP n
 +#define ITM_GMODE                   2458  // program-graphics package: GMODE n
 +#define ITM_GCLIP                   2459  // program-graphics package: GCLIP
++#define ITM_XRNG                    2460  // program-graphics package: XRNG
++#define ITM_YRNG                    2461  // program-graphics package: YRNG
 +#define MNU_CANVAS                  2462  // program-graphics package: the canvas softmenu
  #define ITM_2448                    2448
  #define ITM_2449                    2449

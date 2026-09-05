@@ -70,7 +70,13 @@ The refresh runs first, because `pkg_build` refreshes after its suite.
 | G2 fix wave | D17b: a string that ends in a lone lead byte is trimmed to a width of one pixel without a read beyond its NUL. | None. The failure of the guard is a hang, so this pin documents the guard and does not falsify it. |
 | G2 fix wave | D18: a NaN angle for `ARC` raises `ERROR_OUT_OF_RANGE` and draws nothing. | Accept NaN in the angle reader. |
 | G2 | S1: the showcase screen has the recorded count of lit pixels. | Any change to a primitive. |
-| G3 | `XRNG`, `YRNG`: a real maps to the pixel that `screenWindowRatio` gives. | Off-by-one in the scale. |
+| G3 | W1: without a window, a real is a pixel rounded half away from zero (2.5 is 3, -0.5 is off the screen). | Round toward zero. |
+| G3 | W2: `XRNG` 0 10 and `YRNG` 0 5 map (5, 2.5) to the pixel (200, 120), the corners to (0, 0) and (399, 239), and a long integer stays a pixel. | A scale of 398. |
+| G3 | W3: equal ends raise `ERROR_ARG_EXCEEDS_FUNCTION_DOMAIN` and leave the window; a reversed range mirrors the axis. | Skip the equal-ends check. |
+| G3 | W4: a real that maps beyond 32767 pixels raises `ERROR_OUT_OF_RANGE`; one that maps to 3990 is clipped without an error. | Clamp instead of the error. |
+| G3 | W5: two complex points, the first in Y and the second in X, draw the line; a complex with a long integer is the type error. | Swap the real and imaginary parts. |
+| G3 | W6: the window survives `ERASE`. | Clear the window in `pgSetRegion`. |
+| G3 | S1: the showcase count includes the sine curve through the window. | Any change to a primitive. |
 | G4 | A unit cube from a fixed eye point projects to fixed pixels, recorded once. | Any change in the projection. |
 | G4 | `WIREFRAME` of a plane draws a mesh with a known pixel count. | Skip the row lines. |
 

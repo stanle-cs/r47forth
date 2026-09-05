@@ -300,26 +300,40 @@ A drawing command reads each coordinate register by type:
 
 | Register type | Meaning | Path |
 |---|---|---|
-| long integer | pixel | The fast path. The low 32 bits of the first limb are read directly from the register, with the sign tag. A value that does not fit in 31 bits is an `ERROR_OUT_OF_RANGE`. No GMP call. |
-| real | user coordinate through the window (G3). Before G3, a real is a pixel after rounding toward zero. A magnitude of 32768 or more is an `ERROR_OUT_OF_RANGE`. | The slow path: one decimal compare and one decimal to int32. |
-| complex, for `ARC` center and for the two-point form of `LINE` (G3) | two reals | The slow path, twice. |
+| long integer | pixel, also under a window | The fast path. The low 32 bits of the first limb are read directly from the register, with the sign tag. A magnitude above 32767 is an `ERROR_OUT_OF_RANGE`. No GMP call. |
+| real | user coordinate through the window of its axis (G3). Without a window, a real is a pixel rounded half away from zero. A result beyond 32767 pixels, NaN, or infinity is an `ERROR_OUT_OF_RANGE`. | The slow path: the arithmetic of upstream's `screenWindowRatio`, in 39 digits. |
+| complex | a point: the real part through the x window, the imaginary part through the y window. `ARC` takes its center this way in T. The two-point commands (`LINE`, `BOX`, `FBOX`, `GCLIP`) take two complex points, the first in Y and the second in X (G3). | The slow path, twice. |
 | any other type | error `ERROR_INVALID_DATA_TYPE_FOR_OP` | |
 
-Both points of one command must use the same type. A mixed pair is the
-same error.
+Each coordinate is read by its own type, so a long integer and a real can
+share one command. A complex in X or Y without a complex in the other is
+`ERROR_INVALID_DATA_TYPE_FOR_OP`. A radius is always pixels: a real radius
+is rounded, never mapped through the window.
 
 ### 5.2 The window, stage G3
 
-    typedef struct {
-      real34_t xmin, ymin;
-      real34_t xscale, yscale;   // (SCREEN_WIDTH - 1) / (xmax - xmin), (SCREEN_HEIGHT - 1) / (ymax - ymin)
-    } pgWindow_t;
+    static struct {
+      uint8_t  set;            // bit 0: XRNG was set, bit 1: YRNG was set
+      real34_t xmin, xmax, ymin, ymax;
+    } pgWindow;
 
-The default window is xmin 0, xmax 399, ymin 0, ymax 239, so a real
-behaves as a pixel until `XRNG` or `YRNG` change it. `XRNG` with
-xmax equal to xmin raises `ERROR_INVALID_DATA_INPUT`. The conversion of a
-real x is `pixel = int32(round((x - xmin) * xscale))` in real34 arithmetic.
-The window is part of `pgCanvas_t` from G3 on.
+This struct sits next to `pgCanvas_t` in pgmGraphics.c from G3 on, and
+not inside it, because the package header is read before `realType.h`. Without `XRNG` a real x
+is a pixel, and without `YRNG` a real y is a pixel, each rounded half
+away from zero. With a range set, the conversion of a real x is the one
+of upstream's `screenWindowRatio` in plotstat.c:
+
+    pixel = round_half_away((x - xmin) / (xmax - xmin) * (SCREEN_WIDTH - 1))
+
+in 39-digit decimal arithmetic, and the same for y with `SCREEN_HEIGHT - 1`.
+A result beyond 32767 pixels is an `ERROR_OUT_OF_RANGE`, so a line to a
+far point is refused and never drawn with a clamped slope. `XRNG` and
+`YRNG` take the minimum in Y and the maximum in X, as long integers or
+reals. Equal ends raise `ERROR_ARG_EXCEEDS_FUNCTION_DOMAIN` and leave the window
+unchanged. A reversed range mirrors the axis. The window survives `ERASE`
+and `PVIEW`; only `XRNG`, `YRNG`, and a reset change it. The window maps
+onto the full pixel grid, so in `PVIEW 6` the top 20 rows of the y range
+lie under the status bar.
 
 ## 6. Items and menu
 

@@ -1,8 +1,8 @@
 diff --git a/src/c47/items.c b/src/c47/items.c
-index f65402f25fdbbf808a058f4acae3a95b83683e9d..90b948a0510228f247d996945fbf48c026ea0c79 100644
+index f65402f25fdbbf808a058f4acae3a95b83683e9d..968ad41c29ef8553ec39f7fff59870456f7eccd5 100644
 --- a/src/c47/items.c
 +++ b/src/c47/items.c
-@@ -1094,6 +1094,18 @@ bool_t isFunctionOldParam16(uint16_t func) {
+@@ -1094,6 +1094,20 @@ bool_t isFunctionOldParam16(uint16_t func) {
    void fnLogicalXnor               (uint16_t unusedButMandatoryParameter) {}
    void fnDecomp                    (uint16_t unusedButMandatoryParameter) {}
    void fnPlotStat                  (uint16_t unusedButMandatoryParameter) {}
@@ -18,10 +18,12 @@ index f65402f25fdbbf808a058f4acae3a95b83683e9d..90b948a0510228f247d996945fbf48c0
 +  void fnGdisp                     (uint16_t unusedButMandatoryParameter) {}   // program-graphics package
 +  void fnGmode                     (uint16_t unusedButMandatoryParameter) {}   // program-graphics package
 +  void fnGclip                     (uint16_t unusedButMandatoryParameter) {}   // program-graphics package
++  void fnXrng                      (uint16_t unusedButMandatoryParameter) {}   // program-graphics package
++  void fnYrng                      (uint16_t unusedButMandatoryParameter) {}   // program-graphics package
    void fnSumXY                     (uint16_t unusedButMandatoryParameter) {}
    void fnMeanXY                    (uint16_t unusedButMandatoryParameter) {}
    void fnMeanX                     (uint16_t unusedButMandatoryParameter) {}
-@@ -4307,21 +4319,21 @@ TO_QSPI const item_t indexOfItems[] = {
+@@ -4307,21 +4321,21 @@ TO_QSPI const item_t indexOfItems[] = {
  /* 2446 */  { addItemToBuffer,              ITM_k_CIRC,                  "",                                            STD_k_CIRC,                                    (0 << TAM_MAX_BITS) |     0, CAT_NONE | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
  /* 2447 */  { addItemToBuffer,              ITM_phi_m,                   "",                                            STD_phi_m,                                     (0 << TAM_MAX_BITS) |     0, CAT_NONE | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
  
@@ -37,6 +39,9 @@ index f65402f25fdbbf808a058f4acae3a95b83683e9d..90b948a0510228f247d996945fbf48c0
 -/* 2457 */  { itemToBeCoded,                NOPARAM,                     "2457",                                        "2457",                                        (0 << TAM_MAX_BITS) |     0, CAT_FREE | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
 -/* 2458 */  { itemToBeCoded,                NOPARAM,                     "2458",                                        "2458",                                        (0 << TAM_MAX_BITS) |     0, CAT_FREE | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
 -/* 2459 */  { itemToBeCoded,                NOPARAM,                     "2459",                                        "2459",                                        (0 << TAM_MAX_BITS) |     0, CAT_FREE | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
+-/* 2460 */  { itemToBeCoded,                NOPARAM,                     "2460",                                        "2460",                                        (0 << TAM_MAX_BITS) |     0, CAT_FREE | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
+-/* 2461 */  { itemToBeCoded,                NOPARAM,                     "2461",                                        "2461",                                        (0 << TAM_MAX_BITS) |     0, CAT_FREE | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
+-/* 2462 */  { itemToBeCoded,                NOPARAM,                     "2462",                                        "2462",                                        (0 << TAM_MAX_BITS) |     0, CAT_FREE | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
 +/* 2448 */  { fnPview,                           TM_VALUE,                    "PVIEW",                                       "PVIEW",                                       (2 << TAM_MAX_BITS) |     6, CAT_FNCT | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_NUMBER_8     | HG_ENABLED         },  // program-graphics package
 +/* 2449 */  { fnErase,                           NOPARAM,                     "ERASE",                                       "ERASE",                                       (0 << TAM_MAX_BITS) |     0, CAT_FNCT | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_NONE         | HG_ENABLED         },  // program-graphics package
 +/* 2450 */  { fnGline,                           NOPARAM,                     "LINE",                                        "LINE",                                        (0 << TAM_MAX_BITS) |     0, CAT_FNCT | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_NONE         | HG_ENABLED         },  // program-graphics package
@@ -49,9 +54,8 @@ index f65402f25fdbbf808a058f4acae3a95b83683e9d..90b948a0510228f247d996945fbf48c0
 +/* 2457 */  { fnGdisp,                           TM_VALUE,                    "DISP",                                        "DISP",                                        (1 << TAM_MAX_BITS) |    11, CAT_FNCT | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_NUMBER_8     | HG_ENABLED         },  // program-graphics package
 +/* 2458 */  { fnGmode,                           TM_VALUE,                    "GMODE",                                       "GMODE",                                       (0 << TAM_MAX_BITS) |     2, CAT_FNCT | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_NUMBER_8     | HG_ENABLED         },  // program-graphics package
 +/* 2459 */  { fnGclip,                           NOPARAM,                     "GCLIP",                                       "GCLIP",                                       (0 << TAM_MAX_BITS) |     0, CAT_FNCT | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_NONE         | HG_ENABLED         },  // program-graphics package
- /* 2460 */  { itemToBeCoded,                NOPARAM,                     "2460",                                        "2460",                                        (0 << TAM_MAX_BITS) |     0, CAT_FREE | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
- /* 2461 */  { itemToBeCoded,                NOPARAM,                     "2461",                                        "2461",                                        (0 << TAM_MAX_BITS) |     0, CAT_FREE | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
--/* 2462 */  { itemToBeCoded,                NOPARAM,                     "2462",                                        "2462",                                        (0 << TAM_MAX_BITS) |     0, CAT_FREE | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
++/* 2460 */  { fnXrng,                            NOPARAM,                     "XRNG",                                        "XRNG",                                        (0 << TAM_MAX_BITS) |     0, CAT_FNCT | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_NONE         | HG_ENABLED         },  // program-graphics package
++/* 2461 */  { fnYrng,                            NOPARAM,                     "YRNG",                                        "YRNG",                                        (0 << TAM_MAX_BITS) |     0, CAT_FNCT | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_NONE         | HG_ENABLED         },  // program-graphics package
 +/* 2462 */  { itemToBeCoded,                     NOPARAM,                     "CANVAS",                                      "CANVAS",                                      (0 << TAM_MAX_BITS) |     0, CAT_MENU | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },  // program-graphics package: the canvas softmenu
  /* 2463 */  { itemToBeCoded,                NOPARAM,                     "2463",                                        "2463",                                        (0 << TAM_MAX_BITS) |     0, CAT_FREE | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
  

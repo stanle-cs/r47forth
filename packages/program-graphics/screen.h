@@ -51,6 +51,8 @@
   void       fnGdisp                          (uint16_t line);
   void       fnGmode                          (uint16_t mode);
   void       fnGclip                          (uint16_t unusedButMandatoryParameter);
+  void       fnXrng                           (uint16_t unusedButMandatoryParameter);
+  void       fnYrng                           (uint16_t unusedButMandatoryParameter);
   void       insertAlphaCursor                (uint16_t startAt);
 
   void       drawSinglePixelFullWidthLine     (int y);
