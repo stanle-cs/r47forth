@@ -1,5 +1,5 @@
 diff --git a/src/c47/keyboard.c b/src/c47/keyboard.c
-index bc44026016e94a8865b8acc886386341596641c6..0f576afe2e40540d73c8770979b0efe1651cb77e 100644
+index bc44026016e94a8865b8acc886386341596641c6..b72a13404385c94db66970baa35c8338e31fdd36 100644
 --- a/src/c47/keyboard.c
 +++ b/src/c47/keyboard.c
 @@ -687,7 +687,7 @@ static void executeFunction(const char *data, int16_t item_);
@@ -29,14 +29,16 @@ index bc44026016e94a8865b8acc886386341596641c6..0f576afe2e40540d73c8770979b0efe1
  
        if(data[0] == 0) {
          item = item_;
-@@ -1688,6 +1688,14 @@ endReturnTrue:
+@@ -1688,6 +1688,16 @@ endReturnTrue:
          }
        }
      }
-+    // pretty-print-extra package: the browser resolves its own keys. The
-+    // arm is separate because forth-core rewrites the condition above,
-+    // and two packages cannot edit one line.
-+    else if(calcMode == CM_PRETTY_BROWSER) {
++    // Package browsers 20 to 23 resolve their own keys here (claims
++    // registry; 19 has its own branch). The arm is separate because
++    // forth-core rewrites the condition above, and two packages cannot
++    // edit one line. pretty-print-extra and program-graphics carry this
++    // arm byte for byte.
++    else if(calcMode >= 20 && calcMode <= 23) {
 +      result = shiftF ? key->fShifted :
 +               shiftG ? key->gShifted :
 +                        key->primary;
@@ -44,7 +46,7 @@ index bc44026016e94a8865b8acc886386341596641c6..0f576afe2e40540d73c8770979b0efe1
      else {
        displayBugScreen(bugScreenItemNotDetermined);
        result = 0;
-@@ -2777,6 +2785,15 @@ RELEASE_END:
+@@ -2777,6 +2787,15 @@ RELEASE_END:
              }
            }
  
@@ -60,7 +62,7 @@ index bc44026016e94a8865b8acc886386341596641c6..0f576afe2e40540d73c8770979b0efe1
            else {
              switch(calcMode) {
                case CM_NORMAL: {
-@@ -2789,6 +2806,7 @@ RELEASE_END:
+@@ -2789,6 +2808,7 @@ RELEASE_END:
                    //printf("XXXXXXXX @@@@@@ temporaryInformation=%u calcmode=%u showRegis=%u\n", temporaryInformation, calcMode, showRegis);
                    if(item == ITM_RCL) {
                      keyActionProcessed = true;
@@ -68,7 +70,7 @@ index bc44026016e94a8865b8acc886386341596641c6..0f576afe2e40540d73c8770979b0efe1
                      fnRecall(showRegis);
                      setSystemFlag(FLAG_ASLIFT);
                      temporaryInformation = TI_COPY_FROM_SHOW;
-@@ -2977,6 +2995,9 @@ RELEASE_END:
+@@ -2977,6 +2997,9 @@ RELEASE_END:
                  else if(item == ITM_RCL) {
                    rbr1stDigit = true;
                    calcMode = previousCalcMode;
@@ -78,7 +80,7 @@ index bc44026016e94a8865b8acc886386341596641c6..0f576afe2e40540d73c8770979b0efe1
                    if(rbrMode == RBR_GLOBAL || rbrMode == RBR_LOCAL) {
                      fnRecall(currentRegisterBrowserScreen);
                      screenUpdatingMode = SCRUPD_AUTO;
-@@ -3577,6 +3598,11 @@ void fnKeyEnter(uint16_t unusedButMandatoryParameter) {
+@@ -3577,6 +3600,11 @@ void fnKeyEnter(uint16_t unusedButMandatoryParameter) {
          break;
        }
  
@@ -90,7 +92,7 @@ index bc44026016e94a8865b8acc886386341596641c6..0f576afe2e40540d73c8770979b0efe1
        case CM_TIMER: {
          fnRegAddTimerApp(NOPARAM);     //ENTER
          break;
-@@ -3938,6 +3964,11 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
+@@ -3938,6 +3966,11 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
          break;
        }
  
@@ -102,7 +104,7 @@ index bc44026016e94a8865b8acc886386341596641c6..0f576afe2e40540d73c8770979b0efe1
        case CM_ASN_BROWSER: {
          if(previousCalcMode == CM_AIM || tam.alpha) {
            if(currentMenu() == -MNU_AIMCATALOG) {
-@@ -4348,6 +4379,11 @@ void fnKeyBackspace(uint16_t unusedButMandatoryParameter) {
+@@ -4348,6 +4381,11 @@ void fnKeyBackspace(uint16_t unusedButMandatoryParameter) {
          break;
        }
  
@@ -114,7 +116,7 @@ index bc44026016e94a8865b8acc886386341596641c6..0f576afe2e40540d73c8770979b0efe1
        case CM_BUG_ON_SCREEN:
        case CM_LISTXY:
        case CM_GRAPH:
-@@ -4612,6 +4648,11 @@ void fnKeyUp(uint16_t unusedButMandatoryParameter) {
+@@ -4612,6 +4650,11 @@ void fnKeyUp(uint16_t unusedButMandatoryParameter) {
          break;
        }
  
@@ -126,7 +128,7 @@ index bc44026016e94a8865b8acc886386341596641c6..0f576afe2e40540d73c8770979b0efe1
        case CM_PEM: {
          resetAlphaSelectionBuffer();
          if(getSystemFlag(FLAG_ALPHA) && alphaCase == AC_LOWER) {
-@@ -4830,6 +4871,11 @@ void fnKeyDown(uint16_t unusedButMandatoryParameter) {
+@@ -4830,6 +4873,11 @@ void fnKeyDown(uint16_t unusedButMandatoryParameter) {
          break;
        }
  
@@ -138,7 +140,7 @@ index bc44026016e94a8865b8acc886386341596641c6..0f576afe2e40540d73c8770979b0efe1
        case CM_PEM: {
          resetAlphaSelectionBuffer();
          if(getSystemFlag(FLAG_ALPHA) && alphaCase == AC_UPPER) {
-@@ -4931,6 +4977,11 @@ void fnKeyDotD(uint16_t unusedButMandatoryParameter) {
+@@ -4931,6 +4979,11 @@ void fnKeyDotD(uint16_t unusedButMandatoryParameter) {
          break;
        }
  

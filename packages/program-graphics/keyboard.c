@@ -2139,6 +2139,12 @@ bool_t nimWhenButtonPressed = false;                  //PHM eRPN 2021-07
         temporaryInformation = TI_NO_INFO;
         refreshRegisterLine(REGISTER_T);
       }
+      // program-graphics package: R/S in the canvas view runs the program
+      // without the register line paint of the arm above.
+      if(calcMode == CM_GRAPHICS_CANVAS && showFunctionNameItem == 0 && lastKeyItemDetermined == ITM_RS) {
+        showFunctionNameItem = ITM_RS;
+        temporaryInformation = TI_NO_INFO;
+      }
 
       if(calcMode == CM_ASSIGN && itemToBeAssigned != 0 && tamBuffer[0] == 0) {
         assignToKey((char *)data);
@@ -2773,6 +2779,16 @@ RELEASE_END:
             break;
           }
 
+          // program-graphics package: inside the canvas view R/S continues
+          // the program and every other key does nothing. SNAP falls
+          // through to its own arm below.
+          else if(calcMode == CM_GRAPHICS_CANVAS && item != ITM_SNAP) {
+            if(item == ITM_RS) {
+              showFunctionNameItem = 0;
+            }
+            keyActionProcessed = true;
+          }
+
           else if(item == ITM_SNAP) {
             switch(calcMode) { //place modes here which should not work with SNAP
               //case CM_REGISTER_BROWSER:
@@ -2787,15 +2803,6 @@ RELEASE_END:
             }
           }
 
-          // pretty-print-extra package: a key that is not the browser's own
-          // must not run its item underneath the browser. The arm is
-          // a guard because undo-history adds `case 20:` to the same
-          // switch. The .d exemption keeps the pan key reachable: .d
-          // has no case of its own earlier in this chain.
-          else if(calcMode == CM_PRETTY_BROWSER && item != ITM_dotD) {
-            keyActionProcessed = true;
-          }
-
           else {
             switch(calcMode) {
               case CM_NORMAL: {
@@ -2808,7 +2815,6 @@ RELEASE_END:
                   //printf("XXXXXXXX @@@@@@ temporaryInformation=%u calcmode=%u showRegis=%u\n", temporaryInformation, calcMode, showRegis);
                   if(item == ITM_RCL) {
                     keyActionProcessed = true;
-                    ppcShadowInvalidate();   // fnRecall direct: no item dispatch, so no capture hook runs
                     fnRecall(showRegis);
                     setSystemFlag(FLAG_ASLIFT);
                     temporaryInformation = TI_COPY_FROM_SHOW;
@@ -2997,9 +3003,6 @@ RELEASE_END:
                 else if(item == ITM_RCL) {
                   rbr1stDigit = true;
                   calcMode = previousCalcMode;
-                  /* Both arms below call fnRecall directly, so no
-                   * capture hook runs: wipe the shadow. */
-                  ppcShadowInvalidate();
                   if(rbrMode == RBR_GLOBAL || rbrMode == RBR_LOCAL) {
                     fnRecall(currentRegisterBrowserScreen);
                     screenUpdatingMode = SCRUPD_AUTO;
@@ -3600,11 +3603,6 @@ void fnKeyEnter(uint16_t unusedButMandatoryParameter) {
         break;
       }
 
-      case CM_PRETTY_BROWSER: {
-        prettyBrowserEnter();
-        break;
-      }
-
       case CM_TIMER: {
         fnRegAddTimerApp(NOPARAM);     //ENTER
         break;
@@ -3612,6 +3610,10 @@ void fnKeyEnter(uint16_t unusedButMandatoryParameter) {
 
       case CM_CONFIRMATION: {
         temporaryInformation = TI_ARE_YOU_SURE;      // Keep confirmation message on screen
+        break;
+      }
+
+      case CM_GRAPHICS_CANVAS: {   // program-graphics package: no action in the canvas view
         break;
       }
 
@@ -3966,11 +3968,6 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
         break;
       }
 
-      case CM_PRETTY_BROWSER: {
-        prettyBrowserLeave();
-        break;
-      }
-
       case CM_ASN_BROWSER: {
         if(previousCalcMode == CM_AIM || tam.alpha) {
           if(currentMenu() == -MNU_AIMCATALOG) {
@@ -3991,6 +3988,11 @@ void fnKeyExit(uint16_t unusedButMandatoryParameter) {
           refreshScreen(0);
         }
         calcMode = previousCalcMode;
+        break;
+      }
+
+      case CM_GRAPHICS_CANVAS: {   // program-graphics package
+        pgCloseView();
         break;
       }
 
@@ -4381,11 +4383,6 @@ void fnKeyBackspace(uint16_t unusedButMandatoryParameter) {
         break;
       }
 
-      case CM_PRETTY_BROWSER: {
-        prettyBrowserLeave();
-        break;
-      }
-
       case CM_BUG_ON_SCREEN:
       case CM_LISTXY:
       case CM_GRAPH:
@@ -4500,6 +4497,10 @@ void fnKeyBackspace(uint16_t unusedButMandatoryParameter) {
         else {
           fnBackspaceTimerApp();
         }
+        break;
+      }
+
+      case CM_GRAPHICS_CANVAS: {   // program-graphics package: no action in the canvas view
         break;
       }
 
@@ -4650,11 +4651,6 @@ void fnKeyUp(uint16_t unusedButMandatoryParameter) {
         break;
       }
 
-      case CM_PRETTY_BROWSER: {
-        prettyBrowserUp();
-        break;
-      }
-
       case CM_PEM: {
         resetAlphaSelectionBuffer();
         if(getSystemFlag(FLAG_ALPHA) && alphaCase == AC_LOWER) {
@@ -4725,6 +4721,10 @@ void fnKeyUp(uint16_t unusedButMandatoryParameter) {
 
       case CM_TIMER: {
         fnUpTimerApp();
+        break;
+      }
+
+      case CM_GRAPHICS_CANVAS: {   // program-graphics package: no action in the canvas view
         break;
       }
 
@@ -4873,11 +4873,6 @@ void fnKeyDown(uint16_t unusedButMandatoryParameter) {
         break;
       }
 
-      case CM_PRETTY_BROWSER: {
-        prettyBrowserDown();
-        break;
-      }
-
       case CM_PEM: {
         resetAlphaSelectionBuffer();
         if(getSystemFlag(FLAG_ALPHA) && alphaCase == AC_UPPER) {
@@ -4952,6 +4947,10 @@ void fnKeyDown(uint16_t unusedButMandatoryParameter) {
         break;
       }
 
+      case CM_GRAPHICS_CANVAS: {   // program-graphics package: no action in the canvas view
+        break;
+      }
+
       default: {
         sprintf(errorMessage, commonBugScreenMessages[bugMsgCalcModeWhileProcKey], "fnKeyDown", calcMode, "DOWN");
         displayBugScreen(errorMessage);
@@ -4979,11 +4978,6 @@ void fnKeyDotD(uint16_t unusedButMandatoryParameter) {
         break;
       }
 
-      case CM_PRETTY_BROWSER: {
-        prettyBrowserPan();
-        break;
-      }
-
       case CM_REGISTER_BROWSER:
       case CM_FLAG_BROWSER:
       case CM_ASN_BROWSER:
@@ -4994,6 +4988,10 @@ void fnKeyDotD(uint16_t unusedButMandatoryParameter) {
       case CM_EIM:
       case CM_TIMER:
       case CM_LISTXY: {
+        break;
+      }
+
+      case CM_GRAPHICS_CANVAS: {   // program-graphics package: no action in the canvas view
         break;
       }
 

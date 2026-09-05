@@ -1,0 +1,12 @@
+diff --git a/src/c47/defines.h b/src/c47/defines.h
+index 63b9c1a7692f24da093a882ffa1f3be1625bb7a8..e2052f356803e42d785a7d9e45cf8b534a63aaee 100644
+--- a/src/c47/defines.h
++++ b/src/c47/defines.h
+@@ -1705,6 +1705,7 @@ static inline uint8_t regCtoKS(const int16_t regC) {
+ #define CM_NIM                                     2 // Numeric input mode
+ #define CM_PEM                                     3 // Program entry mode
+ #define CM_ASSIGN                                  4 // Assign mode
++#define CM_GRAPHICS_CANVAS                        21 // program-graphics canvas view (package browsers 19-23, claims registry)
+ #define CM_REGISTER_BROWSER                        5 // Register browser
+ #define CM_FLAG_BROWSER                            6 // Flag browser
+ #define CM_FONT_BROWSER                            7 // Font browser

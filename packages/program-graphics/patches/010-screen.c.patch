@@ -1,0 +1,17 @@
+diff --git a/src/c47/screen.c b/src/c47/screen.c
+index d2ac868bd18f9f4c20608f5dc90d5652844afcc6..483fe8a2bae5efb0b6355da661def45512ef9045 100644
+--- a/src/c47/screen.c
++++ b/src/c47/screen.c
+@@ -6221,6 +6221,12 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
+         _refreshNormalScreen();
+         break;
+ 
++      case CM_GRAPHICS_CANVAS:   // program-graphics package: the canvas keeps its pixels
++        last_CM = calcMode;
++        pgRefreshCanvasView();
++        force_refresh(force);
++        break;
++
+       case CM_LISTXY:
+           doRefreshSoftMenu = false;
+           displayShiftAndTamBuffer();

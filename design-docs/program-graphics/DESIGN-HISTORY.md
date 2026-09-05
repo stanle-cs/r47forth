@@ -68,3 +68,51 @@ measured delta comes with G1.
 
 The simulator numbers do not transfer to the DM42. The ratio of the
 `PIXEL` body to the `NOP` dispatch is the number to watch.
+
+## Stage G1: the canvas view
+
+Implementation choices that DESIGN.md version 0 left open, now fixed in
+DESIGN.md §3 and §6:
+
+1. `PVIEW` with a bad parameter raises `ERROR_OUT_OF_RANGE`, not the
+   data-type error. The parameter is a number, and the number is out of
+   range.
+2. The key resolution chain had no free arm position. Undo-history owns
+   the chain head, forth-core rewrites the main condition, and
+   pretty-print-extra owns the arm before the final else. The fix was the
+   registry mechanism: pretty-print-extra's arm became the range form
+   `calcMode >= 20 && calcMode <= 23`, and this package carries the same
+   bytes. Forth-core already covers the range in its rewrite.
+3. R/S in the canvas view goes through upstream's release path. The
+   press arm only clears `showFunctionNameItem`. A separate release arm
+   sets it to `ITM_RS` for the canvas view without the register line
+   paint that the `CM_NORMAL` arm does.
+4. The five key functions with a bug-screen default get a no-op case each.
+5. The `CANVAS` softmenu row sits after row 180, not at the tail, because
+   pretty-print-extra's tail row and a second tail row do not merge.
+6. Prototypes go into `screen.h`, because three siblings patch `c47.h`.
+
+Firmware size, `make dmcp5r47`, this package alone against no package:
+
+| Section | Without | With | Delta |
+|---|---|---|---|
+| flash | 1,090,512 | 1,091,000 | +488 bytes |
+| ram | 7,548 | 7,564 | +16 bytes (the `pgCanvas_t` state) |
+
+Red-first results of the G1 pins on the simulator:
+
+| Mutation | Pins that went red |
+|---|---|
+| No refreshScreen case for the canvas | V8, the status bar repaint. V4 stayed green, because the default arm of the switch paints nothing. The contract now names V8 as the pin of the case. |
+| No restore of calcMode on EXIT | V6, K3, and V7 through the leaked mode |
+| Region 2 clips at row 239 | V1 |
+| No no-op case in `fnKeyEnter` | K2 and K3, through the bug screen that the release raises |
+
+With the sources restored the suite was green: solo 13,020 tests, combined
+with the four other packages 13,046 tests.
+
+Two pin lessons from this stage. The softmenu painter clears its band
+before it paints, so a pixel in rows 171 to 239 proves nothing about the
+region clear. The clip row is the observable. And EXIT, ENTER, BACKSPACE,
+UP, DOWN, and .d run their key function on the key release, through the
+item function, so a key pin must drive the release too.

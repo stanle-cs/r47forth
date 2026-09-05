@@ -1,0 +1,16 @@
+diff --git a/src/c47/screen.h b/src/c47/screen.h
+index 1643a2b62d0eaa0c6936bc21d7d563f1d6dab990..dfb35926ff8e7b9080c0e81071ac85b9bf7e8ef3 100644
+--- a/src/c47/screen.h
++++ b/src/c47/screen.h
+@@ -34,6 +34,11 @@
+   void       fnPixel                          (uint16_t unusedButMandatoryParameter);
+   void       fnPoint                          (uint16_t unusedButMandatoryParameter);
+   void       fnAGraph                         (uint16_t regist);
++  // program-graphics package (files/pgmGraphics.c): the canvas view.
++  void       fnPview                          (uint16_t region);
++  void       fnErase                          (uint16_t unusedButMandatoryParameter);
++  void       pgCloseView                      (void);
++  void       pgRefreshCanvasView              (void);
+   void       insertAlphaCursor                (uint16_t startAt);
+ 
+   void       drawSinglePixelFullWidthLine     (int y);

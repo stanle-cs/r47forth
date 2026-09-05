@@ -1,12 +1,19 @@
 {
   "base_commit": "af7ad934a0dfeeada96c21136e2ab7084647de01",
   "files": {
-    "pgmGraphics.c": "8eb02b57b8af31da2350b61a0f2d627e55b796ffbab73742e66911b9ce84eadc",
-    "pgmGraphics.h": "b4430450287da66bcf8a2e7ac75a9033cf1fbbbae0ba60eda3914c76bed43e37",
-    "testSuite/tests/program_graphics.txt": "db00c62dfe1699e4dd72309c826ab3ef5a9eb7db53966d11abc21c4a6e9e8bc5"
+    "pgmGraphics.c": "64c53d961b08e8f3bda4cc2e7cbda695837925895e9b512e3604fa192bd15d75",
+    "pgmGraphics.h": "24ec7036ab013daab6e5124cba545b9b354ca7234866e388549422baebd320bc",
+    "testSuite/tests/program_graphics.txt": "c54c19b11d7acfa39d521398d3f621a670da35da92b5326de97abc946789c62d"
   },
   "patches": {
-    "010-testSuite__testSuite.c.patch": "ade43d98685495594b02837bbd593f48036d6cf0088998d8b76f68c84c5a212a",
+    "010-defines.h.patch": "99755d76dcc46033c3258989c82281ccbc0c3f9aaf047cbb552c09fbd7cafd04",
+    "010-items.c.patch": "0c5720e396c9aa384be012f27e1d2be36990fe889ac55944630a2907f3f8efe6",
+    "010-items.h.patch": "957d0cc2817f9ac867637003ef1a5c0e74647e3dc5dd9f34c4e87a710d6784d8",
+    "010-keyboard.c.patch": "0bed6120910392065a9689dbed4539df14b6b20b550120e4b2d2369162545528",
+    "010-screen.c.patch": "fa70a8dbaa323b5730ab83137eaf621991a7680f8a53411e11413be8b3f08fb1",
+    "010-screen.h.patch": "6633d74b2a8726520e512954532ee2756c8a820b4bac5c78d26c71daa8ce83f3",
+    "010-softmenus.c.patch": "c3914599072793ab209ef0a357aa1b8afd6f9d8bdca3022d21d022ac8d5b8f0b",
+    "010-testSuite__testSuite.c.patch": "bd2596c1cce65fe9264cad5ee3ee72578a69fe1bf47683dfea636fff478a5823",
     "010-testSuite__tests__testSuiteList.txt.patch": "450ed6f8c1940a98da9a5bc4b8dd25b4737cd6ed5dcd54c5da923a915d2fe166"
   }
 }

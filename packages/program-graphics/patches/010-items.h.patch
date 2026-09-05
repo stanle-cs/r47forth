@@ -1,0 +1,14 @@
+diff --git a/src/c47/items.h b/src/c47/items.h
+index 98924313217f3b57f1b663367c8e45c0dc0f1010..e8f8f3bda106bcfca914f8115cd1d2f0834eebe1 100644
+--- a/src/c47/items.h
++++ b/src/c47/items.h
+@@ -2511,6 +2511,9 @@
+ #define ITM_j_CIRC                  2445
+ #define ITM_k_CIRC                  2446
+ #define ITM_phi_m                   2447
++#define ITM_PVIEW                   2448  // program-graphics package: open the canvas view (claims registry: rows 2448-2463)
++#define ITM_ERASE                   2449  // program-graphics package: clear the canvas
++#define MNU_CANVAS                  2462  // program-graphics package: the canvas softmenu
+ #define ITM_2448                    2448
+ #define ITM_2449                    2449
+ #define ITM_2450                    2450

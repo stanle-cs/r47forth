@@ -93,7 +93,7 @@ except the name and the value:
 
 The status bar, rows 0 to 19, stays live in both regions. Region code 1 is
 not supported. `PVIEW` with a parameter other than 2 or 6 raises
-`ERROR_INVALID_DATA_TYPE_FOR_OP` and does nothing else.
+`ERROR_OUT_OF_RANGE` and does nothing else.
 
 ### 3.3 State
 
@@ -126,8 +126,8 @@ clip rectangle is stored in screen coordinates.
 ### 3.5 PVIEW
 
     fnPview(n):
-      if n != 2 and n != 6: error ERROR_INVALID_DATA_TYPE_FOR_OP; return
-      if canvas.region == 0:
+      if n != 2 and n != 6: error ERROR_OUT_OF_RANGE; return
+      if calcMode != CM_GRAPHICS_CANVAS:
         canvas.prevCalcMode = calcMode
       canvas.region = n
       canvas.clipX0 = 0; canvas.clipX1 = SCREEN_WIDTH - 1
@@ -150,9 +150,9 @@ new region. It does not change `prevCalcMode`.
 |---|---|
 | `refreshScreen` runs while `calcMode == CM_GRAPHICS_CANVAS` | The case for the mode calls `refreshStatusBar()`, then `showSoftmenuCurrentPart()` when region is 2, then `force_refresh(force)`. It does not clear or paint any other row. |
 | A program stops | The stop path calls `refreshScreen(4)`. The rule above keeps the canvas. |
-| R/S, direct key path | The same call as in `CM_NORMAL`: `fnRunProgram`. The view stays open. |
-| EXIT, direct key path | `pgCloseView()`: `calcMode = canvas.prevCalcMode`; `canvas.region = 0`; `temporaryInformation = TI_NO_INFO`; `screenUpdatingMode = SCRUPD_AUTO`; `refreshScreen(...)`. |
-| Any other key, direct key path | Ignored. `keyActionProcessed = true`. |
+| R/S, direct key path | The press arm sets `showFunctionNameItem = 0` and marks the key processed. The release path sets `showFunctionNameItem = ITM_RS` for the canvas view, as it does for `CM_NORMAL` but without the register line paint. Upstream then runs `fnRunProgram`. The view stays open. |
+| EXIT, direct key path | `fnKeyExit` has a case for the mode that calls `pgCloseView()`: `calcMode = canvas.prevCalcMode`; `canvas.region = 0`; `temporaryInformation = TI_NO_INFO`; `screenUpdatingMode = SCRUPD_AUTO`; `refreshScreen(197)`. |
+| Any other key, direct key path | Ignored. A guard arm in `processKeyAction` before the SNAP arm marks every key except SNAP as processed. `fnKeyEnter`, `fnKeyBackspace`, `fnKeyUp`, `fnKeyDown`, and `fnKeyDotD` have a no-op case for the mode, because their default arm shows a bug screen. |
 | Any softkey, softkey path | Ignored. The package carries the range clause `calcMode < 19 /* package browsers 19-23, claims registry */` on the three softkey functions, byte-identical to the other packages. |
 | `VIEW`, `AVIEW` inside the view | The upstream body sets `temporaryInformation` and calls `refreshScreen`. The rule above paints nothing. The program continues. On EXIT, `temporaryInformation` is reset, so nothing shows later. |
 | `PAUSE` inside the view | Upstream flushes the buffer once and waits. The canvas stays. |
@@ -298,14 +298,31 @@ The window is part of `pgCanvas_t` from G3 on.
 
 ## 6. Items and menu
 
-The item rows, the menu row, and the softmenu array are chosen in stage G1
-from the free spare rows, under the touching-line rule: the package does
-not edit a row adjacent to a row that another package edited. The exact
-rows are recorded here when G1 lands.
+The package claims the spare rows 2448 to 2463 of `items.c` (all
+`CAT_FREE`, far from every sibling claim) and the 3D rows from 2864 on
+when G4 lands.
+
+| Row | Item | Since |
+|---|---|---|
+| 2448 | `PVIEW` (`TM_VALUE`, `PTP_NUMBER_8`, min 2, max 6) | G1 |
+| 2449 | `ERASE` | G1 |
+| 2450 to 2461 | the 2D commands of §2.2 and §2.3 | G2, G3 |
+| 2462 | `CANVAS`, the softmenu (`CAT_MENU`, `MNU_CANVAS`) | G1 |
+
+The `CANVAS` menu array is defined after `menu_PFN_3` in `softmenus.c`.
+Its registry row sits after row 180, four rows above the tail, because
+pretty-print-extra owns the tail row and two insertions at one line do
+not merge. The rows after 180 shift by one in a build with this package.
+The menu hangs off the first free slot of the P.FN page 2 menu.
+
+Prototypes of the commands and of the view hooks live in `screen.h`, next
+to the upstream `PIXEL` family, because three siblings already patch the
+include block of `c47.h`. The catalog stubs of the commands sit after the
+`fnPlotStat` stub in the stub block of `items.c`.
 
 Parameters of `PVIEW`, `DISP`, and `GMODE` use the step-parameter
-mechanism of `MSG nn` (`PTP_NUMBER_8`). `WIREFRAME` uses the label
-mechanism of `PGMSLV`.
+mechanism of `PAUSE nn` (`TM_VALUE`, `PTP_NUMBER_8`). `WIREFRAME` uses
+the label mechanism of `PGMSLV`.
 
 ## 7. Composition with the other packages
 
@@ -318,6 +335,18 @@ mechanism of `PGMSLV`.
    `items.c`, `softmenus.c`, or `testSuiteList.txt`.
 4. `NUMBER_OF_SYSTEM_FLAGS` is not touched. The package adds no system
    flag.
+5. The key resolution chain of `keyboard.c` has one free arm position,
+   and pretty-print-extra owns it. Both packages carry one identical arm
+   there: `else if(calcMode >= 20 && calcMode <= 23)` with the same
+   comment bytes. Pretty-print-extra was amended to this range form on
+   2026-09-04 under the registry mechanism. Forth-core resolves the same
+   range in its own rewrite of the condition above the arm, so the three
+   compose.
+6. Every other keyboard insertion of the package sits at least three
+   lines from every sibling hunk: the guard arm before the SNAP arm, the
+   release arm after the `CM_NORMAL` R/S block, the EXIT case before
+   `CM_TIMER`, and the no-op cases before the `default` arm of each key
+   function.
 
 ## 8. The speed law
 

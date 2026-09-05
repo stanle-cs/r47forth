@@ -10,3 +10,10 @@ Out: EC=0 RX=LonI:"0"
 Func: pgTestBaseline
 In:  FL_ASLIFT=1 RX=LonI:"0"
 Out: EC=0 RX=LonI:"0"
+; Stage G1: the canvas view (TESTING.md section 4).
+Func: pgTestView
+In:  FL_ASLIFT=1 RX=LonI:"0"
+Out: EC=0 RX=LonI:"0"
+Func: pgTestKeys
+In:  FL_ASLIFT=1 RX=LonI:"0"
+Out: EC=0 RX=LonI:"0"
