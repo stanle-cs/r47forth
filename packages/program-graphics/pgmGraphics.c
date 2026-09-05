@@ -231,10 +231,12 @@ static void pgBox(const pgRect_t *c, int32_t x0, int32_t y0, int32_t x1, int32_t
   }
 }
 
-static int32_t pgIsqrt(int32_t v) {
-  int32_t r = 0, bit;
+// Integer square root in 64 bits: the fill of a radius up to 32767 needs 4 r^2,
+// which is above INT32_MAX from r = 23171 on (audit G2 round 1, Sol 2).
+static int64_t pgIsqrt(int64_t v) {
+  int64_t r = 0, bit;
   if(v <= 0) return 0;
-  for(bit = 1 << 15; bit > 0; bit >>= 1) {
+  for(bit = (int64_t)1 << 31; bit > 0; bit >>= 1) {
     if((r + bit) * (r + bit) <= v) r += bit;
   }
   return r;
@@ -245,9 +247,12 @@ static void pgCircle(const pgRect_t *c, int32_t cx, int32_t cy, int32_t r, bool_
   int32_t x, y, err;
   if(r < 0) r = -r;
   if(filled) {
-    int32_t dy;
-    for(dy = -r; dy <= r; dy++) {
-      int32_t w = (pgIsqrt(4 * (r * r - dy * dy)) + 1) / 2;   // rounded half-width, matches the midpoint outline
+    int32_t dy, dy0 = -r, dy1 = r;
+    if(cy + dy0 < c->y0) dy0 = c->y0 - cy;   // only the rows inside the clip
+    if(cy + dy1 > c->y1) dy1 = c->y1 - cy;
+    for(dy = dy0; dy <= dy1; dy++) {
+      int64_t rr = (int64_t)r * r - (int64_t)dy * dy;
+      int32_t w = (int32_t)((pgIsqrt(4 * rr) + 1) / 2);   // rounded half-width, matches the midpoint outline
       pgRun(c, cx - w, cx + w, cy + dy);
     }
     return;
@@ -280,7 +285,7 @@ static void pgCircle(const pgRect_t *c, int32_t cx, int32_t cy, int32_t r, bool_
 }
 
 // Arc test: is the direction (dx, dy), y upward, inside the counterclockwise
-// span from A to B? A and B are direction vectors scaled by 1024. wide is
+// span from A to B? A and B are direction vectors scaled by 65536. wide is
 // true when the span exceeds 180 degrees (§4.5).
 static bool_t pgInSpan(int32_t ax, int32_t ay, int32_t bx, int32_t by, bool_t wide, int32_t dx, int32_t dy) {
   int64_t ca = (int64_t)ax * dy - (int64_t)ay * dx;   // cross(A, P)
@@ -396,7 +401,13 @@ static bool_t pgReadCoord(calcRegister_t regist, int32_t *v) {
 static bool_t pgReadAngle(calcRegister_t regist, real_t *angle) {
   switch(getRegisterDataType(regist)) {
     case dtLongInteger: convertLongIntegerRegisterToReal(regist, angle, &ctxtReal39); return true;
-    case dtReal34:      real34ToReal(REGISTER_REAL34_DATA(regist), angle);            return true;
+    case dtReal34:
+      if(real34IsNaN(REGISTER_REAL34_DATA(regist)) || real34IsInfinite(REGISTER_REAL34_DATA(regist))) {
+        pgError(ERROR_OUT_OF_RANGE);
+        return false;
+      }
+      real34ToReal(REGISTER_REAL34_DATA(regist), angle);
+      return true;
     default:            pgError(ERROR_INVALID_DATA_TYPE_FOR_OP);                      return false;
   }
 }
@@ -502,11 +513,11 @@ void fnGarc(uint16_t unusedButMandatoryParameter) {
   int32ToReal(360, &full);
   fullCircle = realCompareGreaterEqual(&d, &full);
   C47_WP34S_Cvt2RadSinCosTan(&a1, currentAngularMode, &s, &co, &t, &ctxtReal39);
-  realToFloat(&co, &f); ax = (int32_t)(f * 1024.0f);
-  realToFloat(&s,  &f); ay = (int32_t)(f * 1024.0f);
+  realToFloat(&co, &f); ax = (int32_t)(f * 65536.0f);
+  realToFloat(&s,  &f); ay = (int32_t)(f * 65536.0f);
   C47_WP34S_Cvt2RadSinCosTan(&a2, currentAngularMode, &s, &co, &t, &ctxtReal39);
-  realToFloat(&co, &f); bx = (int32_t)(f * 1024.0f);
-  realToFloat(&s,  &f); by = (int32_t)(f * 1024.0f);
+  realToFloat(&co, &f); bx = (int32_t)(f * 65536.0f);
+  realToFloat(&s,  &f); by = (int32_t)(f * 65536.0f);
   pgClipNow(&c);
   if(fullCircle) {
     pgCircle(&c, cx, PG_ROW_OF(cy), r, false);
@@ -515,7 +526,7 @@ void fnGarc(uint16_t unusedButMandatoryParameter) {
     int64_t cross = (int64_t)ax * by - (int64_t)ay * bx;
     int64_t dot   = (int64_t)ax * bx + (int64_t)ay * by;
     if(cross == 0 && dot > 0) {
-      pgPixel(&c, cx + (int32_t)(((int64_t)ax * r) / 1024), PG_ROW_OF(cy + (int32_t)(((int64_t)ay * r) / 1024)));
+      pgPixel(&c, cx + (int32_t)(((int64_t)ax * r) / 65536), PG_ROW_OF(cy + (int32_t)(((int64_t)ay * r) / 65536)));
     }
     else {
       wide = cross < 0;
@@ -537,6 +548,9 @@ static bool_t pgStringCut(calcRegister_t regist, uint32_t width) {
   n = strlen(s);
   if(n >= TMP_STR_LENGTH - 1) {
     n = TMP_STR_LENGTH - 2;
+    if(n > 0 && ((uint8_t)s[n - 1] & 0x80)) {   // do not cut inside a two-byte glyph
+      n--;
+    }
   }
   memcpy(tmpString, s, n);
   tmpString[n] = 0;
@@ -545,7 +559,13 @@ static bool_t pgStringCut(calcRegister_t regist, uint32_t width) {
     size_t i = 0, last = 0;
     while(tmpString[i] != 0) {
       last = i;
-      i += ((uint8_t)tmpString[i] & 0x80) ? 2 : 1;
+      if((uint8_t)tmpString[i] & 0x80) {
+        if(tmpString[i + 1] == 0) break;   // a lone lead byte at the end: the glyph is that byte
+        i += 2;
+      }
+      else {
+        i++;
+      }
     }
     tmpString[last] = 0;
   }
@@ -580,9 +600,15 @@ void fnGdisp(uint16_t line) {
   if(row < c.y0 || row + 19 > c.y1) {
     return;
   }
-  if(!pgStringCut(REGISTER_X, SCREEN_WIDTH - 1)) return;
-  lcd_fill_rect(0, (uint32_t)row, SCREEN_WIDTH, 20, LCD_SET_VALUE);
-  showString(tmpString, &standardFont, 1, (uint32_t)row, vmNormal, true, true);
+  {
+    int32_t col = c.x0 < 1 ? 1 : c.x0;
+    if(col > c.x1) {
+      return;
+    }
+    if(!pgStringCut(REGISTER_X, (uint32_t)(c.x1 - col + 1))) return;
+    lcd_fill_rect((uint32_t)c.x0, (uint32_t)row, (uint32_t)(c.x1 - c.x0 + 1), 20, LCD_SET_VALUE);
+    showString(tmpString, &standardFont, (uint32_t)col, (uint32_t)row, vmNormal, true, true);
+  }
   pgRefreshMaybe();
 }
 
@@ -601,10 +627,18 @@ void fnGclip(uint16_t unusedButMandatoryParameter) {
   if(!pgReadTwoPoints(&x0, &r0, &x1, &r1)) return;
   if(x0 > x1) { int32_t t = x0; x0 = x1; x1 = t; }
   if(r0 > r1) { int32_t t = r0; r0 = r1; r1 = t; }
+  // The clip is the intersection of the rectangle and the region. A
+  // rectangle wholly outside the region gives the empty clip (x0 > x1):
+  // every clip test fails and nothing draws. Only values that fit int16
+  // reach the stores (audit G2 round 1, Sol 1: one unclamped edge narrowed).
   if(x0 < 0) x0 = 0;
   if(x1 > SCREEN_WIDTH - 1) x1 = SCREEN_WIDTH - 1;
   if(r0 < PG_TOP_ROW) r0 = PG_TOP_ROW;
   if(r1 > regionBottom) r1 = regionBottom;
+  if(x0 > x1 || r0 > r1) {
+    x0 = 1; x1 = 0;
+    r0 = PG_TOP_ROW; r1 = PG_TOP_ROW;
+  }
   canvas.clipX0 = (int16_t)x0; canvas.clipY0 = (int16_t)r0;
   canvas.clipX1 = (int16_t)x1; canvas.clipY1 = (int16_t)r1;
 }
@@ -852,6 +886,15 @@ void fnGclip(uint16_t unusedButMandatoryParameter) {
 
   // ---- Stage G2 pins (TESTING.md §4, D1 to D12) ----
 
+  // Writes a signed value into regist as a long integer.
+  static void pgTestWriteLonISigned(calcRegister_t regist, int32_t value) {
+    longInteger_t li;
+    longIntegerInit(li);
+    int32ToLongInteger(value, li);
+    convertLongIntegerToLongIntegerRegister(li, regist);
+    longIntegerFree(li);
+  }
+
   static void pgTestSetString(calcRegister_t regist, const char *s) {
     reallocateRegister(regist, dtString, TO_BLOCKS(strlen(s) + 1), amNone);
     strcpy(REGISTER_STRING_DATA(regist), s);
@@ -950,6 +993,15 @@ void fnGclip(uint16_t unusedButMandatoryParameter) {
     if(lastErrorCode != ERROR_OUT_OF_RANGE) pgTestFail("D8 a coordinate of 40000 did not raise ERROR_OUT_OF_RANGE");
     lastErrorCode = ERROR_NONE;
     if(pgTestLit(200, 31)) pgTestFail("D8 the refused command drew");
+    // D8c: a negative start column is clamped at the left edge; nothing
+    // spills into the next row's bytes (the mirrored layout puts the
+    // right end of the row below right after this row's left end).
+    pgTestWriteLonISigned(REGISTER_X, -20); pgTestWriteLonI(REGISTER_Y, 100); pgTestWriteLonI(REGISTER_Z, 50); pgTestWriteLonI(REGISTER_T, 100);
+    fnGline(NOPARAM);
+    if(lastErrorCode != ERROR_NONE) { pgTestFail("D8c a negative column raised an error"); lastErrorCode = ERROR_NONE; }
+    if(!pgTestLit(0, 100) || !pgTestLit(50, 100)) pgTestFail("D8c the clamped line misses an edge pixel");
+    if(pgTestLit(399, 99) || pgTestLit(392, 99) || pgTestLit(399, 101)) pgTestFail("D8c the run spilled into the row below or above");
+    if(pgRowPtr(PG_ROW_OF(99))[0] > 1) pgTestFail("D8c the row below has a corrupted dirty flag");
 
     // D9: GMODE 2 twice restores the buffer.
     {
@@ -1031,6 +1083,120 @@ void fnGclip(uint16_t unusedButMandatoryParameter) {
     if(lastErrorCode != ERROR_INVALID_DATA_TYPE_FOR_OP) pgTestFail("D12 a string coordinate did not raise the data type error");
     lastErrorCode = ERROR_NONE;
     if(pgTestLit(300, 200)) pgTestFail("D12 the command drew after the error");
+
+    // D13: a clip rectangle wholly outside the region is empty, on each of
+    // the four sides. A full-screen FBOX then draws nothing, and the stored
+    // clip stays inside the region (audit G2 round 1, Sol 1).
+    {
+      static const int32_t outside[4][4] = {
+        { 0, 32766, 399, 32767 },       // above the region
+        { 0, -32767, 399, -32766 },     // below the region (Sol's case)
+        { -32767, 0, -32766, 219 },     // left of the screen
+        { 32766, 0, 32767, 219 },       // right of the screen
+      };
+      uint32_t side;
+      for(side = 0; side < 4; side++) {
+        fnErase(NOPARAM);
+        pgTestWriteLonISigned(REGISTER_X, outside[side][0]); pgTestWriteLonISigned(REGISTER_Y, outside[side][1]);
+        pgTestWriteLonISigned(REGISTER_Z, outside[side][2]); pgTestWriteLonISigned(REGISTER_T, outside[side][3]);
+        fnGclip(NOPARAM);
+        if(lastErrorCode != ERROR_NONE) { pgTestFail("D13 an outside clip rectangle raised an error"); lastErrorCode = ERROR_NONE; }
+        if(canvas.clipX0 < 0 || canvas.clipX1 > SCREEN_WIDTH - 1 || canvas.clipY0 < PG_TOP_ROW || canvas.clipY1 > SCREEN_HEIGHT - 1) pgTestFail("D13 a stored clip edge is outside the region");
+        pgTestPoints(0, 0, 399, 219);
+        fnGfbox(NOPARAM);
+        if(pgTestLit(0, 0) || pgTestLit(200, 100) || pgTestLit(399, 219) || pgTestLit(0, 219) || pgTestLit(399, 0)) pgTestFail("D13 a full-screen FBOX drew through an empty clip");
+      }
+      fnErase(NOPARAM);
+    }
+
+    // D14: filled circles with a large radius (audit G2 round 1, Sol 2).
+    // A radius of 23170 far off screen paints nothing on the screen. A
+    // radius of 32767 around an on-screen center paints the whole region.
+    pgTestWriteLonISigned(REGISTER_X, -30000); pgTestWriteLonI(REGISTER_Y, 100); pgTestWriteLonI(REGISTER_Z, 23170);
+    fnGfcircle(NOPARAM);
+    if(lastErrorCode != ERROR_NONE) { pgTestFail("D14 a radius of 23170 raised an error"); lastErrorCode = ERROR_NONE; }
+    if(pgTestLit(0, 100) || pgTestLit(200, 100) || pgTestLit(399, 100)) pgTestFail("D14 the off-screen circle of radius 23170 painted an on-screen row");
+    pgTestWriteLonI(REGISTER_X, 200); pgTestWriteLonI(REGISTER_Y, 100); pgTestWriteLonI(REGISTER_Z, 32767);
+    fnGfcircle(NOPARAM);
+    if(lastErrorCode != ERROR_NONE) { pgTestFail("D14 a radius of 32767 raised an error"); lastErrorCode = ERROR_NONE; }
+    if(!pgTestLit(0, 0) || !pgTestLit(399, 219) || !pgTestLit(0, 219) || !pgTestLit(399, 0)) pgTestFail("D14 the circle of radius 32767 left a corner clear");
+    fnErase(NOPARAM);
+
+    // D15: DISP clears and writes only between the clip columns (audit G2
+    // round 1, Sol 3). A pixel left of the clip survives, and the text
+    // starts at the left clip edge, not at column 1.
+    pgTestPoints(5, 190, 15, 190);   // buffer row 49, inside the band of line 2
+    fnGline(NOPARAM);
+    pgTestPoints(200, 0, 399, 219);
+    fnGclip(NOPARAM);
+    pgTestSetString(REGISTER_X, "HELLO");
+    fnGdisp(2);
+    {
+      bool_t inside = false, left = false;
+      uint32_t x, yy;
+      for(x = 200; x < 260 && !inside; x++) for(yy = 40; yy < 60 && !inside; yy++) inside = lcd_buffer_pixel_on(x, yy);
+      for(x = 20; x < 200 && !left; x++) for(yy = 40; yy < 60 && !left; yy++) left = lcd_buffer_pixel_on(x, yy);
+      if(!pgTestLit(10, 190)) pgTestFail("D15 DISP cleared a pixel left of the clip");
+      if(!inside) pgTestFail("D15 DISP did not write inside the clip");
+      if(left) pgTestFail("D15 DISP wrote left of the clip");
+    }
+    fnErase(NOPARAM);
+
+    // D16: an arc of 0.05 degrees at radius 5000 keeps its span (audit G2
+    // round 1, Sol 4). The center is off screen so that the arc crosses
+    // the screen at column 300, rows 130 to 134.
+    {
+      const angularMode_t savedAm = currentAngularMode;
+      currentAngularMode = amDegree;
+      pgTestSetComplex(REGISTER_T, -4700, 130);
+      pgTestWriteLonI(REGISTER_Z, 5000);
+      pgTestWriteLonI(REGISTER_Y, 0);
+      reallocateRegister(REGISTER_X, dtReal34, 0, amNone);
+      stringToReal34("0.05", REGISTER_REAL34_DATA(REGISTER_X));
+      fnGarc(NOPARAM);
+      currentAngularMode = savedAm;
+      if(lastErrorCode != ERROR_NONE) { pgTestFail("D16 the small arc raised an error"); lastErrorCode = ERROR_NONE; }
+      if(!pgTestLit(300, 130) || !pgTestLit(300, 133)) pgTestFail("D16 the arc of 0.05 degrees lost its span");
+      if(pgTestLit(300, 140) || pgTestLit(300, 120)) pgTestFail("D16 the arc of 0.05 degrees drew outside its span");
+    }
+
+    // D17: the string cap never cuts inside a two-byte glyph.
+    {
+      static char longString[TMP_STR_LENGTH + 64];
+      size_t i;
+      for(i = 0; i < TMP_STR_LENGTH - 3; i++) longString[i] = 'A';
+      longString[TMP_STR_LENGTH - 3] = (char)0x80;   // a two-byte glyph starts at the cap
+      longString[TMP_STR_LENGTH - 2] = 'B';
+      for(i = TMP_STR_LENGTH - 1; i < TMP_STR_LENGTH + 30; i++) longString[i] = 'C';
+      longString[TMP_STR_LENGTH + 30] = 0;
+      pgTestSetString(REGISTER_X, longString);
+      if(!pgStringCut(REGISTER_X, 0xFFFFFFFFu)) pgTestFail("D17 the string cut refused a long string");
+      if(strlen(tmpString) != TMP_STR_LENGTH - 3 || (uint8_t)tmpString[TMP_STR_LENGTH - 4] != 'A') pgTestFail("D17 the string cap cut inside a two-byte glyph");
+      // D17b: a string that ends in a lone lead byte is trimmed to fit a
+      // width of one pixel without a read beyond its NUL. The bytes after
+      // the NUL are set to a non-NUL pattern first. No mutation can red
+      // this pin without a hang, so it documents the guard (DESIGN-HISTORY).
+      tmpString[10] = 'Y'; tmpString[11] = 'Y'; tmpString[12] = 0;
+      pgTestSetString(REGISTER_X, "ABCDEFGH\x80");
+      if(!pgStringCut(REGISTER_X, 1)) pgTestFail("D17b the trim refused a short string");
+      if(tmpString[0] != 0) pgTestFail("D17b the trim did not empty a string wider than one pixel");
+    }
+
+    // D18: a NaN angle is refused with ERROR_OUT_OF_RANGE and draws nothing.
+    {
+      const angularMode_t savedAm = currentAngularMode;
+      currentAngularMode = amDegree;
+      pgTestSetComplex(REGISTER_T, 200, 100);
+      pgTestWriteLonI(REGISTER_Z, 30);
+      pgTestWriteLonI(REGISTER_Y, 0);
+      reallocateRegister(REGISTER_X, dtReal34, 0, amNone);
+      stringToReal34("NaN", REGISTER_REAL34_DATA(REGISTER_X));
+      fnGarc(NOPARAM);
+      currentAngularMode = savedAm;
+      if(lastErrorCode != ERROR_OUT_OF_RANGE) pgTestFail("D18 a NaN angle did not raise ERROR_OUT_OF_RANGE");
+      lastErrorCode = ERROR_NONE;
+      if(pgTestLit(230, 100) || pgTestLit(200, 130)) pgTestFail("D18 the refused arc drew");
+    }
 
     pgCloseView();
     calcMode = CM_NORMAL;

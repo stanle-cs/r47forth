@@ -235,6 +235,11 @@ Every primitive clips before it touches the buffer. `bitblt24` does not
 check the row. `lcd_fill_rect` drops the whole call when any edge is off
 screen. An off-screen argument is not an error. It draws nothing.
 
+`GCLIP` stores the intersection of its rectangle and the region. When the
+intersection is empty, the clip is empty (clipX0 = 1, clipX1 = 0) and
+nothing draws until the next `GCLIP`, `ERASE`, or `PVIEW`. Only values
+inside the region reach the int16 clip fields.
+
 ### 4.3 Lines
 
 Integer Bresenham, one `pgPixel` per step. Horizontal lines call `pgRun`
@@ -250,12 +255,17 @@ calls `pgRun` per row.
 ### 4.5 Circles and arcs
 
 `CIRCLE` uses the midpoint algorithm with `pgPixel`. `FCIRCL` uses the
-same algorithm and calls `pgRun` for each scan line pair. `ARC` computes
-the start and end angles in the current angular mode, then steps the
-circle with the midpoint algorithm and draws the pixels whose angle lies
-in the span. The angle test uses integer octant logic, no trigonometry.
-A span of 360 degrees or more draws the full circle. Stage G2 specifies
-the octant test in full before implementation.
+same algorithm and calls `pgRun` for each row of the clip that the circle
+crosses. Its half-width per row is the rounded integer square root of
+4 (r squared minus dy squared), computed in 64 bits, because the product
+by four exceeds int32 from radius 23171 on. `ARC` reads the start and end
+angles in the current angular mode. A NaN or infinite angle raises
+`ERROR_OUT_OF_RANGE`. The command then steps the circle with the midpoint
+algorithm and draws the pixels whose direction lies in the span. The span
+test is two integer cross products against the two direction vectors of
+the angles, each scaled by 65536, computed once with the WP34S sine and
+cosine. The resolution of the span is about 0.001 degrees. A span of 360
+degrees or more draws the full circle.
 
 ### 4.6 Text
 
@@ -266,10 +276,14 @@ is outside the clip rectangle is not drawn. `GMODE` does not apply to
 text. `DISP n` draws the string of X the same way at the cell:
 
     row = 20 + (n - 1) * 20
-    col = 1
-    if row + 19 > clipY1: return
-    clear the band rows row..row+19, cols 0..SCREEN_WIDTH-1 to white
-    showString(the string of X, cut to the width, &standardFont, col, row, vmNormal, true, true)
+    col = max(1, clipX0)
+    if row < clipY0 or row + 19 > clipY1 or col > clipX1: return
+    clear the band rows row..row+19, cols clipX0..clipX1 to white
+    showString(the string of X, cut to clipX1 - col + 1, &standardFont, col, row, vmNormal, true, true)
+
+The cut never splits a two-byte glyph, at the width and at the cap of the
+scratch buffer. A string that ends in a lone lead byte is trimmed at that
+byte.
 
 Region 2 has lines 1 to 7. Region 6 has lines 1 to 11. `n` outside the
 region draws nothing.

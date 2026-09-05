@@ -200,3 +200,73 @@ equivalence pin that draws points does not test the pixel writer; the pin
 must draw vertical segments. And a mutation that removes a clamp can red by
 a crash before any assertion runs; the assertion that names the defect is
 the neighbour-row check.
+
+## Audit round 1 on G2, 2026-09-04, and its fix wave
+
+Two out-of-family readers read G2 on the day of its commit. Sol (GPT-5)
+took the kernel packet, 27.6 KB, self-contained. That packet held the
+writers, the steppers for lines, boxes, circles and arcs, the coordinate
+reader, and the ten commands, with the numbers of the layout. Gemini 3.1
+Pro took the contracts packet, 27.6 KB. That packet held the same code,
+with the questions turned to the callers and the shared state. The in-family finders were refused at spawn
+by the platform classifier, as on G1. The cause was found the same day
+and is recorded in the cross-model-audit skill: the finders' output
+schema, not the prompt text. The in-family leg runs on the fixed workflow
+after this fix wave, over the range that includes it.
+
+The two readers converged on two sites from different evidence, so the
+round counts eight distinct claims, not nine.
+
+| Claim | Reader | Verdict | Where it went |
+|---|---|---|---|
+| `GCLIP` clamps only the bottom row. Two rows below the region narrow into int16 and the clip starts at a negative row. A later `FBOX` writes before the buffer. | Sol 1 | Confirmed. The worst finding of the round. | Fixed: the clip is the intersection of the rectangle and the region, with an empty sentinel (x0 = 1, x1 = 0) when nothing is left. Pin D13 on all four sides. |
+| The filled circle overflows int32: the square root above radius 16384, and 4 r squared above 23170. Radius 23170 far off screen paints a full row. | Sol 2, Gemini 3 | Confirmed by both, with different consequences (a full row, a single column). | Fixed: 64-bit square root and product, and the fill loop is limited to the rows of the clip. Pin D14. |
+| `DISP` ignores the clip columns: it clears the full width and starts the text at column 1. | Sol 3, Gemini 4 | Confirmed by both. | Fixed: the clear and the text stay between the clip columns. Pin D15. |
+| The arc direction vectors are scaled by 1024, so a span under 0.056 degrees collapses to one pixel. | Sol 4 | Confirmed. | Fixed: scale 65536, cross products already in 64 bits. Pin D16. |
+| The string cap can cut inside a two-byte glyph. The glyph-trim loop then steps over the NUL and reads beyond the string. | Gemini 1, and Sol named the cap as a gap | Confirmed. | Fixed: the cap backs up before a lead byte, and the trim loop stops at a lead byte followed by NUL. Pins D17 and D17b. |
+| `pgReadAngle` accepts NaN and infinity. | Sol, named as a gap | Confirmed. | Fixed: `ERROR_OUT_OF_RANGE`. Pin D18. |
+| `TEXTOUT` and `DISP` overwrite `tmpString`, which the program runner can keep across a step. | Gemini 2 | Refuted by the operator. Upstream item functions write `tmpString` inside a step (stringFuncs.c 290-305, factorial.c 21) and the runner writes it fresh when it shows a step (nextStep.c 280). No runner state lives there. | Handed to the in-family refutation pass as an extra finding. |
+| `pgError` paints the error and never sets `errorShown`. | Gemini 5 | Refuted by the operator. `pgError` only raises the error. The paint on canvas line 1 happens in `pgRefreshCanvasView`, which sets the flag when it paints and clears both together (pin K7). | Handed to the in-family refutation pass as an extra finding. |
+
+Sol also asked whether a long integer register can carry stale bytes
+above its value. It cannot. `convertLongIntegerToLongIntegerRegister`
+reallocates the register to the exact limb size of the value before the
+copy. As a result, the fast-path reader sees only the bytes of the value.
+
+Two lessons for the packets. A packet that supplies the numbers of the
+layout gets findings with numbers back. Here the numbers were the rows of
+52 bytes, the mirrored bit order, and the int16 clip fields, and Sol
+computed the exact narrowed row. Two readers on the same code with
+different questions converge on the same defects from different
+consequences. That convergence is the corroboration that the process
+wants. It is also the dedup work that the operator owes before a number
+is minted.
+
+Red-first results of the fix-wave pins on the simulator:
+
+| Mutation | Pins that went red |
+|---|---|
+| `GCLIP` with the one-sided clamps of the first G2 code | D13: a stored clip edge outside the region, and a full-screen `FBOX` through the empty clip |
+| The square root in 32 bits | D14: the off-screen circle of radius 23170 painted a row |
+| 4 r squared narrowed to 32 bits | D14: the circle of radius 32767 left a corner clear |
+| `DISP` clears the full width and starts at column 1 | D15, all three checks |
+| Arc vectors scaled by 1024 | D16 |
+| The cap cuts inside a glyph | D17 |
+| A NaN angle accepted | D18, both checks: the error was not raised, and the arc drew |
+
+One mutation stayed green by its own design. The first form of the
+"4 r squared" mutation narrowed r squared minus dy squared to 32 bits.
+That value fits 32 bits for every legal radius. The overflow of the first
+G2 code was in the product by four. The mutation was rewritten to narrow
+that product. The trim-loop guard (a lone lead byte before the NUL) has
+no mutation. Its failure is a hang, so pin D17b documents the guard and
+does not falsify it.
+
+Firmware size after the fix wave, `make dmcp5r47`, R47.elf, text plus
+data for flash and data plus BSS for RAM, without and with the package in
+one build session:
+
+| Section | Without | With G2 and its fix wave | Delta |
+|---|---|---|---|
+| flash | 1,090,512 | 1,094,824 | +4,312 bytes (+272 against the G2 commit) |
+| ram | 7,564 | 7,616 | +52 bytes (the 64-bit square root and the sentinel clip) |

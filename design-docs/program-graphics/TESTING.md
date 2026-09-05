@@ -57,10 +57,18 @@ The refresh runs first, because `pkg_build` refreshes after its suite.
 | G2 | D1 to D6: `LINE`, `BOX`, `FBOX`, `CIRCLE`, `FCIRCL`, `ARC`: endpoint and edge pixels lit, one pixel outside clear, interior clear or filled. | Off-by-one in the endpoint of the line stepper; skip the last row of the fill. |
 | G2 | D7: `GCLIP`: a line that crosses the clip edge stops at the edge. | Remove the clip test in `pgPixel`. |
 | G2 | D8: a line from column 0 to 5000 draws the on-screen part with no error; a coordinate of 40000 raises `ERROR_OUT_OF_RANGE` and draws nothing. | Remove the clamp in `pgRun`; skip the limit check. |
+| G2 | D8c: a line from column -20 is clamped at the left edge, and the row below keeps its bytes and its dirty flag. | Remove the left clamp in `pgRun`. |
 | G2 | D9: `GMODE 2` twice restores the buffer, for a filled box. | Use set instead of invert in `pgRun`. |
 | G2 | D10: for 1,000 pseudo-random pixels, the direct write and `bitblt24` leave the same bytes in every row, dirty flags included. | Change the bit order or skip the dirty flag. |
 | G2 | D11: `DISP 2` lights pixels in rows 40 to 59 only; `TEXTOUT` at a point lights pixels in its cell. | Shift the line row. |
 | G2 | D12: a string in X for `LINE` raises `ERROR_INVALID_DATA_TYPE_FOR_OP` and draws nothing. | Skip the type check. |
+| G2 fix wave | D13: a clip rectangle wholly outside the region, on each of the four sides, gives an empty clip. A full-screen `FBOX` then draws nothing, and the stored clip stays inside the region. | Restore the one-sided clamps of the first G2 code. |
+| G2 fix wave | D14: `FCIRCL` with radius 23170 far off the screen paints nothing on the screen. Radius 32767 around an on-screen center paints the four corners. | Compute the square root, or 4 r squared, in 32 bits. |
+| G2 fix wave | D15: `DISP` inside a clip of columns 200 to 399 keeps a pixel at column 10, writes inside the clip, and writes nothing left of the clip. | Clear the full width and start the text at column 1. |
+| G2 fix wave | D16: an arc from 0 to 0.05 degrees at radius 5000 lights the pixels at rows 130 and 133 of column 300, and none at rows 120 or 140. | Scale the arc vectors by 1024. |
+| G2 fix wave | D17: a string longer than the scratch buffer, with a two-byte glyph at the cap, is cut before the glyph. | Cut at the cap without the glyph check. |
+| G2 fix wave | D17b: a string that ends in a lone lead byte is trimmed to a width of one pixel without a read beyond its NUL. | None. The failure of the guard is a hang, so this pin documents the guard and does not falsify it. |
+| G2 fix wave | D18: a NaN angle for `ARC` raises `ERROR_OUT_OF_RANGE` and draws nothing. | Accept NaN in the angle reader. |
 | G2 | S1: the showcase screen has the recorded count of lit pixels. | Any change to a primitive. |
 | G3 | `XRNG`, `YRNG`: a real maps to the pixel that `screenWindowRatio` gives. | Off-by-one in the scale. |
 | G4 | A unit cube from a fixed eye point projects to fixed pixels, recorded once. | Any change in the projection. |
