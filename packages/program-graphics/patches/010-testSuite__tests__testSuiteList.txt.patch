@@ -1,0 +1,12 @@
+diff --git a/src/testSuite/tests/testSuiteList.txt b/src/testSuite/tests/testSuiteList.txt
+index 6bb764d1b588d13b2767c07e61837d86e4b5a0c0..4f0c42d5cb7c0ed2d6e1dec23aa9a3d916ab683a 100644
+--- a/src/testSuite/tests/testSuiteList.txt
++++ b/src/testSuite/tests/testSuiteList.txt
+@@ -84,6 +84,7 @@ bits_cov
+ flags_cov
+ statsx_cov
+ regmgmt_cov
++program_graphics
+ 
+ addition_longInteger
+ addition_time

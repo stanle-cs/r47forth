@@ -1,0 +1,12 @@
+{
+  "base_commit": "af7ad934a0dfeeada96c21136e2ab7084647de01",
+  "files": {
+    "pgmGraphics.c": "8eb02b57b8af31da2350b61a0f2d627e55b796ffbab73742e66911b9ce84eadc",
+    "pgmGraphics.h": "b4430450287da66bcf8a2e7ac75a9033cf1fbbbae0ba60eda3914c76bed43e37",
+    "testSuite/tests/program_graphics.txt": "db00c62dfe1699e4dd72309c826ab3ef5a9eb7db53966d11abc21c4a6e9e8bc5"
+  },
+  "patches": {
+    "010-testSuite__testSuite.c.patch": "ade43d98685495594b02837bbd593f48036d6cf0088998d8b76f68c84c5a212a",
+    "010-testSuite__tests__testSuiteList.txt.patch": "450ed6f8c1940a98da9a5bc4b8dd25b4737cd6ed5dcd54c5da923a915d2fe166"
+  }
+}

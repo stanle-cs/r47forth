@@ -1,0 +1,12 @@
+; program-graphics package: stage G0.
+; pgTestSmoke proves that the driver registration works. It writes its
+; failure count into X.
+; pgTestBaseline runs NOP and PIXEL steps through reallyRunFunction with
+; the program state set to running, prints the times, and writes its
+; failure count into X.
+Func: pgTestSmoke
+In:  FL_ASLIFT=1 RX=LonI:"99"
+Out: EC=0 RX=LonI:"0"
+Func: pgTestBaseline
+In:  FL_ASLIFT=1 RX=LonI:"0"
+Out: EC=0 RX=LonI:"0"

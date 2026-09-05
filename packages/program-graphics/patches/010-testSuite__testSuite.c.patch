@@ -1,0 +1,25 @@
+diff --git a/src/testSuite/testSuite.c b/src/testSuite/testSuite.c
+index bc8a9792a584984b3e18dee2a6626ce81a330205..a06ffb498d068c0f9eab178e4521e0b487a1a7db 100644
+--- a/src/testSuite/testSuite.c
++++ b/src/testSuite/testSuite.c
+@@ -58,6 +58,9 @@ void covSolveErr(uint16_t which);
+ void covLoadPgm(uint16_t unusedButMandatoryParameter);
+ void covLoadPgmLongLabel(uint16_t unusedButMandatoryParameter);
+ void covLoadStateLongLabel(uint16_t unusedButMandatoryParameter);
++// program-graphics package: test drivers of files/pgmGraphics.c (no indexOfItems row).
++void pgTestSmoke(uint16_t unusedButMandatoryParameter);
++void pgTestBaseline(uint16_t unusedButMandatoryParameter);
+ void covIterationTi(uint16_t which);
+ void covNamedVariableFold(uint16_t unusedButMandatoryParameter);
+ void covStatsRegister(uint16_t unusedButMandatoryParameter);
+@@ -304,6 +307,10 @@ const funcTest_t funcTestNoParam[] = {
+   {"fnEffToICov",            covEffToI, 1 },
+   {"fnAmortCov",             covAmort, 1 },
+   {"fnAmortNextCov",         covAmortNext, 1 },
++  // program-graphics package: drivers for tests/program_graphics.txt. This
++  // anchor is far from the four other packages' anchors near the table end.
++  {"pgTestSmoke",            pgTestSmoke,         1},
++  {"pgTestBaseline",         pgTestBaseline,      1},
+   // Statistics (use FARG=1 with fnSigmaAddRem to accumulate a (Y,X) data point).
+   {"fnSigmaAddRem",          fnSigmaAddRem         },
+   {"fnMeanX",                fnMeanX               },
