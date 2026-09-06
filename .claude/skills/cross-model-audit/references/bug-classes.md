@@ -687,3 +687,44 @@ program step such as CLSTK closed the mode and left the region set. Class
 test: for every programmable item that reaches `calcModeNormal()` or
 assigns `calcMode`, run it under the mode and assert the mode survives, or
 assert the documented abandonment for the plot family.
+
+## A bounded scan with no terminator test reads the neighbouring pool block (program-graphics G3/G4 round 1, 2026-09-05, upstream)
+
+**Shape.** A prefix scan steps a fixed number of glyphs forward through a
+string to find a marker (`':'` for a label, `'('` for a call) and tests
+only for the marker, never for the terminator. For a string shorter than
+the bound, the scan walks past the NUL into the allocation's padding and
+into the next pool block. What it finds there decides how the string is
+parsed. Upstream `parseEquation` (`src/c47/solver/equation.c:1307-1319`)
+does this with a bound of seven glyphs; the one-glyph formula `"X"`
+stored in a one-block allocation reads five bytes of neighbour.
+
+**Why the audits missed it.** Every symptom points elsewhere. The failing
+test is far from the code that reads too far. AddressSanitizer is silent,
+because the read stays inside the pool array. The pool's own bookkeeping
+is consistent, because nothing is freed twice or lost. Probing globals
+shows nothing, because the state that matters is the bytes next to one
+block. The failure moves with the pool layout, so any change in an
+earlier test (a leak, an extra allocation, an undo image) makes it come
+and go, and the natural reaction is to reorder the tests. The reorder
+hides the defect and documents the symptom ("the equation files depend on
+the pool state they inherit") as if it were a rule.
+
+**How it was found.** Reproduce in a worktree with the failing order. Add
+a pool tiling check (free plus allocated regions must tile the pool below
+program memory) at every test and at every program-memory resize: clean.
+Add a liveness check of the formula block at parse time: live, right
+size. Arm a hardware watchpoint on the block at the store: no write before
+the parse. Then dump the parser's input at the error: the token buffer
+held a stale error message and the formula bytes showed the neighbour
+with a `':'` inside the scan. Two hours from symptom to line.
+
+**Test.** For every scan with a fixed bound over a string from the pool:
+store the shortest legal string in a fresh one-block allocation whose
+neighbour is filled with the marker byte, and assert the parse treats the
+string as unlabeled. Where the scan is upstream's, the package suite can
+still carry the pin as a tripwire that names the upstream site.
+
+**Rule.** A scan over a string tests for the terminator on every step,
+before it tests for its marker. A test-order dependency on "the pool
+state inherited" is a symptom to explain, not a rule to record.

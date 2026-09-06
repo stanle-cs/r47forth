@@ -532,3 +532,59 @@ calls `ERASE` under `WIREFRAME` could leave a valid grid with zero counts
 cleared the STOP, error, string, nesting, EXIT, reset and boot paths.
 Neither reader could name a mechanism for the open suite question from
 the code in its packet.
+
+## Audit round 1 on G3 and G4, 2026-09-05
+
+One round for both stages, under the one-round ruling. The out-of-family
+half ran on 2026-09-05 before this entry: packets E and F on G3 (Sol,
+Gemini), G, H and I on G4 (Sol, Gemini, Sol). The G4 replies were fixed
+on the readers' word inside the G4 commit; this round is the first
+reading of that fix wave. The in-family half ran the same day: eight
+finders, three-lens refutation of every finding, the nine out-of-family
+findings fed through the same refutation. Report:
+`design-docs/program-graphics/audit/AUDIT_G3-G4_round-1_2026-09-05.md`.
+Findings, not fixes: the tree is as it was at `840fe1c92`.
+
+Three results decide the next wave.
+
+The GTK simulator does not start with the package. The G4 items.c hunk
+replaced upstream's sentinel row at index 2885, which carries the same
+stale comment `/* 2870 */` as the real row 2870, with a second WIREFRAME
+row, and `c47-gtk.c` refuses to run when that row is not `"Last item"`.
+Executed: the built simulator exits with the message. The headless gate
+has no such check, so it stayed green from `e19769236` on. The run-sim
+skill has been unusable for the package since that commit.
+
+The open suite question of the G4 entry is settled, and it is upstream.
+`parseEquation` scans up to seven glyphs forward for a label marker and
+never tests for the terminator, so the one-glyph formula `"X"` is read
+past its NUL into the neighbouring pool block. A `':'` there makes the
+parser treat the neighbour's bytes as the formula. The package only
+changes the pool layout. The evidence is a pool tiling check that stayed
+clean, a hardware watchpoint that saw no write to the formula block, and
+a dump of the parser's input at the error. The reorder of
+`testSuiteList.txt` in the G4 commit is a workaround for this defect, and
+its comment describes the symptom. An upstream report is the next step.
+
+The test drivers leak. `pgTestUnitCubeView` and pin P27 call `pgReset()`
+while a 3D block is allocated, and `pgReset()` forgets the block without
+a free by design, because a real reset rebuilds the pool. Two blocks of
+512 pool blocks leak per run of `pgTestDraw3D`. Five finders found it
+independently. It is part of the pool layout that exposed the upstream
+defect, and it breaks the first pin rule.
+
+The rest of the round is in the report. The design and the suite
+disagree on the G4 pin set: DESIGN.md §9.8 names 28 pins with numbers
+and mutations, 12 have no code, and the fix wave reused the numbers P27
+and P28 for pins that §9.8 gives other content. The 3D redraw
+has no pin with an absolute oracle. `pg3dEnsure` decides "view open" by
+`canvas.region` where every other site decides by `calcMode`, so a
+plot-abandoned view lets a 3D command take the block outside the view.
+The nine G4 rows sit on the head of upstream's CONV growth region.
+
+Process. The finders ran without a refusal for the second time since the
+schema fix. Two operator lessons went into the skill: the mechanical half
+now launches the built simulator once, because the gate does not run the
+sentinel check that `c47-gtk.c` makes at start; and the bug-class catalog
+gained the over-read class, with the rule that a test-order dependency on
+"the pool state inherited" is a symptom to explain, not a rule to record.

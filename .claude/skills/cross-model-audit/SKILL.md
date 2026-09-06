@@ -48,8 +48,13 @@ test can fail.
    finding gets skimmed too. Do not re-report open findings.
 2. **Mechanical half.** `./packages/forth-core/build-test.sh` and
    `./design-docs/forth-core/design-audit.sh`. Compiler warnings count
-   (`-Wtype-limits` caught a same-day vacuous assertion). Nothing the
-   mechanical half reports is a finding.
+   (`-Wtype-limits` caught a same-day vacuous assertion). Launch the built
+   GTK simulator once (`./build.sim/src/c47-gtk/c47`, then close it):
+   `c47-gtk.c` exits at start when the item table's last row is not the
+   `"Last item"` sentinel, and the headless gate never runs that check.
+   A package shipped two commits with a simulator that could not start
+   while its gate was green (program-graphics G3/G4 round 1, 2026-09-05).
+   Nothing the mechanical half reports is a finding.
 3. **In-family pass.** `Workflow({scriptPath:
    'design-docs/forth-core/audit-workflow.js', args: {subject, commits,
    files, date, round, outOfFamily}})`. Args may arrive as a JSON string —
