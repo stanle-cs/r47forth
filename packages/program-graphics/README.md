@@ -76,7 +76,7 @@ The 3D drawing stays in the view after the program stops, and the keys turn it:
 | f UP, f DOWN | Turn about the y axis. |
 | g UP, g DOWN | Turn about the z axis. |
 | + , - | Zoom in and out, a factor 1.25 per press, 8 steps each way. |
-| 5 | The view as set by `EYEPT`. |
+| 5 | The home view: no turn, no zoom. `ERASE`, `PVIEW` and EXIT also return to it. |
 
 A rotation redraws the 3D content only. 2D drawings on the same canvas are lost at the first press. The eye and the volume freeze at the first 3D drawing; a change takes effect after `ERASE`, `PVIEW`, or `EXIT`. When a zoom step makes one recorded z step wider than a pixel, the program of the last `WIREFRAME` runs again once to record finer values.
 
@@ -217,11 +217,13 @@ The window maps x from 0 to 6.2832 onto the 400 columns and y from -1.5 to 1.5 o
 
 ## Limits
 
-- The canvas does not survive sleep or power off.
+- The canvas does not survive sleep or power off. A state save closes the view before the state is written.
 - Text is not clipped inside its cell, and `GMODE` does not apply to text.
 - `RESET` inside the view keeps the view open with a blank canvas.
 - A program that opens a plot view abandons the canvas.
-- Shifted keys do nothing in the view.
+- UP and DOWN turn the drawing about y under f and about z under g. SNAP works. Every other shifted key does nothing in the view.
+- A mesh above 44 by 44 is drawn once. The keys leave it as it is.
+- The 3D commands and the keys need `XRNG` and `YRNG` ends that fit a 32-bit float, about 3.4e38. A window outside that range is refused with an error, and the picture stays.
 - The DMA refresh of the DM42 is untested by the package. Every number in this file comes from the simulator.
 
 ## Compatibility and license

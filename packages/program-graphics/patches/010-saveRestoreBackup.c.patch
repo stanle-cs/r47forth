@@ -1,0 +1,12 @@
+diff --git a/src/c47/saveRestoreBackup.c b/src/c47/saveRestoreBackup.c
+index 621cd37c31bfa17f47be2cfd0282d7a88a358fa9..6f2975a5b54aef8144bbaa209c26c036b8282c7e 100644
+--- a/src/c47/saveRestoreBackup.c
++++ b/src/c47/saveRestoreBackup.c
+@@ -269,6 +269,7 @@ static void convertOldMatrixHeaderToNewMatrixHeader(calcRegister_t regist) {
+       calcMode = previousCalcMode;
+       refreshScreen(90);
+     }
++    pgBeforeSave();   // program-graphics: the canvas view does not survive a save.
+ 
+     printf("Begin of calc's backup\n");
+ 

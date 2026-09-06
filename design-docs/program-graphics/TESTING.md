@@ -24,14 +24,13 @@ is listed in `testSuiteList.txt` under the touching-line rule.
 
 ## 3. Gate
 
-Solo:
+Solo and combined, in one run:
 
-    tools/pkg_patch_refresh.py
-    make pkg_build PKG=packages/program-graphics
+    ./packages/program-graphics/build-test.sh
 
-Combined:
-
-    make pkg_build PKG=packages/program-graphics PKG_TEST_WITH=packages/forth-core,packages/undo-history,packages/pretty-print,packages/pretty-print-extra
+The script refreshes the package first, then runs the solo pass and the
+combined pass with forth-core, undo-history, pretty-print and
+pretty-print-extra. `--solo` and `--combined` run one pass.
 
 The refresh runs first, because `pkg_build` refreshes after its suite.
 
@@ -67,7 +66,7 @@ The refresh runs first, because `pkg_build` refreshes after its suite.
 | G2 fix wave | D15: `DISP` inside a clip of columns 200 to 399 keeps a pixel at column 10, writes inside the clip, and writes nothing left of the clip. | Clear the full width and start the text at column 1. |
 | G2 fix wave | D16: an arc from 0 to 0.05 degrees at radius 5000 lights the pixels at rows 130 and 133 of column 300, and none at rows 120 or 140. | Scale the arc vectors by 1024. |
 | G2 fix wave | D17: a string longer than the scratch buffer, with a two-byte glyph at the cap, is cut before the glyph. | Cut at the cap without the glyph check. |
-| G2 fix wave | D17b: a string that ends in a lone lead byte is trimmed to a width of one pixel without a read beyond its NUL. | None. The failure of the guard is a hang, so this pin documents the guard and does not falsify it. |
+| G2 fix wave | D17b, first form, retired by the rewritten row below. | Retired. |
 | G2 fix wave | D18: a NaN angle for `ARC` raises `ERROR_OUT_OF_RANGE` and draws nothing. | Accept NaN in the angle reader. |
 | G2 | S1: the showcase screen has the recorded count of lit pixels. | Any change to a primitive. |
 | G3 | W1: without a window, a real is a pixel rounded half away from zero (2.5 is 3, -0.5 is off the screen). | Round toward zero. |
@@ -80,7 +79,7 @@ The refresh runs first, because `pkg_build` refreshes after its suite.
 | G2 audit, in-family wave | D20: outside the view, `LINE`, `FBOX`, `FCIRCL`, and `TEXTOUT` set the PIXEL flags and their drawing survives a refresh. | Skip the flag writes. |
 | G2 audit, in-family wave | D8, rewritten: the refused line targets a row nothing has lit, and that row stays clear. | Raise the error and still draw. |
 | G2 audit, in-family wave | D15b: `DISP` clears its band inside the clip before it writes; the row above stays. | Skip the band fill. |
-| G2 audit, in-family wave | D17b, rewritten: the canary bytes after the NUL survive the trim walk. | Remove the lone-lead-byte stop of the walk. |
+| G2 audit, in-family wave | D17b, rewritten: the canary bytes after the NUL survive the trim walk. | Restore the old cap guard in place of `pgGlyphBoundary`: the walk reads past the NUL and the canary changes. |
 | G2 audit, in-family wave | D17c: the cap keeps a glyph whose second byte has bit 7 set. | Test bit 7 of the byte before the cap instead of walking. |
 | G2 audit, in-family wave | D17d: a lone lead byte at the end is cut when the width fits, and the canary survives. | Cut only at the cap. |
 | G2 audit, in-family wave | D19: an arc of 359.9995 degrees draws almost the full circle; an arc of 0.0002 degrees draws a few pixels. | Drop the 180-degree test of the same-direction arm. |
@@ -102,11 +101,32 @@ The refresh runs first, because `pkg_build` refreshes after its suite.
 | G4 | P23: `LINE3D` without a current point sets it and draws nothing. | Draw from (0, 0, 0). |
 | G4 | P12: 330 lines fill the block. | Skip the free-bytes test. |
 | G4 | S3, R1, R1y, R1z, R2: the showcase count, and the canvas returns after each full turn and after six zoom steps in and out. | Any change to a primitive or to the projection. |
-| G4 fix wave | P27: a point exactly one 1024th of the depth in front of the eye is drawable; nearer is not. | Make the eps test exclusive again. |
-| G4 fix wave | P28: the far corner of an extreme window projects to (32000, 32000): the clamp holds on the final row. | Drop the row clamp after the flip. |
+| G4 fix wave | P31 (P27 until the G3/G4 wave): a point exactly one 1024th of the depth in front of the eye is drawable; nearer is not. | Make the eps test exclusive again. |
+| G4 fix wave | P32 (P28 until the G3/G4 wave): the far corner of an extreme window projects to (32000, 32000): the clamp holds on the final row. | Drop the row clamp after the flip. |
 | G4 fix wave | P20b: `XVOL -2e38 2e38`, a span that overflows float, is refused. | Drop the finite-span check. |
 | G4 fix wave | P29: a body that calls `ERASE`, `PT3D`, and `LINE3D` under `WIREFRAME` leaves no valid grid. | Drop the counts check before `gridValid`. |
 | G4 fix wave | P3, second mutation: the block is not freed inside `pg3dFreeBlock`. | The first form did not compile: it named the 3D state above its declaration. |
+| G3/G4 audit wave | S0: the last item row is upstream's sentinel. | Put the WIREFRAME row back at the last index. |
+| G3/G4 audit wave | L1: `pgTestDraw3D` returns every pool block it takes. | Remove the free before P31's `pgReset()`. |
+| G3/G4 audit wave | W3, corrected: the probe pixel is clear before the refused `XRNG`. | Store the range before the equal-ends test. |
+| G3/G4 audit wave | The header size is a compile-time assert. | `reserved[13]`, or `PG3D_HEADER_BYTES` 68: the build fails. |
+| G3/G4 audit wave | O1: a plot step abandons the view; the next `EYEPT` returns the block and the region. | Restore the `canvas.region == 0` test in `pg3dEnsure`. |
+| G3/G4 audit wave | B1, B2: `pgBeforeSave()` closes an open view and releases an abandoned one. | Empty `pgBeforeSave`. |
+| G3/G4 audit wave | E1, E2: a failed undo save refuses `WIREFRAME` and the zoom re-run before a sample runs. | Remove the `ERROR_RAM_FULL` test in `pg3dEngineEnter`. |
+| G3/G4 audit wave | H1: a body that erases once and records a line per sample keeps every record intact. | Restore the frozen-only retention test. |
+| G3/G4 audit wave | H2: a re-run whose body erases writes no z range into the empty header. | Write the z range on `PG3D_RUN_OK` alone. |
+| G3/G4 audit wave | V1: a volume span whose byte scale overflows float is refused. | Drop the scale test in `pg3dSpanUsable`. |
+| G3/G4 audit wave | Z1: a zoom re-run over a slice too thin for the byte scale is skipped. | The same. |
+| G3/G4 audit wave | W7, W9: a window outside float range is refused by `WIREFRAME` and by the keys; the picture stays. | Remove the window test in `fnWireframe` or in `pg3dKey`. |
+| G3/G4 audit wave | W8: a mirrored window is legal in 3D. | Add `mn < mx` to `pg3dWindowUsable`. |
+| G3/G4 audit wave | T1 to T3: `ERASE`, `PVIEW` and EXIT return to the home view. | Skip the reset in `pgSetRegion` or in `pgCloseView`. |
+| G3/G4 audit wave | T4: a `PT3D` outside the view does not survive into the view. | Keep the NULL test first in `pg3dEmpty`. |
+| G3/G4 audit wave | P6: a key press leaves an over-cap mesh as it is. | Remove the nothing-retained return in `pg3dKey`. |
+| G3/G4 audit wave | P4, P7, P8, P11, P13, P14, P15, P21, P22, P25, P27 as DESIGN.md section 9.8 specifies. P7 and P8 select the R47 f/g layout for the pin. | Each row's mutation. |
+| G3/G4 audit wave, limit | P17: the program pointers are equal before and after `WIREFRAME`. | None reddens it: `execProgram` restores the pointers itself. The pin guards upstream's behaviour. |
+| G3/G4 audit wave | B3: `saveCalc()` from the view leaves the previous mode, no block, region 0. | Remove the `pgBeforeSave` call in `saveRestoreBackup.c`. |
+| G3/G4 audit wave | R0: the still picture equals the first home redraw. | Change one divisor in the redraw copy. |
+| G3/G4 audit wave | S3h: the home redraw count, recorded once. | Any change to the redraw. |
 
 ## 5. Baseline measurement, stage G0
 

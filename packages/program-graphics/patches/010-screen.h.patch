@@ -1,18 +1,19 @@
 diff --git a/src/c47/screen.h b/src/c47/screen.h
-index 1643a2b62d0eaa0c6936bc21d7d563f1d6dab990..8ea71b580ab09de4a3d72174c90dbd812148f656 100644
+index 1643a2b62d0eaa0c6936bc21d7d563f1d6dab990..1aa2e1fc4b9e62242f8fd36a00def228cd23d589 100644
 --- a/src/c47/screen.h
 +++ b/src/c47/screen.h
-@@ -34,6 +34,36 @@
+@@ -34,6 +34,37 @@
    void       fnPixel                          (uint16_t unusedButMandatoryParameter);
    void       fnPoint                          (uint16_t unusedButMandatoryParameter);
    void       fnAGraph                         (uint16_t regist);
-+  // program-graphics package (files/pgmGraphics.c): the canvas view.
++  // program-graphics: canvas view functions.
 +  void       fnPview                          (uint16_t region);
 +  void       fnErase                          (uint16_t unusedButMandatoryParameter);
 +  void       pgCloseView                      (void);
++  void       pgBeforeSave                     (void);
 +  void       pgRefreshCanvasView              (void);
 +  uint8_t    pgEffectiveCalcMode              (void);
-+  // program-graphics package, stage G2: the 2D drawing commands.
++  // program-graphics: 2D and 3D drawing functions.
 +  void       fnGline                          (uint16_t unusedButMandatoryParameter);
 +  void       fnGbox                           (uint16_t unusedButMandatoryParameter);
 +  void       fnGfbox                          (uint16_t unusedButMandatoryParameter);

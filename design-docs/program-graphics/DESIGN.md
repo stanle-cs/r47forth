@@ -163,7 +163,7 @@ new region. It does not change `prevCalcMode`.
 | A program step whose item function switches on `calcMode`: `ENTER`, `CC`, `.d`, `.ms` | The function runs as in `CM_NORMAL` while a program runs. The package helper `pgEffectiveCalcMode()` returns `CM_NORMAL` when `calcMode` is 21 and `programRunStop` is running, else `calcMode`. The four functions switch on it. From the keyboard, the same keys do nothing. Audit G1 round 1, finding G1R1-1 and G1R1-3. |
 | An error inside the view | Nothing paints at once. The next `refreshScreen` in mode 21 clears canvas line 1 (rows 20 to 39) and writes the error text there. When the error is gone, the next refresh clears the band again. The register line painter `refreshRegisterLine` returns at once in mode 21, so the upstream error line and any other register line never paint over the canvas. Audit G1 round 1, finding G1R1-4. |
 | EXIT with an error pending | Upstream consumes the EXIT press to clear the error. The view stays open. A second EXIT closes it. |
-| Shifted keys, f and g | The shift keys do not engage in mode 21. Shifted items are not reachable from the keyboard in the view. Documented limit. SNAP on the R47 keyboard is a long press of EXIT. |
+| Shifted keys, f and g | From G4 on the shift keys engage in mode 21. f UP, f DOWN, g UP and g DOWN turn the 3D drawing (section 9.6). SNAP works. Every other shifted item does nothing in the view. SNAP on the R47 keyboard is a long press of EXIT. |
 | `PAUSE` inside the view | Upstream flushes the buffer once and waits. The canvas stays. |
 | `CLLCD` inside the view | Upstream clears the whole screen, status bar included. The view stays open. The status bar repaints at the next refresh. |
 | A program step that calls `calcModeNormal()`, such as `CLSTK` or `CLA` | `calcModeNormal` returns at once while the view is open. The view and the drawing stay. The package patches `calcMode.c` for this. |
@@ -655,7 +655,9 @@ freeze at the first record after the block was empty. Later `XVOL`,
 `YVOL`, `ZVOL`, and `EYEPT` change `pg3d` only. They take effect after
 `ERASE`, `PVIEW`, or EXIT. DECISION: this rule keeps the still picture and
 every redraw consistent. The window (`XRNG`, `YRNG`) is not frozen. The
-redraw reads the live window.
+redraw reads the live window. The angles and the zoom are not part of the
+frozen view: `ERASE`, `PVIEW` and EXIT reset them to the home view
+(ruling 2026-09-05).
 
     typedef struct {
       float eyeX, eyeY, eyeZ;
@@ -1204,7 +1206,13 @@ Item ids: `ITM_UP1` 1733, `ITM_DOWN1` 1735, `ITM_BST` 1734, `ITM_SST`
 
 DECISION: a key press with no retained content has no effect. The angles
 do not change either. The K2 pin of G1, which presses UP and DOWN in an
-empty view, stays green.
+empty view, stays green. Ruling 2026-09-05 (G34R1-9): this holds for a
+mesh above the cap too. The mesh stays on the screen and does not turn;
+a key press leaves the canvas byte for byte (pin P6).
+
+Ruling 2026-09-05 (G34R1-4): `ERASE`, `PVIEW` and EXIT return the three
+angles and the zoom to the home view, as they drop the frozen eye. The
+next drawing starts straight on (pins T1 to T3).
 
 On the PC build a key reaches the package only while no program runs
 (`keyboard.c:1887-1907`). On the DM42 a held UP or DOWN repeats
@@ -1270,7 +1278,7 @@ and the nine item functions after `fnGclip`, in the same style.
 
 (g) `config.c`, the reset hook of section 9.1.1.
 
-(h) `items.c`: rows 2864 to 2872 (section 9.10), nine catalog stubs after
+(h) `items.c`: rows 2864 to 2872 (sections 9.4.1 and 9.5.2), nine catalog stubs after
 the `fnPview` stub (package `items.c:1097`), and `items.h` the nine
 `ITM_` defines. `softmenus.c`: the nine items appended to `menu_CANVAS`
 after `ITM_YRNG`.
@@ -1603,7 +1611,7 @@ commands and `processKeyAction` for the keys, except where a pin names
 | P3 | `c47MemInBlocks` rises by exactly 512 at the first `EYEPT` inside the view and falls by 512 at `pgCloseView`. `EYEPT` outside the view changes it by 0. | 512, 512, 0 | Skip the free in `pgCloseView`. |
 | P4 | With the pool exhausted (allocate every free block in chunks until `allocC47Blocks(512)` returns NULL), `EYEPT` inside the view raises `ERROR_RAM_FULL`, leaves `pg3d.block` NULL, and leaves the eye unchanged. The chunks are freed after. | error 11 | Skip the NULL test in `pg3dEnsure`. |
 | P5 | `pg3dEncode(NaN, 0, 1)` is 255, `pg3dEncode(0, 0, 1)` is 0, `pg3dEncode(1, 0, 1)` is 254, `pg3dEncode(7, 0, 1)` is 254, `pg3dEncode(-7, 0, 1)` is 0, `pg3dDecode(254, 0, 1)` is 1.0f, `pg3dDecode(127, 0, 1)` is within 0.002 of 0.5. | as listed | Scale by 255. |
-| P6 | `NUMX 45`, `NUMY 45`, `WIREFRAME` of PLNE in the unit-cube view draws (lit above 0), the header has `gridValid` 0 and `numX` 0. One UP press then leaves the canvas with 0 lit pixels. | 0, 0, 0 | Retain the grid regardless of the cap. |
+| P6 | `NUMX 45`, `NUMY 45`, `WIREFRAME` of PLNE in the unit-cube view draws (lit above 0), the header has `gridValid` 0 and `numX` 0. One UP press then leaves the canvas byte for byte and `angX` 0 (ruling 2026-09-05). | above 0, 0, 0, 0 bytes | Remove the nothing-retained return in `pg3dKey`. |
 | P7 | The showcase view, then `btnClicked` with the UP key string once (key "22" of `kbd_std_R47f_g`, verified by the pin against `assign.c:370-392`). `angX` is 1 and the lit count differs from S3. | 1 | Call `pg3dKey` in the release path too: 2. |
 | P8 | The showcase view, `btnClicked` f then UP. `angY` is 1, `angX` is 0, `shiftF` is false after. Then g then UP: `angZ` is 1. | 1, 0, 1 | Restore upstream's shift gate line: the shift does not engage and `angX` becomes 1. |
 | P9 | `processKeyAction` with `ITM_RBR`, `ITM_FLGSV`, `ITM_ADD`, `ITM_SUB`, `ITM_5`, `ITM_4` in turn from the home view. | `angZ` 1 then 0, `zoomStep` 1 then 0, all zero, all zero | Drop `ITM_RBR` from the guard arm. |
@@ -1614,7 +1622,7 @@ commands and `processKeyAction` for the keys, except where a pin names
 | P14 | `WIREFRAME` of `LBL "STP", STOP, END` in the unit-cube view with `NUMX 2`, `NUMY 2`. `lastErrorCode` is `ERROR_SOLVER_ABORT` (60), `gridValid` is 0, `programRunStop` is not `PGM_RUNNING`. | 60, 0 | Skip the abort test: the run completes. |
 | P15 | With `engineNestingDepth` set to 1, `WIREFRAME` of PLNE returns with `programRunStop == PGM_WAITING`, `engineNestingWasRefused` true, no pixel lit, `c47MemInBlocks` unchanged. The pin restores the depth and `programRunStop`. | 2, true, 0 | Call `engineNestingRefused(false)`: the mesh draws. |
 | P16 | X, Y, Z, T hold the long integers 1, 2, 3, 4 before `WIREFRAME` of the saddle. After it they hold 1, 2, 3, 4. | 1, 2, 3, 4 | Skip `fnUndo(0)`. |
-| P17 | From the keyboard state (`programRunStop == PGM_STOPPED`), `currentProgramNumber`, `currentLocalStepNumber`, and `currentStep` are equal before and after `WIREFRAME`. | equal | Skip the pointer restore. |
+| P17 | From the keyboard state (`programRunStop == PGM_STOPPED`), `currentProgramNumber`, `currentLocalStepNumber`, and `currentStep` are equal before and after `WIREFRAME`. | equal | Skip the pointer restore: the pin stays green, because `execProgram` (`lblGtoXeq.c`) restores the three pointers itself. The engine's restore is a belt over upstream's, and the pin guards that upstream behaviour. Documented pin limit. |
 | P18 | With a block allocated, `pgReset()` leaves `pg3d.block` NULL, `c47MemInBlocks` unchanged, and the HP defaults in `pg3d`. The pin frees the block itself after. | NULL, unchanged, eye (0, -3, 0), volume -1 to 1, 10 by 8 | Free in `pgReset`: `c47MemInBlocks` falls by 512. |
 | P19 | After the showcase and `ERASE`, the header has `lineCount` 0 and `gridValid` 0, and one UP press leaves 0 lit pixels. | 0, 0, 0 | Skip `pg3dEmpty` in `pgSetRegion`: the picture returns. |
 | P20 | `NUMX` with 1, 101, 2.5 in X raises `ERROR_OUT_OF_RANGE` (8) and leaves `numX`. A string raises `ERROR_INVALID_DATA_TYPE_FOR_OP` (24). `XVOL` with 1 and 1 raises `ERROR_ARG_EXCEEDS_FUNCTION_DOMAIN` (1). `EYEPT` with NaN raises 8. `WIREFRAME` with `eyeY` 2 and `ylo` 0 raises 1 and lights nothing. | 8, 8, 8, 24, 1, 8, 1 | Skip the eye rule. |
@@ -1625,7 +1633,29 @@ commands and `processKeyAction` for the keys, except where a pin names
 | P25 | `WIREFRAME` of HOLE with `XVOL -2 -1`: every sample errors. `lastErrorCode` is `ERROR_ARG_EXCEEDS_FUNCTION_DOMAIN` (1), nothing is lit, `gridValid` is 0. | 1, 0, 0 | Never re-raise: 0. |
 | P26 | From the home view, one press each of `ITM_DOWN1`, `ITM_SST`, `ITM_FLGSV`. | `angX` 35, `angY` 35, `angZ` 35 | DOWN adds 1: 1. |
 | P27 | The plane P2 with `GMODE 2` twice over the same mesh: the second `WIREFRAME` restores the canvas to 0 lit pixels. | 0 | Draw the still picture in mode 0 regardless of GMODE. |
-| P28 | `WIREFRAME` of the saddle, then 36 `ITM_BST` presses, then 36 `ITM_RBR` presses. R1y and R1z of section 9.7.4: zero differing bytes each. | 0, 0 | Compose the matrices in the other order for one of the axes only: still 0. Use `angY % 36` for the sine index and `(angY + 8) % 36` for the cosine: red. |
+| P28 | `WIREFRAME` of the saddle, then 36 `ITM_BST` presses, then 36 `ITM_RBR` presses. R1y and R1z of section 9.7.4: zero differing bytes each. | 0, 0 | Compose the matrices in the other order for one of the axes only: still 0. Use `angY % 36` for the sine index and `(angY + 8) % 36` for the cosine: red. | Covered by R1y and R1z of the showcase driver.
+| P31 | (The code's former P27.) A point exactly one 1024th of the depth in front of the eye is drawable; a nearer point is not. | drawn, rejected | Make the eps test exclusive again. |
+| P32 | (The code's former P28.) The far corner of an extreme window projects to (32000, 32000): the clamp holds on the final row. | 32000, 32000 | Drop the row clamp after the flip. |
+| P20b | `XVOL -2e38 2e38`, a span that overflows float, is refused. | 1 | Drop the finite-span test. |
+| P29 | A body that calls `ERASE`, `PT3D` and `LINE3D` under `WIREFRAME` leaves no valid grid. | 0 | Drop the counts test before `gridValid`. |
+| S0 | `indexOfItems[LAST_ITEM]` is upstream's sentinel row: the name `"Last item"` and the function `itemToBeCoded`. | sentinel | Put the WIREFRAME row back at the last index. |
+| L1 | `pgTestDraw3D` returns every pool block it takes: `c47MemInBlocks` is equal at both ends after the statistics, the stack and the undo image are normalised. | 0 | Remove the free before P31's `pgReset()`: 512. |
+| O1 | A plot step (`fnSigmaAddRem` twice, `fnPlotStat(PLOT_START)`) leaves the view without EXIT. The next `EYEPT` returns the block and zeroes the region. | NULL, 0, minus 512 | Restore the `canvas.region == 0` test in `pg3dEnsure`. |
+| B1 | In the view with a block, `pgBeforeSave()` restores the previous mode, returns the block and zeroes the region. | mode, NULL, 0 | Empty `pgBeforeSave`. |
+| B2 | The same after the plot step of O1 abandoned the view; the plot mode stays. | plot mode, NULL, 0 | Empty `pgBeforeSave`. |
+| E1 | With the test switch the undo save fails: `WIREFRAME` shows `ERROR_RAM_FULL`, runs no sample, keeps X to T, the engine counters, `FLAG_SOLVING`, the pool count and the old header. | 11, unchanged | Remove the `ERROR_RAM_FULL` test in `pg3dEngineEnter`. |
+| E2 | The same at a zoom re-run: the run count does not rise, `gridValid` stays 1, the recorded z range stays. | unchanged | The same. |
+| H1 | Program `CND` erases at the first sample and records one line at every sample of a 17 by 17 grid: 289 records, all intact, `gridValid` 0. | 289 | Restore the frozen-only retention test: record 282 is overwritten. |
+| H2 | Program `CNE` erases at a zoom re-run: the header stays empty and no z range is written into it. | 0, 0 | Write the z range on `PG3D_RUN_OK` alone. |
+| V1 | `XVOL 0 7.4e-37` is refused and leaves the volume; `XVOL 0 7.6e-37` is accepted; `YVOL` and `ZVOL` refuse the same span. | 1, accepted | Drop the scale test in `pg3dSpanUsable`. |
+| Z1 | Eye at z 0, `YRNG 0 2e-36`, `ZVOL -1 1`, a valid grid: zoom presses 1 to 4 re-run the program and press 5 is refused, because 254 divided by the visible slice overflows float. | runs at 4, none at 5 | The same. |
+| W7 | `XRNG 0 1e39`, then `WIREFRAME`: `ERROR_ARG_EXCEEDS_FUNCTION_DOMAIN`, nothing lit, no sample run. | 1, 0, 0 | Remove the window test in `fnWireframe`. |
+| W8 | `XRNG 1 0` (mirrored) with the plane of P2: 798 lit pixels and no error. | 798 | Add `mn < mx` to `pg3dWindowUsable`. |
+| W9 | A valid grid, then `XRNG 0 1e39`, then UP: `ERROR_ARG_EXCEEDS_FUNCTION_DOMAIN`, the canvas bytes identical, `angX` 0. | 1, 0, 0 | Remove the window test in `pg3dKey`. |
+| T1, T2, T3 | After UP and +, `ERASE` (T1), `PVIEW 6` (T2), or EXIT then `PVIEW 6` (T3): angles 0, zoom 0, and the next `WIREFRAME` equals the home drawing byte for byte. | 0, 0, 0 bytes | Skip the reset in `pgSetRegion` (T1, T2) or in `pgCloseView` (T3). |
+| T4 | `PT3D` outside the view, `PVIEW 6`, `LINE3D`: nothing lit and `haveCur` 1. | 0, 1 | Keep the NULL test first in `pg3dEmpty`. |
+| R0 | The showcase still picture equals the redraw after UP then DOWN, byte for byte. | 0 bytes | Change one divisor in the redraw copy (before `pg3dGridCoord`), or blank the redraw. |
+| S3h | The home redraw of the showcase (frame 001) has its own recorded count. | recorded | Any change to the redraw. |
 
 P13 and P25 use `√x` (`ITM_SQUAREROOTX`, 61): a negative real with
 `FLAG_CPXRES` clear raises `ERROR_ARG_EXCEEDS_FUNCTION_DOMAIN`
@@ -1638,38 +1668,7 @@ reachable from the suite. Documented.
 
 ### 9.9 Limits and documented gaps
 
-1. A rotation clears the canvas. 2D content drawn on the canvas is lost at
-   the first 3D key press.
-2. The retained block holds 44 by 44 at most. A larger grid draws once
-   and does not rotate. A line past 330, or past the free bytes next to a
-   grid, draws once and does not rotate.
-3. The block takes 512 resident pool blocks while the view is open. With
-   the undo-history ring the RCL58 slack is exceeded, so a 14 by 14
-   eigenvalue inside the view can raise `ERROR_RAM_FULL`.
-4. The volume and the eye freeze at the first record. `XVOL`, `YVOL`,
-   `ZVOL`, and `EYEPT` after that take effect only after `ERASE`, `PVIEW`,
-   or EXIT.
-5. A coordinate outside the volume clamps to the volume face, so a line
-   that leaves the volume changes direction.
-6. The z bytes span 254 steps, so a surface is quantized to 1/254 of its
-   range. At the default distance one step is under one pixel. Past the
-   zoom threshold the program runs again at every press.
-7. The zoom threshold test ignores the rotation.
-8. The 3D commands outside the view draw once and retain nothing.
-9. A body that calls `ERASE` or `PVIEW` during `WIREFRAME` empties the
-   block under the run. The run continues and retains nothing.
-10. Float results differ in the last bit between a build that contracts
-    `a * b + c` into a fused multiply-add and one that does not. A pixel
-    can flip at an exact rounding boundary between the DM42 and the
-    simulator. The pins run on the simulator only.
-11. The DM42 key repeat for UP and DOWN is untested.
-12. With `FLAG_FGLNFUL` or `FLAG_FGLNLIM` set, the shift underline paints
-    inside region 6.
-13. The default window puts a unit volume into one pixel. A 3D drawing
-    needs `XRNG` and `YRNG` in volume units, or the eye and the volume in
-    pixel units.
-14. No hidden-line removal. No depth sort.
-15. The 8-level stack registers A to D are not loaded for the body.
+The limits are in section 10.
 
 ## 10. Limits and documented gaps
 
@@ -1693,8 +1692,8 @@ reachable from the suite. Documented.
 12. A rotation clears the canvas. 2D content drawn on the canvas is lost at
    the first 3D key press.
 13. The retained block holds 44 by 44 at most. A larger grid draws once
-   and does not rotate. A line past 330, or past the free bytes next to a
-   grid, draws once and does not rotate.
+   and does not rotate; a key press leaves it as it is. A line past 330,
+   or past the free bytes next to a grid, draws once and does not rotate.
 14. The block takes 512 resident pool blocks while the view is open. With
    the undo-history ring the RCL58 slack is exceeded, so a 14 by 14
    eigenvalue inside the view can raise `ERROR_RAM_FULL`.
@@ -1722,6 +1721,18 @@ reachable from the suite. Documented.
     pixel units.
 25. No hidden-line removal. No depth sort.
 26. The 8-level stack registers A to D are not loaded for the body.
+27. The 3D commands and the keys convert `XRNG` and `YRNG` to 32-bit
+    floats. Ends that do not give finite floats with a finite, non-zero
+    pixel scale are refused with `ERROR_ARG_EXCEEDS_FUNCTION_DOMAIN`, and
+    the picture stays. A mirrored window is legal. Ruling 2026-09-05.
+28. `ERASE`, `PVIEW` and EXIT return the angles and the zoom to the home
+    view. Ruling 2026-09-05.
+29. The canvas view closes before the calculator state is saved, so a
+    backup never holds mode 21. A backup written by the G4 build with
+    mode 21 is not handled.
+30. A `WIREFRAME` or a zoom re-run whose undo save fails with
+    `ERROR_RAM_FULL` is refused before a sample runs. The old picture
+    stays. In the test build a switch makes the next save fail.
 
 ## 11. Test policy
 

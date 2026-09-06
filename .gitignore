@@ -47,6 +47,8 @@ c47regdumpTest.txt
 20*.REGS.TSV
 20*.bmp
 c47plotTest*.bmp
+pg3d_*.bmp
+pg_show*.bmp
 tags
 /PROGRAMS
 /SAVFILES

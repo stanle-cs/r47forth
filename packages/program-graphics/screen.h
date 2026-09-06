@@ -34,13 +34,14 @@
   void       fnPixel                          (uint16_t unusedButMandatoryParameter);
   void       fnPoint                          (uint16_t unusedButMandatoryParameter);
   void       fnAGraph                         (uint16_t regist);
-  // program-graphics package (files/pgmGraphics.c): the canvas view.
+  // program-graphics: canvas view functions.
   void       fnPview                          (uint16_t region);
   void       fnErase                          (uint16_t unusedButMandatoryParameter);
   void       pgCloseView                      (void);
+  void       pgBeforeSave                     (void);
   void       pgRefreshCanvasView              (void);
   uint8_t    pgEffectiveCalcMode              (void);
-  // program-graphics package, stage G2: the 2D drawing commands.
+  // program-graphics: 2D and 3D drawing functions.
   void       fnGline                          (uint16_t unusedButMandatoryParameter);
   void       fnGbox                           (uint16_t unusedButMandatoryParameter);
   void       fnGfbox                          (uint16_t unusedButMandatoryParameter);

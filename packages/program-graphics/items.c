@@ -4806,6 +4806,6 @@ TO_QSPI const item_t indexOfItems[] = {
 
 
 
-/* 2870 */  { fnWireframe,                        TM_LBLONLY,                  "WIREFRAME",                                   "WIREFRAME",                                    (0 << TAM_MAX_BITS) |    99, CAT_FNCT | SLS_UNCHANGED | US_UNCHANGED | EIM_DISABLED | PTP_LABEL        | HG_ENABLED         },  // program-graphics package
+/* 2870 */  { itemToBeCoded,                NOPARAM,                     "",                                               "Last item",                                    (0 << TAM_MAX_BITS) |     0, CAT_NONE | SLS_ENABLED   | US_UNCHANGED | EIM_DISABLED | PTP_DISABLED     | HG_ENABLED         },
 
 };

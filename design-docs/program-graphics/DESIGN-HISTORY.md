@@ -588,3 +588,85 @@ now launches the built simulator once, because the gate does not run the
 sentinel check that `c47-gtk.c` makes at start; and the bug-class catalog
 gained the over-read class, with the rule that a test-order dependency on
 "the pool state inherited" is a symptom to explain, not a rule to record.
+
+## G3 and G4 round-1 fix wave, 2026-09-05
+
+One wave for the 18 findings of the round, under the one-wave rule. The
+plan came first: `FIXWAVE_PLAN_G3-G4_round-1_2026-09-05.md`, written after
+a design review by ChatGPT over the seven cached designer outputs of the
+interrupted in-family review (`audit/FIX_DESIGN_REVIEW_G3-G4_2026-09-05.md`)
+and after four rulings by Stan. Every repair pin was red before its fix
+and red again under its named mutation; every coverage pin was red under
+its mutation. The table is below.
+
+Rulings (Stan, 2026-09-05). G34R1-4: `ERASE`, `PVIEW` and EXIT return the
+angles and the zoom to the home view. G34R1-5: a test-only switch under
+`TESTSUITE_BUILD` makes the next undo save fail; no pool-filling fixture
+for that pin. G34R1-8: a window that does not convert to usable floats is
+refused with `ERROR_ARG_EXCEEDS_FUNCTION_DOMAIN`, the picture stays, a
+mirrored window stays legal. G34R1-9: a key press with nothing retained
+leaves the canvas as it is. Comments carry no contracts in the finished
+state; the comment pass of the same afternoon stands.
+
+The repairs. The sentinel row at the end of `indexOfItems` is upstream's
+row again (Antigravity, at Stan's request, before the wave); the smoke
+driver pins it. `pg3dEnsure` decides "in the view" by `calcMode`, and a
+new `pgReleaseAbandoned` returns the block and the region that a plot
+step leaves behind; `fnPview` and every 3D command call it. A new
+override of `saveRestoreBackup.c` calls `pgBeforeSave` after upstream's
+own save-time normalisation of `CM_CONFIRMATION`, so a backup never
+holds mode 21. `pg3dEngineEnter` returns false when the undo save fails,
+and both callers refuse before a sample runs; `fnWireframe` writes the
+header after a successful entry, so a refused run keeps the old grid.
+`pg3dGridIntact` gates every grid byte, the final `gridValid`, and the
+re-run's z range. `pg3dSpanUsable` guards the volume setters and the
+zoom re-run; `pg3dWindowUsable` guards `WIREFRAME`, `LINE3D` and the
+keys. `pgSetRegion` and `pgCloseView` reset the angles and the zoom;
+`pg3dEmpty` clears the current point before its NULL test.
+`pg3dGridCoord` is the one grid coordinate for the still picture and the
+redraw. The test drivers free the block before every `pgReset()`, and
+L1 proves the balance.
+
+Things seen on the way, not fixed. A redraw on an emptied header freezes
+the live view into it (`pg3dRedraw` calls `pg3dRecordView`), so H2 drives
+`pg3dZoomRerun` directly. The leak was 1024 blocks per run, two fixture
+resets, where the static reading had found one; the balance pin found the
+second. P17's named mutation leaves it green: `execProgram` restores the
+program pointers itself, so the engine's restore is a belt; the pin guards
+upstream's behaviour and TESTING.md says so. The test build's default
+keyboard is the C47 layout with one combined f/g key, so P7 and P8 select
+`USER_R47f_g` for their presses. A refused key press paints its error on
+canvas line 1, so W9 compares the rows below the band.
+
+Red-first table. R = red before the fix, G = green after, M = red under
+the named mutation.
+
+| Pin | Before | After | Mutation | Note |
+|---|---|---|---|---|
+| S0 | R (sim message) | G | M | WIREFRAME row at the last index |
+| L1 | R, 1024 blocks | G | M, 512 | free before P31's reset removed |
+| W3 | G (coverage) | G | M | range stored before the equal-ends test |
+| size assert | build fails | builds | build fails | `reserved[13]`; `PG3D_HEADER_BYTES` 68 |
+| O1 | R | G | M | region test restored |
+| B1, B2 | R | G | M | `pgBeforeSave` emptied |
+| E1, E2 | R | G | M | no `ERROR_RAM_FULL` test |
+| H1 | R, record 282 = 0 0 0 159 254 159 | G | M | frozen-only retention test |
+| H2 | R | G | M | z range on `PG3D_RUN_OK` alone |
+| V1 | R | G | M | no scale test |
+| Z1 | R (press 5 re-ran) | G | M | no scale test |
+| W7, W9 | R | G | M | window test removed |
+| W8 | G (coverage) | G | M | `mn < mx` added |
+| T1, T2, T3 | R, 332 bytes | G | M | reset skipped |
+| T4 | R | G | M | NULL test first |
+| P6 | G (coverage) | G | M, 2321 bytes | nothing-retained return removed |
+| P4, P7, P8, P11, P13, P14, P15, P22 | G (coverage) | G | M | mutation set A |
+| P17 | G (coverage) | G | green under its mutation | `execProgram` restores the pointers itself; documented |
+| B3 | G (coverage) | G | M | `pgBeforeSave` call removed |
+| P21, P25, P27, R0, W8 | G (coverage) | G | M | mutation set B |
+| S3h | recorded | G | M (blank redraw) | frame 001 count S3H_COUNT |
+
+Gate: solo 13,024, combined 13,050, both banners. The end-of-suite pool
+line went from 30,800 to 26,704 bytes solo and from 55,600 to 51,504
+bytes combined: the 1,024 leaked blocks came back. Flash (`make dmcp5r47`, R47.elf text plus data): 1,101,144 at G4 to 1,101,720, plus 576 bytes. RAM (data plus BSS): 7,720 to 7,720, no change; the test switch lives under `TESTSUITE_BUILD`. The GTK simulator starts. B3 drives `saveCalc()` from the suite: the
+view closes before the state is written, so the file never holds mode 21.
+The GUI round trip through a saved file was not driven. Churn scan: zero.
