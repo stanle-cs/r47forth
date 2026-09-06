@@ -18,10 +18,6 @@
 #include "c47.h"
 #include "prettyInternal.h"
 
-static char ppScratch[200];
-static char ppSpanA[120];
-static char ppSpanB[120];
-
 /* Toggle the pretty-print system flag.
  * Inverts the state of FLAG_PRETTYP to enable or disable formatted stack displays. */
 void fnPrettyToggle(uint16_t unusedButMandatoryParameter) {
@@ -327,6 +323,7 @@ bool_t ppParseExponent(const char *src, uint8_t ctxFont, uint8_t childFont, uint
     expEnd = len;
   }
 
+  char ppSpanA[120];
   int16_t baseLen = markOff + 2;
   if(baseLen + 3 > (int16_t)sizeof(ppSpanA)) {
     return false;
@@ -728,6 +725,8 @@ bool_t ppParseComplex(const char *src, uint8_t ctxFont, uint8_t childFont, uint8
   if(imEnd <= imStart || sepOff <= 0) {
     return false;
   }
+  char ppSpanA[120];
+  char ppSpanB[120];
   if(imEnd - imStart >= (int16_t)sizeof(ppSpanB) || sepOff >= (int16_t)sizeof(ppSpanA)) {
     return false;
   }
@@ -784,6 +783,7 @@ bool_t ppParseComplex(const char *src, uint8_t ctxFont, uint8_t childFont, uint8
  * Parses real numbers and fractions alongside complex values at the requested font sizes.
  * Returns true if a layout tree is built, or false otherwise. */
 static bool_t ppBuildRegister(calcRegister_t regist, uint8_t ctxFont, uint8_t childFont, uint8_t *rootOut) {
+  char ppScratch[200];
   uint32_t dt = getRegisterDataType(regist);
 
   if(dt == dtReal34 && getSystemFlag(FLAG_FRACT)

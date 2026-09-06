@@ -1,0 +1,95 @@
+Introducing program graphics for R47. This package lets a program draw on the screen and keep the drawing visible after it finishes. Normally on R47, any pixel you draw gets wiped out the moment the program stops or the screen refreshes. I built this package so programs can draw persistent charts, diagrams, and wireframes. I'd like to submit this upstream as a PR if people find it useful.
+
+[b]Canvas control[/b]
+
+To draw, a program first opens the canvas:
+[list]
+[*]PVIEW 2 opens the canvas over the register area (rows 20 to 170). The softmenu keys stay visible at the bottom so you can still read them.
+[*]PVIEW 6 opens the canvas over the whole screen (rows 20 to 239) below the status bar, giving you maximum drawing room.
+[*]ERASE clears the canvas back to white and resets clipping. If the view is closed, ERASE opens PVIEW 2 automatically.
+[*]EXIT closes the canvas and returns to the normal stack. R/S continues running your program.
+[/list]
+
+[b]2D drawing commands[/b]
+
+The package adds dedicated commands for common shapes:
+[list]
+[*]LINE draws a straight line between two points (x1, y1) and (x2, y2).
+[*]BOX and FBOX draw rectangles. BOX draws an outline, while FBOX fills the box solid black.
+[*]CIRCLE and FCIRCL draw circles from a center point (x, y) and radius r. CIRCLE draws an outline, while FCIRCL fills solid black.
+[*]ARC draws curved circular segments between two angles, useful for pie slices or rounded corners.
+[*]TEXTOUT prints text starting at an exact pixel (x, y), while DISP n prints text on text line n (1 to 11).
+[*]GMODE n sets the drawing pen: 0 draws black, 1 erases white, and 2 inverts pixels (black becomes white, white becomes black). Invert mode lets you punch white text or holes inside solid black shapes.
+[*]GCLIP locks drawing inside a boundary box so lines from plotting math functions do not spill into your labels.
+[/list]
+The CANVAS menu under PFN holds all of these commands.
+
+[attachment=2]pg-attach-1-2d-commands.png[/attachment]
+
+This canvas shows the 2D commands together. You can see a sine wave plotted through XRNG and YRNG, an ARC, an outline BOX, an FBOX with a GMODE 2 inverted cutout, and a quarter circle clipped with GCLIP.
+
+[b]Coordinates and the stack[/b]
+
+The origin sits at the bottom left, with x going right and y going up (400 by 240 pixels). Coordinates off the screen simply clip without throwing an error.
+
+The commands leave their arguments on the stack without consuming them. That means the same four numbers can feed a BOX and then a LINE without duplicating them. For LINE, the stack expects (x1, y1) in X and Y, and (x2, y2) in Z and T, so you enter y2 first:
+
+[code]230 ENTER 390 ENTER 10 ENTER 10 LINE[/code]
+
+Complex numbers also work as points in (Y, X).
+
+To avoid calculating screen pixels by hand in your math programs, XRNG and YRNG define a plotting window (like x from -10 to 10):
+[list]
+[*]Integers are always treated as raw screen pixels, skipping decimal math to stay fast.
+[*]Real numbers automatically scale through your XRNG and YRNG window onto the screen.
+[/list]
+
+[b]Speed[/b]
+
+Drawing writes straight into the display framebuffer. While a program runs, screen refreshes throttle to at most every 40 ms so tight loops do not choke the display. On the simulator, a 100-pixel line takes about half a microsecond on top of the step itself. Hardware will run slower, but the 40 ms refresh is the main delay you will notice.
+
+[b]3D wireframes[/b]
+
+The 3D commands follow the HP 48 model:
+[list]
+[*]EYEPT sets where the camera stands in (x, y, z) space.
+[*]XVOL, YVOL, and ZVOL set the 3D boundary box for your object.
+[*]NUMX and NUMY set the grid density (how many mesh lines to calculate).
+[*]WIREFRAME takes a program label, runs your program at every grid point to calculate z = f(x, y), and draws the connected mesh.
+[*]PT3D and LINE3D plot custom 3D points and vectors in that same volume.
+[/list]
+
+Once drawn, the drawing stays on screen and you can interactively spin it using the keyboard:
+[list]
+[*]UP and DOWN rotate around the x-axis.
+[*]f-UP and f-DOWN rotate around the y-axis.
+[*]g-UP and g-DOWN rotate around the z-axis.
+[*]Plus and minus zoom in and out.
+[*]Key 5 resets back to the home view.
+[/list]
+Rotating the view does not re-evaluate your program. The points are cached in a temporary 2 KB memory block, so spinning the model is immediate. Only zooming past the recorded step resolution triggers a re-run.
+
+[attachment=1]pg-attach-2-3d-cube.gif[/attachment]
+
+This saddle z = x² - y² comes from a four-step program on a 24 by 24 mesh, framed inside its volume cube. The capture shows 122 frames of rotation and zoom recorded by the headless test driver.
+
+[b]Limits[/b]
+[list]
+[*]Sleep, power off, or saving state clears the canvas.
+[*]Text strings stay unclipped inside character cells, and GMODE skips text.
+[*]RESET blanks the canvas but leaves the view open.
+[*]Opening a built-in plot view drops the drawing.
+[*]Shifted UP and DOWN rotate the drawing, and SNAP works. Other shifted keys do nothing while the canvas is open.
+[*]Errors inside the view print across the top 20 pixel rows.
+[*]Meshes larger than 44 by 44 render once, and the keys leave them stationary.
+[*]3D bounds must fit in 32-bit single-precision floats.
+[/list]
+
+[b]Install[/b]
+
+Unpack the zip into packages/program-graphics and build with the package manager [url]https://forum.swissmicros.com/viewtopic.php?f=46&t=4876[/url]:
+[code]make sim CUSTOM_PKG=packages/program-graphics[/code]
+To load it with the other packages, pass a comma-separated list:
+[code]make sim CUSTOM_PKG=packages/forth-core,packages/undo-history,packages/pretty-print,packages/pretty-print-extra,packages/program-graphics[/code]
+For hardware, run make dmcp5r47 with the same variable. It targets R47 or C47 on a DM42n running DMCP5. The package adds 11.2 KB of flash firmware and 156 bytes of static memory. 2D takes zero bytes from the memory pool. 3D borrows a 2 KB pool block while the canvas is open.
+Base commit is r47forth af7ad934a. Upstream tests pass cleanly alone and with the full set of five packages. Standard warning: simulator numbers only, back up your calculator first, and flash at your own risk. Distributed under GPL-3.0-only.

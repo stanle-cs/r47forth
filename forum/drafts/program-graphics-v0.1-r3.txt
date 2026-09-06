@@ -1,0 +1,48 @@
+Introducing program graphics for R47. This package lets a program draw on the screen and keep the drawing there when it stops. Same deal as pretty print, it's built with Claude and I'd like to send it upstream if people find it useful.
+
+Added functions:
+[list]
+[*]PVIEW n opens the canvas. PVIEW 6 takes the whole screen under the status bar, PVIEW 2 leaves the softmenu visible. The drawing stays after STOP. EXIT closes it, R/S still runs the program.
+[*]ERASE clears it.
+[*]LINE, BOX, FBOX, CIRCLE, FCIRCL, ARC, TEXTOUT, DISP n, GMODE n, GCLIP for the 2D drawing.
+[*]XRNG and YRNG set a window for real numbers, like a plot.
+[*]CANVAS menu under PFN, holds all of them.
+[/list]
+[attachment=2]pg-attach-1-2d-commands.png[/attachment]
+
+The wavy line is a sine through XRNG and YRNG. The black quarter disc is a filled circle cut by GCLIP, and the white hole in the black box is GMODE 2 inverting a rectangle.
+
+[b]Coordinates[/b]
+
+Origin bottom left, x to the right, y up, 400 by 240. A point off the screen isn't an error, you get the part that's on the screen. The commands read the stack and leave it alone. So the same four numbers can feed a BOX and then a LINE. A long integer is always a pixel (no decimal math on that path, it stays fast). A real goes through the XRNG and YRNG window. LINE takes x1 in X, y1 in Y, x2 in Z, y2 in T, so you type y2 first:
+
+[code]230 ENTER 390 ENTER 10 ENTER 10 LINE[/code]
+
+A complex number works as a point too. LINE, BOX, FBOX and GCLIP take two of them, first point in Y, second in X. ARC takes its center as a complex in T with the radius in Z and the two angles in Y and X, in whatever angle unit is set.
+
+[b]Speed[/b]
+
+I put the drawing straight into the screen buffer, and the screen refreshes at most every 40 ms while a program runs. On the simulator a LINE of 100 pixels costs about half a microsecond on top of the step itself. I think it's fast enough that the 40 ms refresh is the only delay you'll notice. The real DM42n is probably a bit slower than the simulator.
+
+[b]3D[/b]
+
+[G4 section: EYEPT, XVOL, YVOL, ZVOL, NUMX, NUMY, WIREFRAME, PT3D, LINE3D, the rotation keys and the cube animation. Written when the stage lands.]
+
+[b]Limits[/b]
+[list]
+[*]The canvas is gone after sleep or power off.
+[*]Text isn't clipped inside its cell and GMODE doesn't apply to text.
+[*]RESET inside the view keeps the view open on a blank canvas.
+[*]A program that opens a plot view drops the canvas.
+[*]Shifted keys do nothing in the view.
+[*]An error inside the view shows on the top canvas line, over the top 20 rows of the drawing.
+[/list]
+
+[b]Install[/b]
+
+The zip unpacks into packages/program-graphics and builds through the package manager [url]https://forum.swissmicros.com/viewtopic.php?f=46&t=4876[/url]:
+[code]make sim CUSTOM_PKG=packages/program-graphics[/code]
+It builds and runs alone. With the other packages it's one comma-separated list:
+[code]make sim CUSTOM_PKG=packages/forth-core,packages/undo-history,packages/pretty-print,packages/pretty-print-extra,packages/program-graphics[/code]
+For hardware, run make dmcp5r47 with that variable. The target is R47 or C47 on a DM42n running DMCP5. It adds [FLASH] KB of firmware and [RAM] bytes of static memory, and the 2D part takes nothing from the calculator's pool. The patch base is r47forth commit af7ad934a, and upstream's own tests pass with the package in, alone and in the five-package build.
+As before, none of this has been on a real DM42n, every number above is from the simulator, flash at your own risk and back the calculator up first. COPYING is in the zip, GPL-3.0-only inherited from upstream.

@@ -17,8 +17,8 @@
 #include "c47.h"
 #include "prettyInternal.h"
 
-static ppNode_t ppPool[PP_POOL_NODES];
-static char     ppText[PP_TEXT_BYTES];
+static ppNode_t *ppPool      = NULL;
+static char     *ppText      = NULL;
 static uint8_t  ppNodeCount = 0;
 static uint16_t ppTextLen   = 0;
 
@@ -123,11 +123,25 @@ void ppReset(void) {
   ppTextLen   = 0;
 }
 
+/* Ensure layout node and text pools are allocated.
+ * Allocates from the system heap on first use.
+ * Returns true if pools are available, or false on allocation failure. */
+static bool_t ppEnsurePools(void) {
+  if(ppPool != NULL) {
+    return true;
+  }
+  ppPool = (ppNode_t *)malloc(PP_POOL_NODES * sizeof(ppNode_t) + PP_TEXT_BYTES);
+  if(ppPool != NULL) {
+    ppText = (char *)(ppPool + PP_POOL_NODES);
+  }
+  return (ppPool != NULL);
+}
+
 /* Allocate a new 2D layout box in the node pool.
  * Initializes child and sibling pointers to PP_NONE with the specified font ID.
  * Returns the allocated node index, or PP_NONE if pool memory is full. */
 uint8_t ppNewBox(uint8_t kind, uint8_t fontId) {
-  if(ppNodeCount >= PP_POOL_NODES) {
+  if(!ppEnsurePools() || ppNodeCount >= PP_POOL_NODES) {
     return PP_NONE;
   }
   ppNode_t *n = &ppPool[ppNodeCount];

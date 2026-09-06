@@ -180,3 +180,29 @@ or retouches a frame — a full 400x240 screen is always shown whole.
    earlier version of this shot was written in display glyphs, which draw
    the same but are not input syntax, so it could never have been
    computed.
+
+## program-graphics (sim, 2026-09-05)
+
+1. `pg-attach-1-2d-commands.png` — every 2D command of the package on one
+   `PVIEW 6` canvas: a baseline and an axis (LINE), a diagonal, an outline
+   BOX, a filled FBOX with a GMODE 2 hole, CIRCLE and FCIRCL, a 30 to 300
+   degree ARC, TEXTOUT, DISP 1 for the title, a quarter FCIRCL cut by
+   GCLIP with the clip rectangle outlined, and a sine curve of 26 LINE
+   segments through XRNG and YRNG. Written by the headless test driver
+   `pgTestShowcase2D` through the calculator's own `fnScreenDump`, scaled
+   2x. Pin S1 records the count of lit pixels (10,760) on every gate run.
+
+2. `pg-attach-2-3d-cube.gif` — the G4 film, 122 frames at 10 per second,
+   400 by 240: the saddle z = x² - y² from the four-step program `SADL`
+   on a 24 by 24 `WIREFRAME` mesh, and the cube of the volume from `PT3D`
+   and `LINE3D`, then one home frame, 36 UP presses (x), 36 f-UP presses
+   (y), 36 g-UP presses (z), six plus and six minus presses. Every frame
+   is a `fnScreenDump` of the headless suite's driver `pgTestShowcase3D`,
+   joined by the assembly script of DESIGN.md §9.7.3. Pins S3 and R1 to
+   R2 record the count of the still (8,656 lit pixels) and the byte-exact
+   return of the canvas after each full turn and after the zoom.
+   The forum attachment `pg-attach-2-3d-cube.gif` is scaled to 200x120
+   (244 KB, 122 frames) to meet forum attachment size limits; the native
+   400x240 capture is preserved in `pg-attach-2-3d-cube-400x240.gif` (464 KB),
+   and `pg-attach-2-3d-cube-120kb.gif` provides a 61-frame (121 KB) fallback.
+

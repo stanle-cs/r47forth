@@ -1,0 +1,54 @@
+This package lets a program draw on the screen, and the drawing stays when the program stops. Claude and I built it the same way as pretty print. I want to send it upstream if people find it useful.
+
+Added functions:
+[list]
+[*]PVIEW n opens the canvas. PVIEW 6 takes the whole screen under the status bar, and PVIEW 2 keeps the softmenu visible. Your drawing stays after STOP. EXIT closes the canvas, and R/S still runs the program.
+[*]ERASE clears the canvas.
+[*]LINE, BOX, FBOX, CIRCLE, FCIRCL, ARC, TEXTOUT, DISP n, GMODE n and GCLIP draw in 2D.
+[*]XRNG and YRNG set a window for real numbers, as a plot does.
+[*]The CANVAS menu under PFN holds all of them.
+[/list]
+[attachment=2]pg-attach-1-2d-commands.png[/attachment]
+
+The wavy line is a sine through XRNG and YRNG. The black quarter disc is a filled circle cut by GCLIP. The white hole in the black box is GMODE 2, which inverts a rectangle.
+
+[b]Coordinates[/b]
+
+The origin is bottom left, x goes to the right, y goes up, 400 by 240 pixels. A point off the screen is not an error. You get the part that is on the screen. The commands read the stack and leave it in place, so the same four numbers can feed a BOX and then a LINE. A long integer is always a pixel, and the pixel path skips the decimal math. A real goes through the XRNG and YRNG window. LINE takes x1 in X, y1 in Y, x2 in Z and y2 in T. Type y2 first:
+
+[code]230 ENTER 390 ENTER 10 ENTER 10 LINE[/code]
+
+Complex numbers work as points too. LINE, BOX, FBOX and GCLIP take two of them, the first point in Y and the second in X. ARC takes its center as a complex number in T and the radius in Z. The two angles go in Y and X, in the angle unit that is set.
+
+[b]Speed[/b]
+
+I put the drawing straight into the screen buffer, and the screen refreshes at most every 40 ms while a program runs. On the simulator a LINE of 100 pixels costs about half a microsecond on top of the step itself. I think the 40 ms refresh is the only delay you will notice. But the real DM42n is probably slower than the simulator.
+
+[b]3D[/b]
+
+EYEPT, XVOL, YVOL, ZVOL, NUMX and NUMY set up a view volume and an eye point the HP 48 way. WIREFRAME runs a program of yours at every grid point and draws z = f(x, y) as a mesh. PT3D and LINE3D draw lines in the volume. Your drawing stays in the view, and the keys turn it. UP and DOWN turn about x, f-UP and f-DOWN about y, g-UP and g-DOWN about z. Plus and minus zoom in and out. Key 5 goes back to the home view, and ERASE, PVIEW and EXIT also return to it. Nothing runs again for a rotation, because the values sit in a 2 KB block from the pool as one byte each. Only a zoom that outgrows that precision runs the program once more.
+
+[attachment=1]pg-attach-2-3d-cube.gif[/attachment]
+
+Here the saddle comes from a four step program, with the cube of the volume drawn around it. The test suite turned it about the three axes and zoomed it, 122 frames.
+
+[b]Limits[/b]
+[list]
+[*]Sleep, power off or a state save loses the canvas.
+[*]Text is not clipped inside its cell, and GMODE does not apply to text.
+[*]RESET inside the view keeps the view open on a blank canvas.
+[*]A plot view opened from a program drops the drawing.
+[*]Shifted UP and DOWN turn the drawing inside the view, and SNAP works. The other shifted keys do nothing.
+[*]An error inside the view shows on the top canvas line, over the top 20 rows of the drawing.
+[*]A mesh above 44 by 44 draws once, and the keys leave it as it is.
+[*]The 3D commands need XRNG and YRNG ends that fit a 32-bit float, and refuse a window outside that range with an error.
+[/list]
+
+[b]Install[/b]
+
+The zip unpacks into packages/program-graphics and builds through the package manager [url]https://forum.swissmicros.com/viewtopic.php?f=46&t=4876[/url]:
+[code]make sim CUSTOM_PKG=packages/program-graphics[/code]
+It builds and runs alone. With the other packages it is one comma-separated list:
+[code]make sim CUSTOM_PKG=packages/forth-core,packages/undo-history,packages/pretty-print,packages/pretty-print-extra,packages/program-graphics[/code]
+For hardware, run make dmcp5r47 with that variable. The target is R47 or C47 on a DM42n that runs DMCP5. It adds 11.2 KB of firmware and 156 bytes of static memory. In 2D it takes nothing from the calculator's pool. In 3D the view borrows a 2 KB block from the pool while it is open. The patch base is r47forth commit af7ad934a. Upstream's own tests pass with the package in, alone and in the five-package build.
+As before, none of this has run on a real DM42n, and every number above is from the simulator. Flash at your own risk and back the calculator up first. COPYING is in the zip, GPL-3.0-only inherited from upstream.

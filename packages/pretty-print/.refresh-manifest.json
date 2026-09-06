@@ -4,10 +4,10 @@
     "prettyEquation.c": "268f21cc0496c32a6062092cb6f9ad9e2a0db74c0409e6e8715504d847fed53f",
     "prettyInfix.c": "9d0ea65e3ce12e4b53d99bb0ad2faf93361baf07c1c81896380b7c8653a41c6d",
     "prettyInternal.h": "8bed8843800578346fb278300864d85866cd38ea7a926cf08ea3c82be6a9a61e",
-    "prettyLayout.c": "dafda19cca7857eee44d37bc3a8bc59edb3fa593b5ade8de3e048745990f2eca",
+    "prettyLayout.c": "312ede5ff7b355db85de056b9cc50a26eb0e311ba7bd0a36718299b955765feb",
     "prettyPrint.h": "3ddcf6eaac65bce407acee8995628aad04ae769e9b13a7715c309787d2d29a1b",
     "prettyTest.c": "f4bfac3761e9ea59710238e0a5c75f46366bc99a1311a2699aacea3dac65d0fa",
-    "prettyValue.c": "716064690f6351cf2d3219d60efc6f1173e877dc471ba5a610f61edb36d5de8b",
+    "prettyValue.c": "8bf01b578d0f9fe97cd37e0fa7e7597aa646c9477a3b9cbf6717f1c3ad1e02df",
     "prettyVisual.c": "554519c838e11d381842b4588d9c61ade005db35789ce8fd27ecb382672619cd",
     "testSuite/tests/pretty_print.txt": "b8517e5823257db29e39c43a5616cb9543c46ffc0d53dcd44bf1923b6ec4d702",
     "testSuite/tests/pretty_visual_real.txt": "56232d28359e2fb21ef6f0e1ca21e8c15d680856669cccaec0bf050592031ca6"
