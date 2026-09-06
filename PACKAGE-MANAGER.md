@@ -272,3 +272,30 @@ files to exclude from the working area classification. Patterns:
 - `tools/foo.py` — anchored to package root (contains `/`)
 
 Lines starting with `#` are comments.
+
+## Standalone Package Repositories (Subtree Sync)
+
+Each package in `packages/` is also published as an independent, standalone Git repository under `gitlab.com/stanle-cs/<name>` with its own commit history, manifest, and test gates.
+
+### Configured Remotes
+
+- `pkg-forth-core` &rarr; `https://gitlab.com/stanle-cs/forth-core.git`
+- `pkg-pretty-print` &rarr; `https://gitlab.com/stanle-cs/pretty-print.git`
+- `pkg-pretty-print-extra` &rarr; `https://gitlab.com/stanle-cs/pretty-print-extra.git`
+- `pkg-program-graphics` &rarr; `https://gitlab.com/stanle-cs/program-graphics.git`
+- `pkg-undo-history` &rarr; `https://gitlab.com/stanle-cs/undo-history.git`
+
+### Bi-Directional Subtree Sync Commands
+
+To push updates from the firmware repository out to a standalone package repository:
+
+```bash
+git subtree push --prefix=packages/<name> pkg-<name> main
+```
+
+To pull updates from a standalone package repository back into the firmware repository:
+
+```bash
+git subtree pull --prefix=packages/<name> pkg-<name> main
+```
+
