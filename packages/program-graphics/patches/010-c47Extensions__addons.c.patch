@@ -1,5 +1,5 @@
 diff --git a/src/c47/c47Extensions/addons.c b/src/c47/c47Extensions/addons.c
-index 26d98873518bcec7a4eb2bc5a9bd2f069318300c..7301b2654c4980831fb44e5c8f9d94d60095ba97 100644
+index 26d98873518bcec7a4eb2bc5a9bd2f069318300c..ba1e4e2fbef2020173d069d71d0d6f58f530effb 100644
 --- a/src/c47/c47Extensions/addons.c
 +++ b/src/c47/c47Extensions/addons.c
 @@ -1367,7 +1367,10 @@ void fnFrom_ms(uint16_t unusedButMandatoryParameter){
@@ -7,8 +7,8 @@ index 26d98873518bcec7a4eb2bc5a9bd2f069318300c..7301b2654c4980831fb44e5c8f9d94d6
  
  void fnTo_ms(uint16_t unusedButMandatoryParameter) {
 -    switch(calcMode) { //JM
-+    switch(pgEffectiveCalcMode()) { //JM   // program-graphics package: see fnKeyEnter
-+      case CM_GRAPHICS_CANVAS: {   // program-graphics package: no action from the keyboard in the canvas view
++    switch(pgEffectiveCalcMode()) { //JM   // program-graphics: see fnKeyEnter.
++      case CM_GRAPHICS_CANVAS: {   // program-graphics: ignore keyboard in canvas view.
 +        break;
 +      }
        case CM_NIM:

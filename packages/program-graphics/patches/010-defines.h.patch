@@ -1,5 +1,5 @@
 diff --git a/src/c47/defines.h b/src/c47/defines.h
-index 63b9c1a7692f24da093a882ffa1f3be1625bb7a8..793d5a5c431414a19755581507ccdc7626d2694e 100644
+index 63b9c1a7692f24da093a882ffa1f3be1625bb7a8..7c4e07404a12215ed4de8fc4d6f5838d8dbe77d0 100644
 --- a/src/c47/defines.h
 +++ b/src/c47/defines.h
 @@ -1580,9 +1580,9 @@ static inline uint8_t regCtoKS(const int16_t regC) {
@@ -7,10 +7,10 @@ index 63b9c1a7692f24da093a882ffa1f3be1625bb7a8..793d5a5c431414a19755581507ccdc76
  #define X_SHIFT_L                                   0
  #define X_SHIFT_R                                (X_PRINTER - 1)
 -#define X_SHIFT                                  (getSystemFlag(FLAG_SBshfR) ? X_SHIFT_R : X_SHIFT_L)
-+#define X_SHIFT                                  ((getSystemFlag(FLAG_SBshfR) || calcMode == CM_GRAPHICS_CANVAS) ? X_SHIFT_R : X_SHIFT_L)   // program-graphics package: the glyph stays in the status bar in the canvas view
++#define X_SHIFT                                  ((getSystemFlag(FLAG_SBshfR) || calcMode == CM_GRAPHICS_CANVAS) ? X_SHIFT_R : X_SHIFT_L)   // program-graphics: keep shift glyph in status bar in canvas view.
  #define Y_SHIFT_LO                               (Y_POSITION_OF_REGISTER_T_LINE)
 -#define Y_SHIFT                                  (((!SBARUPD_Date || !(SBARUPD_Time || SBARUPD_WoY)) && !SBAR_SHIFT) ? 0 : (SBAR_SHIFT ? 0 : Y_SHIFT_LO ))
-+#define Y_SHIFT                                  (((!SBARUPD_Date || !(SBARUPD_Time || SBARUPD_WoY)) && !SBAR_SHIFT) ? 0 : ((SBAR_SHIFT || calcMode == CM_GRAPHICS_CANVAS) ? 0 : Y_SHIFT_LO ))   // program-graphics package
++#define Y_SHIFT                                  (((!SBARUPD_Date || !(SBARUPD_Time || SBARUPD_WoY)) && !SBAR_SHIFT) ? 0 : ((SBAR_SHIFT || calcMode == CM_GRAPHICS_CANVAS) ? 0 : Y_SHIFT_LO ))   // program-graphics: keep shift glyph in status bar in canvas view.
  
  
  

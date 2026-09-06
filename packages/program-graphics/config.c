@@ -1713,7 +1713,7 @@ void doFnReset(uint16_t confirmation, bool_t autoSav) {
     real34SetZero(&nBins );
     real34SetZero(&hiBinR);
     histElementXorY = -1;
-    pgReset();   // program-graphics package: the pool is rebuilt, forget the 3D block without a free
+    pgReset();   // program-graphics: pool is rebuilt; reset 3D state without freeing block.
 
 
     int32ToReal(-10, x_min);

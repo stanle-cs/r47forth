@@ -58,7 +58,7 @@ void covSolveErr(uint16_t which);
 void covLoadPgm(uint16_t unusedButMandatoryParameter);
 void covLoadPgmLongLabel(uint16_t unusedButMandatoryParameter);
 void covLoadStateLongLabel(uint16_t unusedButMandatoryParameter);
-// program-graphics package: test drivers of files/pgmGraphics.c (no indexOfItems row).
+// program-graphics: test drivers for pgmGraphics.c.
 void pgTestSmoke(uint16_t unusedButMandatoryParameter);
 void pgTestBaseline(uint16_t unusedButMandatoryParameter);
 void pgTestView(uint16_t unusedButMandatoryParameter);
@@ -313,8 +313,7 @@ const funcTest_t funcTestNoParam[] = {
   {"fnEffToICov",            covEffToI, 1 },
   {"fnAmortCov",             covAmort, 1 },
   {"fnAmortNextCov",         covAmortNext, 1 },
-  // program-graphics package: drivers for tests/program_graphics.txt. This
-  // anchor is far from the four other packages' anchors near the table end.
+  // program-graphics: test drivers for tests/program_graphics.txt.
   {"pgTestSmoke",            pgTestSmoke,         1},
   {"pgTestBaseline",         pgTestBaseline,      1},
   {"pgTestView",             pgTestView,          1},

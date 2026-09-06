@@ -1367,8 +1367,8 @@ void fnFrom_ms(uint16_t unusedButMandatoryParameter){
 
 
 void fnTo_ms(uint16_t unusedButMandatoryParameter) {
-    switch(pgEffectiveCalcMode()) { //JM   // program-graphics package: see fnKeyEnter
-      case CM_GRAPHICS_CANVAS: {   // program-graphics package: no action from the keyboard in the canvas view
+    switch(pgEffectiveCalcMode()) { //JM   // program-graphics: see fnKeyEnter.
+      case CM_GRAPHICS_CANVAS: {   // program-graphics: ignore keyboard in canvas view.
         break;
       }
       case CM_NIM:

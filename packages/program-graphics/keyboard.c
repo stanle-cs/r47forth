@@ -2139,8 +2139,7 @@ bool_t nimWhenButtonPressed = false;                  //PHM eRPN 2021-07
         temporaryInformation = TI_NO_INFO;
         refreshRegisterLine(REGISTER_T);
       }
-      // program-graphics package: R/S in the canvas view runs the program
-      // without the register line paint of the arm above.
+      // program-graphics: R/S in canvas view runs program without register line repaint.
       if(calcMode == CM_GRAPHICS_CANVAS && showFunctionNameItem == 0 && lastKeyItemDetermined == ITM_RS) {
         showFunctionNameItem = ITM_RS;
         temporaryInformation = TI_NO_INFO;
@@ -2779,19 +2778,15 @@ RELEASE_END:
             break;
           }
 
-          // program-graphics package: inside the canvas view R/S continues
-          // the program and every other key that reaches this arm does
-          // nothing. SNAP falls through to its own arm below. EXIT, ENTER,
-          // BACKSPACE, UP, DOWN and .d have their own case above and run
-          // their key function on the release; each key function has a
-          // case for this mode.
+          // program-graphics: R/S continues program; SNAP falls through; other
+          // keys are ignored. Dedicated key functions handle navigation keys.
           else if(calcMode == CM_GRAPHICS_CANVAS && item != ITM_SNAP) {
             if(item == ITM_RS) {
               showFunctionNameItem = 0;
             }
             else if(item == ITM_BST || item == ITM_SST || item == ITM_RBR || item == ITM_FLGSV
                  || item == ITM_ADD || item == ITM_SUB || item == ITM_4 || item == ITM_5 || item == ITM_6) {
-              pg3dKey(item);   // program-graphics package, stage G4: rotation, zoom, home view
+              pg3dKey(item);   // program-graphics: rotation, zoom, home view.
             }
             keyActionProcessed = true;
           }
@@ -4734,7 +4729,7 @@ void fnKeyUp(uint16_t unusedButMandatoryParameter) {
         break;
       }
 
-      case CM_GRAPHICS_CANVAS: {   // program-graphics package: stage G4, rotation about x
+      case CM_GRAPHICS_CANVAS: {   // program-graphics: rotation about x.
         pg3dKey(ITM_UP1);
         break;
       }
@@ -4958,7 +4953,7 @@ void fnKeyDown(uint16_t unusedButMandatoryParameter) {
         break;
       }
 
-      case CM_GRAPHICS_CANVAS: {   // program-graphics package: stage G4, rotation about x
+      case CM_GRAPHICS_CANVAS: {   // program-graphics: rotation about x.
         pg3dKey(ITM_DOWN1);
         break;
       }

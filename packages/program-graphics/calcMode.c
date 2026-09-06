@@ -41,7 +41,7 @@
       sprintf(tmp, "^^^^### calcModeNormal");
       jm_show_comment(tmp);
     #endif // PC_BUILD
-    if(calcMode == CM_GRAPHICS_CANVAS) {   // program-graphics package: a program step such as CLSTK or CLA leaves the canvas view open; EXIT closes it (DESIGN.md §3.6)
+    if(calcMode == CM_GRAPHICS_CANVAS) {   // program-graphics: keep canvas view open during program steps; EXIT closes view.
       return;
     }
     calcMode = CM_NORMAL;

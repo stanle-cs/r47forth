@@ -453,10 +453,7 @@ solve_cov
 cpxslv_cov
 eqslv_cov
 integrate_cov
-; program-graphics runs after the equation coverage files: its 3D drivers
-; load programs, run them through the engine protocol thousands of times,
-; and take and free a 2 KB pool block, and the equation files above depend
-; on the pool state they inherit (see the note before eq_cov).
+; program-graphics runs after equation coverage tests to avoid memory pool side effects.
 program_graphics
 tvm_cov
 

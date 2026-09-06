@@ -1580,9 +1580,9 @@ static inline uint8_t regCtoKS(const int16_t regC) {
                                                        // f/g icon either in T-line left; or if date or time is removed, it moves up top left; or if SBAR_SHIFT is active, it goes top right, next to U
 #define X_SHIFT_L                                   0
 #define X_SHIFT_R                                (X_PRINTER - 1)
-#define X_SHIFT                                  ((getSystemFlag(FLAG_SBshfR) || calcMode == CM_GRAPHICS_CANVAS) ? X_SHIFT_R : X_SHIFT_L)   // program-graphics package: the glyph stays in the status bar in the canvas view
+#define X_SHIFT                                  ((getSystemFlag(FLAG_SBshfR) || calcMode == CM_GRAPHICS_CANVAS) ? X_SHIFT_R : X_SHIFT_L)   // program-graphics: keep shift glyph in status bar in canvas view.
 #define Y_SHIFT_LO                               (Y_POSITION_OF_REGISTER_T_LINE)
-#define Y_SHIFT                                  (((!SBARUPD_Date || !(SBARUPD_Time || SBARUPD_WoY)) && !SBAR_SHIFT) ? 0 : ((SBAR_SHIFT || calcMode == CM_GRAPHICS_CANVAS) ? 0 : Y_SHIFT_LO ))   // program-graphics package
+#define Y_SHIFT                                  (((!SBARUPD_Date || !(SBARUPD_Time || SBARUPD_WoY)) && !SBAR_SHIFT) ? 0 : ((SBAR_SHIFT || calcMode == CM_GRAPHICS_CANVAS) ? 0 : Y_SHIFT_LO ))   // program-graphics: keep shift glyph in status bar in canvas view.
 
 
 

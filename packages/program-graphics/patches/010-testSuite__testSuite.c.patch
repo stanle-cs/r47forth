@@ -1,12 +1,12 @@
 diff --git a/src/testSuite/testSuite.c b/src/testSuite/testSuite.c
-index bc8a9792a584984b3e18dee2a6626ce81a330205..bd2c5badefe021f3aeb6090ecfce4368122121cc 100644
+index bc8a9792a584984b3e18dee2a6626ce81a330205..15e02c3f8856aca300276be18726d6f79f2ca8b9 100644
 --- a/src/testSuite/testSuite.c
 +++ b/src/testSuite/testSuite.c
 @@ -58,6 +58,15 @@ void covSolveErr(uint16_t which);
  void covLoadPgm(uint16_t unusedButMandatoryParameter);
  void covLoadPgmLongLabel(uint16_t unusedButMandatoryParameter);
  void covLoadStateLongLabel(uint16_t unusedButMandatoryParameter);
-+// program-graphics package: test drivers of files/pgmGraphics.c (no indexOfItems row).
++// program-graphics: test drivers for pgmGraphics.c.
 +void pgTestSmoke(uint16_t unusedButMandatoryParameter);
 +void pgTestBaseline(uint16_t unusedButMandatoryParameter);
 +void pgTestView(uint16_t unusedButMandatoryParameter);
@@ -18,12 +18,11 @@ index bc8a9792a584984b3e18dee2a6626ce81a330205..bd2c5badefe021f3aeb6090ecfce4368
  void covIterationTi(uint16_t which);
  void covNamedVariableFold(uint16_t unusedButMandatoryParameter);
  void covStatsRegister(uint16_t unusedButMandatoryParameter);
-@@ -304,6 +313,16 @@ const funcTest_t funcTestNoParam[] = {
+@@ -304,6 +313,15 @@ const funcTest_t funcTestNoParam[] = {
    {"fnEffToICov",            covEffToI, 1 },
    {"fnAmortCov",             covAmort, 1 },
    {"fnAmortNextCov",         covAmortNext, 1 },
-+  // program-graphics package: drivers for tests/program_graphics.txt. This
-+  // anchor is far from the four other packages' anchors near the table end.
++  // program-graphics: test drivers for tests/program_graphics.txt.
 +  {"pgTestSmoke",            pgTestSmoke,         1},
 +  {"pgTestBaseline",         pgTestBaseline,      1},
 +  {"pgTestView",             pgTestView,          1},

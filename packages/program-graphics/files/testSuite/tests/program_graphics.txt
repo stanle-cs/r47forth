@@ -1,23 +1,20 @@
-; program-graphics package: stage G0.
-; pgTestSmoke proves that the driver registration works. It writes its
-; failure count into X.
-; pgTestBaseline runs NOP and PIXEL steps through reallyRunFunction with
-; the program state set to running, prints the times, and writes its
-; failure count into X.
+; program-graphics package test suite.
+; pgTestSmoke verifies test driver registration.
+; pgTestBaseline measures execution time of NOP and PIXEL steps.
 Func: pgTestSmoke
 In:  FL_ASLIFT=1 RX=LonI:"99"
 Out: EC=0 RX=LonI:"0"
 Func: pgTestBaseline
 In:  FL_ASLIFT=1 RX=LonI:"0"
 Out: EC=0 RX=LonI:"0"
-; Stage G1: the canvas view (TESTING.md section 4).
+; Canvas view and keyboard interaction tests.
 Func: pgTestView
 In:  FL_ASLIFT=1 RX=LonI:"0"
 Out: EC=0 RX=LonI:"0"
 Func: pgTestKeys
 In:  FL_ASLIFT=1 RX=LonI:"0"
 Out: EC=0 RX=LonI:"0"
-; Stage G2: the 2D commands (TESTING.md section 4, D1 to D12) and the showcase (section 6).
+; 2D drawing command and showcase tests.
 Func: pgTestDraw2D
 In:  FL_ASLIFT=1 RX=LonI:"0"
 Out: EC=0 RX=LonI:"0"

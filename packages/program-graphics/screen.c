@@ -2136,7 +2136,7 @@ return res;
     showFunctionNameItem = item;
     showFunctionNameCounter = delayInMs;
 
-    if(calcMode == CM_GRAPHICS_CANVAS) {   // program-graphics package: nothing paints over the canvas; the item still runs on release
+    if(calcMode == CM_GRAPHICS_CANVAS) {   // program-graphics: canvas view prevents overlay paint; item runs on release.
       return;
     }
 
@@ -2176,7 +2176,7 @@ return res;
 
 
   void hideFunctionName(void) {
-    if(calcMode == CM_GRAPHICS_CANVAS) {   // program-graphics package: no register line repaint over the canvas
+    if(calcMode == CM_GRAPHICS_CANVAS) {   // program-graphics: prevent register line repaint in canvas view.
       showFunctionNameItem = 0;
       showFunctionNameCounter = 0;
       return;
@@ -5492,7 +5492,7 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
   }
 
   void refreshRegisterLine(calcRegister_t regist) {
-    if(calcMode == CM_GRAPHICS_CANVAS) {   // program-graphics package: no register line paints over the canvas
+    if(calcMode == CM_GRAPHICS_CANVAS) {   // program-graphics: prevent register line paint in canvas view.
       return;
     }
     _refreshRegisterLine(regist, !RESTORE_T);
@@ -6233,7 +6233,7 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
         _refreshNormalScreen();
         break;
 
-      case CM_GRAPHICS_CANVAS:   // program-graphics package: the canvas keeps its pixels
+      case CM_GRAPHICS_CANVAS:   // program-graphics: preserve canvas pixels.
         last_CM = calcMode;
         pgRefreshCanvasView();
         force_refresh(force);

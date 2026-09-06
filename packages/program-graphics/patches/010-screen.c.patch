@@ -1,12 +1,12 @@
 diff --git a/src/c47/screen.c b/src/c47/screen.c
-index d2ac868bd18f9f4c20608f5dc90d5652844afcc6..5af0230cf15590d3cbbc21d1ebda0f88965ed2bb 100644
+index d2ac868bd18f9f4c20608f5dc90d5652844afcc6..e8a7b584aa4bf73eba1bd2d438be298f23c57e65 100644
 --- a/src/c47/screen.c
 +++ b/src/c47/screen.c
 @@ -2136,6 +2136,10 @@ return res;
      showFunctionNameItem = item;
      showFunctionNameCounter = delayInMs;
  
-+    if(calcMode == CM_GRAPHICS_CANVAS) {   // program-graphics package: nothing paints over the canvas; the item still runs on release
++    if(calcMode == CM_GRAPHICS_CANVAS) {   // program-graphics: canvas view prevents overlay paint; item runs on release.
 +      return;
 +    }
 +
@@ -17,7 +17,7 @@ index d2ac868bd18f9f4c20608f5dc90d5652844afcc6..5af0230cf15590d3cbbc21d1ebda0f88
  
  
    void hideFunctionName(void) {
-+    if(calcMode == CM_GRAPHICS_CANVAS) {   // program-graphics package: no register line repaint over the canvas
++    if(calcMode == CM_GRAPHICS_CANVAS) {   // program-graphics: prevent register line repaint in canvas view.
 +      showFunctionNameItem = 0;
 +      showFunctionNameCounter = 0;
 +      return;
@@ -29,7 +29,7 @@ index d2ac868bd18f9f4c20608f5dc90d5652844afcc6..5af0230cf15590d3cbbc21d1ebda0f88
    }
  
    void refreshRegisterLine(calcRegister_t regist) {
-+    if(calcMode == CM_GRAPHICS_CANVAS) {   // program-graphics package: no register line paints over the canvas
++    if(calcMode == CM_GRAPHICS_CANVAS) {   // program-graphics: prevent register line paint in canvas view.
 +      return;
 +    }
      _refreshRegisterLine(regist, !RESTORE_T);
@@ -39,7 +39,7 @@ index d2ac868bd18f9f4c20608f5dc90d5652844afcc6..5af0230cf15590d3cbbc21d1ebda0f88
          _refreshNormalScreen();
          break;
  
-+      case CM_GRAPHICS_CANVAS:   // program-graphics package: the canvas keeps its pixels
++      case CM_GRAPHICS_CANVAS:   // program-graphics: preserve canvas pixels.
 +        last_CM = calcMode;
 +        pgRefreshCanvasView();
 +        force_refresh(force);
