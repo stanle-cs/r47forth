@@ -82,6 +82,10 @@ Use these controls:
 
 Each additional `PHIST` press selects the next pager page. Select `PCLR` to clear the stored history.
 
+![The PHIST formula history browser](screenshots/pp-phist-browser.png)
+
+*Figure 1: The `PHIST` formula history browser.*
+
 ## Example: show the live formula
 
 The `PTLINE` system flag is off after a reset. Select `PTLIN` to set `PTLINE`.
@@ -89,6 +93,10 @@ The `PTLINE` system flag is off after a reset. Select `PTLIN` to set `PTLINE`.
 Continue a manual calculation. The open formula uses the screen location of the T register line. The T register value does not change.
 
 The normal T value appears when no formula is open. The normal T value also appears when the formula does not fit.
+
+![Live formula on the T register line](screenshots/pp-tline-formula.png)
+
+*Figure 2: Live formula displayed on the T register line.*
 
 ## Equation constructs
 
@@ -123,7 +131,19 @@ The equations return these results in the same order:
 - 12
 - Approximately 1/3
 
+![Equation summation construct rendered with Sigma](screenshots/pp-eq-sum.png)
+
+*Figure 3: Summation construct `SUM` rendered with Sigma notation.*
+
+![Equation integration construct rendered with integral sign](screenshots/pp-eq-integ.png)
+
+*Figure 4: Integration construct `INTEG` rendered with integral notation.*
+
 The constructs can contain other constructs. Very deep expressions stop with an error when they reach the evaluator guard.
+
+![Nested equation constructs with integral, derivative, and sum](screenshots/pp-nested-constructs.png)
+
+*Figure 5: Nested equation constructs with integral, derivative, summation, and power.*
 
 ## Limits and fallback behavior
 

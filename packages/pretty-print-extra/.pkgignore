@@ -1,3 +1,6 @@
-# not package content: docs and the gate script
+# not package content: docs, screenshots, and the gate script
 *.md
+*.png
+*.gif
+screenshots/
 build-test.sh

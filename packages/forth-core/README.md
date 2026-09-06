@@ -26,6 +26,10 @@ To write Forth code in a program:
 
 The line is verified before it is stored. If a line contains invalid syntax, the editor refuses the line to protect program memory.
 
+![Program Entry Mode with Forth block and colon definition](screenshots/forth-pem-listing.png)
+
+*Figure 1: Program Entry Mode listing showing the Forth block marker and colon definitions.*
+
 ## Dictionary scoping
 
 - **Program-local by default**: A word defined inside a program is visible only to that program. Two separate programs can define words with identical names without collision.
@@ -60,6 +64,10 @@ The line is verified before it is stored. If a line contains invalid syntax, the
 - `.S`: Prints the current stack values and any spilled values.
 - `WORDS`: Displays words defined in the current scope.
 - `FWRD`: Opens a catalog of available Forth words and inserts the selection at the cursor.
+
+![The FWRD softkey word picker in Program Entry Mode](screenshots/forth-word-picker.png)
+
+*Figure 2: The `FWRD` word picker softmenu showing defined Forth words.*
 
 ## Install and build
 
@@ -97,6 +105,18 @@ Store this definition in a program:
 Enter `7` on the stack and execute `FACT`. The stack displays `5040`.
 
 Values past the visible stack window spill into memory automatically and restore as the word finishes execution.
+
+![Stack inspection with .S showing spill boundary separator](screenshots/forth-stack-spill.png)
+
+*Figure 3: The `.S` command showing stack contents and the spill boundary separator `|`.*
+
+## Interactive execution
+
+Forth code can execute interactively. Place a Forth string in the X register or run words in the console:
+
+![Interactive Forth execution in console dialogue](screenshots/forth-console-dialogue.png)
+
+*Figure 4: Interactive Forth execution and stack inspection in the console dialogue.*
 
 ## Example: calling C47 functions
 

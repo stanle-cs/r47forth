@@ -43,6 +43,10 @@ The commands do not consume their arguments. The stack stays as it was.
 
 The commands also work when the view is closed. They then draw on the whole screen, and the next refresh erases the drawing.
 
+![Showcase of 2D drawing commands on the canvas](screenshots/pg-attach-1-2d-commands.png)
+
+*Figure 1: 2D drawing commands on a full canvas (`PVIEW 6`).*
+
 ## Coordinates
 
 A long integer is a pixel. A real goes through the window. Without `XRNG` and `YRNG`, a real is a pixel rounded half away from zero. With a range set, the real maps onto the 400 columns or the 240 rows of the screen, as a plot does.
@@ -81,6 +85,10 @@ The 3D drawing stays in the view after the program stops, and the keys turn it:
 A rotation redraws the 3D content only. 2D drawings on the same canvas are lost at the first press. The eye and the volume freeze at the first 3D drawing; a change takes effect after `ERASE`, `PVIEW`, or `EXIT`. When a zoom step makes one recorded z step wider than a pixel, the program of the last `WIREFRAME` runs again once to record finer values.
 
 The retained 3D content lives in a 2 KB block from the calculator's memory pool while the view is open. It holds a grid of 44 by 44 samples, or a smaller grid and up to 330 lines. A larger grid draws once and does not turn.
+
+![Interactive 3D rotation and zoom in the canvas view](screenshots/pg-attach-2-3d-cube.gif)
+
+*Figure 2: 3D wireframe saddle and volume cube rotating in the canvas view.*
 
 ### Example: a saddle
 

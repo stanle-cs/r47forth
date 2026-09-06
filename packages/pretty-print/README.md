@@ -71,6 +71,10 @@ The stack shows a stacked `3/4` while `PPRTY` is set. Select `PSHOW` to draw the
 
 Select `PPON` to return to the stock inline display. Select `PPON` again to restore natural display.
 
+![Natural fraction display on the stack](screenshots/pp-stack-fractions.png)
+
+*Figure 1: Two-dimensional natural fraction display on stack registers.*
+
 ## Example: show a native equation
 
 Create this equation in EQN:
@@ -82,6 +86,10 @@ Create this equation in EQN:
 Select the equation. Then select `EQSHW` from the function catalog.
 
 The full-screen view draws both fractions with horizontal bars.
+
+![Full-screen native equation view in EQSHW](screenshots/pp-eqshw.png)
+
+*Figure 2: Full-screen two-dimensional equation view (`EQSHW`).*
 
 Press `EXIT` to close the view.
 

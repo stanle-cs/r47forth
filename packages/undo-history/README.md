@@ -20,6 +20,10 @@ The package provides three commands and one system flag:
 
 The three commands occupy the three open slots in the `STK` softmenu. They are also available in the `FCNS` catalog and can be assigned to keys.
 
+![The UHIST system flag in the SYSFL catalog](screenshots/undo-attach-4-sysfl-uhist.png)
+
+*Figure 1: The `UHIST` flag in the `SYSFL` catalog.*
+
 ## What each history level stores
 
 Each history level saves a complete snapshot of calculator state:
@@ -49,6 +53,10 @@ The browser identifies entries with these labels:
 | `(now)` | The anchor state before undo navigation began. |
 | `*` | The current active level in history. |
 | `~` | A skipped oversized state (over 1 KB). Undo steps across this gap. |
+
+![The full-screen history browser view](screenshots/undo-attach-1-history-view.png)
+
+*Figure 2: The history browser showing operation labels, active row cursor, and preview values.*
 
 ## Install and build
 
@@ -96,6 +104,10 @@ Perform several calculations, then select `U.HIST`:
 2. Press `UP` to highlight an earlier step.
 3. Press `ENTER`. The calculator restores the exact stack and flags from that step.
 
+![Stack restored after selecting a history level](screenshots/undo-attach-3-restored.png)
+
+*Figure 3: Stack state restored after pressing ENTER on a history level.*
+
 ## Memory and footprint
 
 - Flash memory growth: +4.2 KB (4,264 bytes)
@@ -109,6 +121,10 @@ Perform several calculations, then select `U.HIST`:
 - **Programs do not capture**: Steps executed inside running R47 programs do not create history entries (same rule as stock undo).
 - **Solvers and integration**: Internal solver iterations do not pollute history. One `SLV` or `SLVQ` execution records as a single operation.
 - **1 KB per-level limit**: Very large objects (such as oversized matrices) that exceed 1 KB are skipped. The sequence number increments and displays `~`. Undo steps across the gap without error.
+
+![Skipped oversized state marked with a tilde](screenshots/undo-attach-2-gap.png)
+
+*Figure 4: A skipped oversized state marked with `~` in the history browser.*
 
 ## Compatibility and license
 
