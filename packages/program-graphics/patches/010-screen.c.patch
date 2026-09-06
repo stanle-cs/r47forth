@@ -1,5 +1,5 @@
 diff --git a/src/c47/screen.c b/src/c47/screen.c
-index d2ac868bd18f9f4c20608f5dc90d5652844afcc6..e8a7b584aa4bf73eba1bd2d438be298f23c57e65 100644
+index d2ac868bd18f9f4c20608f5dc90d5652844afcc6..d6c66810d539e2855286b9781eb1400c6b1e1477 100644
 --- a/src/c47/screen.c
 +++ b/src/c47/screen.c
 @@ -2136,6 +2136,10 @@ return res;
@@ -42,7 +42,7 @@ index d2ac868bd18f9f4c20608f5dc90d5652844afcc6..e8a7b584aa4bf73eba1bd2d438be298f
 +      case CM_GRAPHICS_CANVAS:   // program-graphics: preserve canvas pixels.
 +        last_CM = calcMode;
 +        pgRefreshCanvasView();
-+        force_refresh(force);
++        lcd_refresh();
 +        break;
 +
        case CM_LISTXY:
