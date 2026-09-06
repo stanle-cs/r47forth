@@ -1,5 +1,5 @@
 diff --git a/src/c47/screen.c b/src/c47/screen.c
-index d2ac868bd18f9f4c20608f5dc90d5652844afcc6..d6c66810d539e2855286b9781eb1400c6b1e1477 100644
+index d2ac868bd18f9f4c20608f5dc90d5652844afcc6..ee50d208d1c3900d22f0f104303b7fa8484e96fa 100644
 --- a/src/c47/screen.c
 +++ b/src/c47/screen.c
 @@ -2136,6 +2136,10 @@ return res;
@@ -35,14 +35,18 @@ index d2ac868bd18f9f4c20608f5dc90d5652844afcc6..d6c66810d539e2855286b9781eb1400c
      _refreshRegisterLine(regist, !RESTORE_T);
    }
  
-@@ -6221,6 +6233,12 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
+@@ -6221,6 +6233,16 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
          _refreshNormalScreen();
          break;
  
 +      case CM_GRAPHICS_CANVAS:   // program-graphics: preserve canvas pixels.
 +        last_CM = calcMode;
 +        pgRefreshCanvasView();
-+        lcd_refresh();
++        #if defined(DMCP_BUILD)
++          lcd_refresh_dma();
++        #else // !DMCP_BUILD
++          lcd_refresh();
++        #endif // DMCP_BUILD
 +        break;
 +
        case CM_LISTXY:

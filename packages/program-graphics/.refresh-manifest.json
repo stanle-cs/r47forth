@@ -1,7 +1,8 @@
 {
   "base_commit": "af7ad934a0dfeeada96c21136e2ab7084647de01",
   "files": {
-    "pgmGraphics.c": "32a034625ac0c14649951bd34b5035c7e22647a8ed7e6b099042101503fd977f",
+    "make_test_programs.py": "cd90d6e107b44131e6867812fc4ba241b897db054d60a10f4c3cd6b26be298ed",
+    "pgmGraphics.c": "ddd8df9ff8432420742faa165b0c914cf4c8d435a56d4c1c1c61221324e25d82",
     "pgmGraphics.h": "8adf6790a09083e9ae68eb63847677eec5960d703c989cfa5b3455d404973022",
     "testSuite/tests/program_graphics.txt": "0aea668fa0e2219fdc431a13756b60b08e4a42512ba0c8ee6b580377d3d986b5"
   },
@@ -14,7 +15,7 @@
     "010-items.h.patch": "7a3448a5187231d1f506c56e006fe5300459b29dfb7423bb914d7534d4788509",
     "010-keyboard.c.patch": "b591b18eb3106b428c08a33f1ebfdb7a21053b4a525dd214de49d3c688906b2d",
     "010-saveRestoreBackup.c.patch": "c840f42c451d95d6a9ad573490175673e2dd08b457bd626bacc75a22ca4d9830",
-    "010-screen.c.patch": "930e3e8f24a83a342f758d96374a33542a97ce7b72b23cfb265e1a9acd9d2576",
+    "010-screen.c.patch": "bad4b8905d473ab9cfd06aebc8bd8f0bc1928a38d5225b60afc4c2c33f1212e2",
     "010-screen.h.patch": "a6976d87763792d40ab91bc9289d5618f95024e5e9fffe08a232309888752661",
     "010-softmenus.c.patch": "b24ccdb52c63543cec452d8553142da7276e78e35d2995275326bf77462b99b2",
     "010-testSuite__testSuite.c.patch": "dd928c61b389309fde9d58c9d1784488306297e30fab0fd8c12695745800d55e",

@@ -6236,7 +6236,11 @@ static void displayLRtemporaryInformation(char *prefix1, char *prefix2, char *pr
       case CM_GRAPHICS_CANVAS:   // program-graphics: preserve canvas pixels.
         last_CM = calcMode;
         pgRefreshCanvasView();
-        lcd_refresh();
+        #if defined(DMCP_BUILD)
+          lcd_refresh_dma();
+        #else // !DMCP_BUILD
+          lcd_refresh();
+        #endif // DMCP_BUILD
         break;
 
       case CM_LISTXY:

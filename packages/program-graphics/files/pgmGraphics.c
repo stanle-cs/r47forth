@@ -170,19 +170,24 @@ static inline void pgApply(uint8_t *p, uint8_t mask) {
 
 // Draws one pixel at the specified column and row.
 static void pgPixel(const pgRect_t *c, int32_t col, int32_t row) {
-  uint32_t xm;
   if(col < c->x0 || col > c->x1 || row < c->y0 || row > c->y1) {
     return;
   }
-  xm = (uint32_t)(SCREEN_WIDTH - 1 - col);
-  pgApply(pgRowPtr(row) + 2 + (xm >> 3), (uint8_t)(1u << (xm & 7)));
-  pgRowPtr(row)[0] = 1u;
+  #if defined(DMCP_BUILD)
+    switch(canvas.drawMode) {
+      case 1:  bitblt24((uint32_t)col, 1, (uint32_t)row, 1, BLT_ANDN, BLT_NONE); break;
+      case 2:  bitblt24((uint32_t)col, 1, (uint32_t)row, 1, BLT_XOR,  BLT_NONE); break;
+      default: bitblt24((uint32_t)col, 1, (uint32_t)row, 1, BLT_OR,   BLT_NONE); break;
+    }
+  #else // !DMCP_BUILD
+    uint32_t xm = (uint32_t)(SCREEN_WIDTH - 1 - col);
+    pgApply(pgRowPtr(row) + 2 + (xm >> 3), (uint8_t)(1u << (xm & 7)));
+    pgRowPtr(row)[0] = 1u;
+  #endif // DMCP_BUILD
 }
 
 // Draws a horizontal line between col0 and col1 on the specified row.
 static void pgRun(const pgRect_t *c, int32_t col0, int32_t col1, int32_t row) {
-  uint32_t a, b, byteA, byteB;
-  uint8_t *p;
   if(row < c->y0 || row > c->y1) {
     return;
   }
@@ -192,23 +197,34 @@ static void pgRun(const pgRect_t *c, int32_t col0, int32_t col1, int32_t row) {
   if(col0 > col1) {
     return;
   }
-  a = (uint32_t)(SCREEN_WIDTH - 1 - col1);   // mirrored bit positions, a <= b
-  b = (uint32_t)(SCREEN_WIDTH - 1 - col0);
-  byteA = a >> 3;
-  byteB = b >> 3;
-  p = pgRowPtr(row) + 2;
-  if(byteA == byteB) {
-    pgApply(p + byteA, (uint8_t)((0xFFu << (a & 7)) & (0xFFu >> (7 - (b & 7)))));
-  }
-  else {
-    uint32_t i;
-    pgApply(p + byteA, (uint8_t)(0xFFu << (a & 7)));
-    for(i = byteA + 1; i < byteB; i++) {
-      pgApply(p + i, 0xFFu);
+  #if defined(DMCP_BUILD)
+    int blt_op = (canvas.drawMode == 1) ? BLT_ANDN : ((canvas.drawMode == 2) ? BLT_XOR : BLT_OR);
+    uint32_t endX = (uint32_t)col1 + 1;
+    for(uint32_t col = (uint32_t)col0; col < endX; col += 24) {
+      uint32_t cols = min(24, endX - col);
+      bitblt24(col, cols, (uint32_t)row, 0xFFFFFF, blt_op, BLT_NONE);
     }
-    pgApply(p + byteB, (uint8_t)(0xFFu >> (7 - (b & 7))));
-  }
-  pgRowPtr(row)[0] = 1u;
+  #else // !DMCP_BUILD
+    uint32_t a, b, byteA, byteB;
+    uint8_t *p;
+    a = (uint32_t)(SCREEN_WIDTH - 1 - col1);   // mirrored bit positions, a <= b
+    b = (uint32_t)(SCREEN_WIDTH - 1 - col0);
+    byteA = a >> 3;
+    byteB = b >> 3;
+    p = pgRowPtr(row) + 2;
+    if(byteA == byteB) {
+      pgApply(p + byteA, (uint8_t)((0xFFu << (a & 7)) & (0xFFu >> (7 - (b & 7)))));
+    }
+    else {
+      uint32_t i;
+      pgApply(p + byteA, (uint8_t)(0xFFu << (a & 7)));
+      for(i = byteA + 1; i < byteB; i++) {
+        pgApply(p + i, 0xFFu);
+      }
+      pgApply(p + byteB, (uint8_t)(0xFFu >> (7 - (b & 7))));
+    }
+    pgRowPtr(row)[0] = 1u;
+  #endif // DMCP_BUILD
 }
 
 // Draws a line between two points with the Bresenham algorithm.
